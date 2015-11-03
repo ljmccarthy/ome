@@ -332,27 +332,39 @@ class Send(object):
         args = (' ' if self.args else '') + format_list(self.args)
         return '(send %s %s%s)' % (self.message, self.receiver or '<free>', args)
 
-    def resolve(self, parent):
-        if self.receiver:
-            self.receiver = self.receiver.resolve(parent)
+    def resolve_free_vars(self, parent):
         for i, arg in enumerate(self.args):
-            self.args[i] = arg.resolve(parent)
-        if not self.receiver:
-            symbol = self.message
+            self.args[i] = arg.resolve_free_vars(parent)
+        if self.receiver:
+            self.receiver = self.receiver.resolve_free_vars(parent)
+        else:
             if len(self.args) == 0:
-                ref = parent.lookup_var(symbol)
+                ref = parent.lookup_var(self.message)
                 if ref:
                     return ref
-            block = parent.lookup_receiver(symbol)
-            if not block:
-                raise Exception("Receiver could not be resolved for '%s'" % symbol)
-            receiver = parent.get_block_ref(block.block_id)
-            # Direct slot access optimisation
-            if len(self.args) == 0 and symbol in block.vars:
-                return SlotGet(receiver, block.vars[symbol].index)
-            if len(self.args) == 1 and symbol[:-1] in block.vars:
-                return SlotSet(receiver, block.vars[symbol[:-1]].index, self.args[0])
-            self.receiver = receiver
+            self.receiver_block = parent.lookup_receiver(self.message)
+            if not self.receiver_block:
+                raise Exception("Receiver could not be resolved for '%s'" % self.message)
+        return self
+
+    def resolve_block_refs(self, parent):
+        for i, arg in enumerate(self.args):
+            self.args[i] = arg.resolve_block_refs(parent)
+        if self.receiver:
+            self.receiver = self.receiver.resolve_block_refs(parent)
+        else:
+            block = self.receiver_block
+            if block.is_constant and block != parent.find_block():
+                # No need to get block ref for constant blocks
+                self.receiver = block.constant_ref
+            else:
+                receiver = parent.get_block_ref(block.block_id)
+                # Direct slot access optimisation
+                if len(self.args) == 0 and self.message in block.vars:
+                    return SlotGet(receiver, block.vars[self.message].index)
+                if len(self.args) == 1 and self.message[:-1] in block.vars:
+                    return SlotSet(receiver, block.vars[self.message[:-1]].index, self.args[0])
+                self.receiver = receiver
         return self
 
 class BlockVariable(object):
@@ -370,6 +382,7 @@ class Block(object):
         self.vars = {var.name: var for var in self.vars_list}
         self.methods = {method.symbol: method for method in methods}
         self.block_refs = {}
+        self.blocks_needed = set()
         # Generate getter and setter methods
         for var in vars:
             self.methods[var.name] = Method(var.name, [], var.self_ref)
@@ -382,12 +395,23 @@ class Block(object):
         methods = ' ' + format_list(x[1] for x in sorted(self.methods.items())) if self.methods else ''
         return '(block #%d%s%s)' % (self.block_id, args, methods)
 
-    def resolve(self, parent):
+    def find_block(self):
+        return self
+
+    def resolve_free_vars(self, parent):
         for var in self.vars_list:
             var.init_ref = parent.lookup_var(var.name)
         self.parent = parent
         for method in self.methods.values():
-            method.resolve(self)
+            method.resolve_free_vars(self)
+        return self
+
+    def resolve_block_refs(self, parent):
+        self.is_constant = (len(self.vars_list) == 0 and all(block.is_constant for block in self.blocks_needed))
+        if self.is_constant:
+            self.constant_ref = ConstantBlock(self.block_id)
+        for method in self.methods.values():
+            method.resolve_block_refs(self)
         return self
 
     def lookup_var(self, symbol):
@@ -402,7 +426,10 @@ class Block(object):
     def lookup_receiver(self, symbol):
         if symbol in self.methods:
             return self
-        return self.parent.lookup_receiver(symbol)
+        block = self.parent.lookup_receiver(symbol)
+        if block:
+            self.blocks_needed.add(block)
+        return block
 
     def get_block_ref(self, block_id):
         if block_id == self.block_id:
@@ -424,9 +451,13 @@ class LocalVariable(object):
     def __str__(self):
         return '(let %s %s)' % (self.name, self.expr)
 
-    def resolve(self, parent):
-        self.expr = self.expr.resolve(parent)
+    def resolve_free_vars(self, parent):
+        self.expr = self.expr.resolve_free_vars(parent)
         self.local_ref = parent.add_local(self.name)
+        return self
+
+    def resolve_block_refs(self, parent):
+        self.expr = self.expr.resolve_block_refs(parent)
         return self
 
 class Method(object):
@@ -453,9 +484,16 @@ class Method(object):
     def find_method(self):
         return self
 
-    def resolve(self, parent):
+    def find_block(self):
+        return self.parent.find_block()
+
+    def resolve_free_vars(self, parent):
         self.parent = parent
-        self.expr = self.expr.resolve(self)
+        self.expr = self.expr.resolve_free_vars(self)
+        return self
+
+    def resolve_block_refs(self, parent):
+        self.expr = self.expr.resolve_block_refs(self)
         return self
 
     def lookup_var(self, symbol):
@@ -484,12 +522,20 @@ class Sequence(object):
     def find_method(self):
         return self.parent.find_method()
 
-    def resolve(self, parent):
+    def find_block(self):
+        return self.parent.find_block()
+
+    def resolve_free_vars(self, parent):
         self.parent = parent
         self.method = self.find_method()
         self.vars = {}
         for i, statement in enumerate(self.statements):
-            self.statements[i] = statement.resolve(self)
+            self.statements[i] = statement.resolve_free_vars(self)
+        return self
+
+    def resolve_block_refs(self, parent):
+        for i, statement in enumerate(self.statements):
+            self.statements[i] = statement.resolve_block_refs(self)
         return self
 
     def lookup_var(self, symbol):
@@ -510,17 +556,32 @@ class Array(object):
     def __str__(self):
         return '(array %s)' % format_list(self.elems)
 
-    def resolve(self, parent):
+    def resolve_free_vars(self, parent):
         for i, elem in enumerate(self.elems):
-            self.elems[i] = elem.resolve(parent)
+            self.elems[i] = elem.resolve_free_vars(parent)
+        return self
+
+    def resolve_block_refs(self, parent):
+        for i, elem in enumerate(self.elems):
+            self.elems[i] = elem.resolve_block_refs(parent)
         return self
 
 class Self(object):
     def __str__(self):
         return 'self'
 
-    def resolve(self, parent):
+    def resolve_free_vars(self, parent):
         return self
+
+    def resolve_block_refs(self, parent):
+        return self
+
+class ConstantBlock(object):
+    def __init__(self, block_id):
+        self.block_id = block_id
+
+    def __str__(self):
+        return '(constant-block #%d)' % self.block_id
 
 class LocalGet(object):
     def __init__(self, index):
@@ -529,7 +590,10 @@ class LocalGet(object):
     def __str__(self):
         return '(local-get %d)' % self.index
 
-    def resolve(self, parent):
+    def resolve_free_vars(self, parent):
+        return self
+
+    def resolve_block_refs(self, parent):
         return self
 
 class SlotGet(object):
@@ -543,8 +607,12 @@ class SlotGet(object):
     def setter(self, set_expr):
         return SlotSet(self.obj_expr, self.index, set_expr)
 
-    def resolve(self, parent):
-        self.obj_expr = self.obj_expr.resolve(parent)
+    def resolve_free_vars(self, parent):
+        self.obj_expr = self.obj_expr.resolve_free_vars(parent)
+        return self
+
+    def resolve_block_refs(self, parent):
+        self.obj_expr = self.obj_expr.resolve_block_refs(parent)
         return self
 
 class SlotSet(object):
@@ -556,9 +624,14 @@ class SlotSet(object):
     def __str__(self):
         return '(slot-set! %s %d %s)' % (self.obj_expr, self.index, self.set_expr)
 
-    def resolve(self, parent):
-        self.obj_expr = self.obj_expr.resolve(parent)
-        self.set_expr = self.set_expr.resolve(parent)
+    def resolve_free_vars(self, parent):
+        self.obj_expr = self.obj_expr.resolve_free_vars(parent)
+        self.set_expr = self.set_expr.resolve_free_vars(parent)
+        return self
+
+    def resolve_block_refs(self, parent):
+        self.obj_expr = self.obj_expr.resolve_block_refs(parent)
+        self.set_expr = self.set_expr.resolve_block_refs(parent)
         return self
 
 class Number(object):
@@ -569,7 +642,10 @@ class Number(object):
     def __str__(self):
         return '(number %s%s)' % (self.mantissa, 'e' + self.exponent if self.exponent else '')
 
-    def resolve(self, parent):
+    def resolve_free_vars(self, parent):
+        return self
+
+    def resolve_block_refs(self, parent):
         return self
 
 class String(object):
@@ -579,7 +655,10 @@ class String(object):
     def __str__(self):
         return "(string '" + self.value + "')"
 
-    def resolve(self, parent):
+    def resolve_free_vars(self, parent):
+        return self
+
+    def resolve_block_refs(self, parent):
         return self
 
 class TopLevel(object):
@@ -607,7 +686,8 @@ def parse_file(filename):
 def compile_file(filename):
     ast = parse_file(filename)
     ast = Method('', [], ast)
-    ast = ast.resolve(TopLevel)
+    ast = ast.resolve_free_vars(TopLevel)
+    ast = ast.resolve_block_refs(TopLevel)
     return ast
 
 if __name__ == '__main__':
