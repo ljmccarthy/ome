@@ -58,7 +58,6 @@ class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
         super(Parser, self).__init__(stream, stream_name)
         self.tab_width = tab_width
-        self.block_id = 16       
 
     def match(self, pattern):
         """
@@ -218,9 +217,7 @@ class Parser(ParserState):
         self.scan()
         if self.pos < len(self.stream) and not self.peek('}'):
             self.error('Expected declaration or end of block')
-        block_id = self.block_id
-        self.block_id += 1
-        block = Block(block_id, vars, methods)
+        block = Block(vars, methods)
         if statements:
             statements.append(block)
             return Sequence(statements)
@@ -358,7 +355,7 @@ class Send(object):
                 # No need to get block ref for constant blocks
                 self.receiver = block.constant_ref
             else:
-                receiver = parent.get_block_ref(block.block_id)
+                receiver = parent.get_block_ref(block)
                 # Direct slot access optimisation
                 if len(self.args) == 0 and self.message in block.vars:
                     return SlotGet(receiver, block.vars[self.message].index)
@@ -366,6 +363,19 @@ class Send(object):
                     return SlotSet(receiver, block.vars[self.message[:-1]].index, self.args[0])
                 self.receiver = receiver
         return self
+
+    def collect_blocks(self, block_list):
+        self.receiver.collect_blocks(block_list)
+        for arg in self.args:
+            arg.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        receiver = self.receiver.generate_code(code, code.add_temp())
+        args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
+        code.add_instruction(SEND(dest, self.message, receiver, args))
+        return dest
+
+    check_error = True
 
 class BlockVariable(object):
     def __init__(self, name, mutable, index, init_ref=None):
@@ -375,9 +385,11 @@ class BlockVariable(object):
         self.init_ref = init_ref
         self.self_ref = SlotGet(Self, index)
 
+    def generate_code(self, code):
+        return self.init_ref.generate_code(code, code.add_temp())
+
 class Block(object):
-    def __init__(self, block_id, vars, methods):
-        self.block_id = block_id
+    def __init__(self, vars, methods):
         self.vars_list = vars
         self.vars = {var.name: var for var in self.vars_list}
         self.methods = {method.symbol: method for method in methods}
@@ -393,7 +405,7 @@ class Block(object):
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.vars_list) + ')' if self.vars_list else ''
         methods = ' ' + format_list(x[1] for x in sorted(self.methods.items())) if self.methods else ''
-        return '(block #%d%s%s)' % (self.block_id, args, methods)
+        return '(block%s%s)' % (args, methods)
 
     def find_block(self):
         return self
@@ -409,7 +421,7 @@ class Block(object):
     def resolve_block_refs(self, parent):
         self.is_constant = (len(self.vars_list) == 0 and all(block.is_constant for block in self.blocks_needed))
         if self.is_constant:
-            self.constant_ref = ConstantBlock(self.block_id)
+            self.constant_ref = ConstantBlock(self)
         for method in self.methods.values():
             method.resolve_block_refs(self)
         return self
@@ -431,17 +443,29 @@ class Block(object):
             self.blocks_needed.add(block)
         return block
 
-    def get_block_ref(self, block_id):
-        if block_id == self.block_id:
+    def get_block_ref(self, block):
+        if block is self:
             return Self
-        if block_id in self.block_refs:
-            return self.block_refs[block_id]
-        init_ref = self.parent.get_block_ref(block_id)
-        var = BlockVariable('.block-%d' % block_id, False, len(self.vars_list), init_ref)
+        if block in self.block_refs:
+            return self.block_refs[block]
+        init_ref = self.parent.get_block_ref(block)
+        var = BlockVariable('<blockref>', False, len(self.vars_list), init_ref)
         self.vars_list.append(var)
         self.vars[var.name] = var
-        self.block_refs[block_id] = var.self_ref
+        self.block_refs[block] = var.self_ref
         return var.self_ref
+
+    def collect_blocks(self, block_list):
+        block_list.append(self)
+        for method in self.methods.values():
+            method.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        args = [var.generate_code(code) for var in self.vars_list]
+        code.add_instruction(CREATE(dest, self.block_id, args))
+        return dest
+
+    check_error = False
 
 class LocalVariable(object):
     def __init__(self, name, expr):
@@ -459,6 +483,14 @@ class LocalVariable(object):
     def resolve_block_refs(self, parent):
         self.expr = self.expr.resolve_block_refs(parent)
         return self
+
+    def collect_blocks(self, block_list):
+        self.expr.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        return self.expr.generate_code(code, self.local_ref.generate_code(code, VOID))
+
+    check_error = False
 
 class Method(object):
     def __init__(self, symbol, args, expr):
@@ -504,8 +536,17 @@ class Method(object):
     def lookup_receiver(self, symbol):
         return self.parent.lookup_receiver(symbol)
 
-    def get_block_ref(self, block_id):
-        return self.parent.get_block_ref(block_id)
+    def get_block_ref(self, block):
+        return self.parent.get_block_ref(block)
+
+    def collect_blocks(self, block_list):
+        self.expr.collect_blocks(block_list)
+
+    def generate_code(self):
+        code = MethodCode(len(self.args), len(self.locals) - len(self.args))
+        dest = self.expr.generate_code(code, code.add_temp())
+        code.add_instruction(RETURN(dest))
+        return code
 
 class Sequence(object):
     def __init__(self, statements):
@@ -546,8 +587,29 @@ class Sequence(object):
     def lookup_receiver(self, symbol):
         return self.parent.lookup_receiver(symbol)
 
-    def get_block_ref(self, block_id):
-        return self.parent.get_block_ref(block_id)
+    def get_block_ref(self, block):
+        return self.parent.get_block_ref(block)
+
+    def collect_blocks(self, block_list):
+        for statement in self.statements:
+            statement.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        error_label = None
+        for statement in self.statements[:-1]:
+            statement.generate_code(code, dest)
+            if statement.check_error:
+                if not error_label:
+                    error_label = code.add_label()
+                code.add_instruction(ON_ERROR(dest, error_label))
+        dest = self.statements[-1].generate_code(code, dest)
+        if error_label:
+            error_label.location = code.here()
+        return dest
+
+    @property
+    def check_error(self):
+        return self.statements[-1].check_error
 
 class Array(object):
     def __init__(self, elems):
@@ -566,6 +628,19 @@ class Array(object):
             self.elems[i] = elem.resolve_block_refs(parent)
         return self
 
+    def collect_blocks(self, block_list):
+        for elem in self.elems:
+            elem.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        code.add_instruction(CREATE_ARRAY(dest, len(self.elems)))
+        for i, elem in enumerate(self.elems):
+            elem_dest = elem.generate_code(code, code.add_temp())
+            code.add_instruction(SET_SLOT(dest, i, elem_dest))
+        return dest
+
+    check_error = False
+
 class Self(object):
     def __str__(self):
         return 'self'
@@ -576,12 +651,27 @@ class Self(object):
     def resolve_block_refs(self, parent):
         return self
 
+    def collect_blocks(self, block_list):
+        pass
+
+    def generate_code(self, code, dest):
+        return SELF
+
+    check_error = False
+
 class ConstantBlock(object):
-    def __init__(self, block_id):
-        self.block_id = block_id
+    def __init__(self, block):
+        self.block = block
 
     def __str__(self):
-        return '(constant-block #%d)' % self.block_id
+        return '<constant-block>'
+
+    def collect_blocks(self, block_list):
+        pass
+
+    def generate_code(self, code, dest):
+        code.add_instruction(CREATE(dest, self.block.block_id, []))
+        return dest
 
 class LocalGet(object):
     def __init__(self, index):
@@ -595,6 +685,14 @@ class LocalGet(object):
 
     def resolve_block_refs(self, parent):
         return self
+
+    def collect_blocks(self, block_list):
+        pass
+
+    def generate_code(self, code, dest):
+        return code.locals[self.index]
+
+    check_error = False
 
 class SlotGet(object):
     def __init__(self, obj_expr, index):
@@ -615,6 +713,16 @@ class SlotGet(object):
         self.obj_expr = self.obj_expr.resolve_block_refs(parent)
         return self
 
+    def collect_blocks(self, block_list):
+        self.obj_expr.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        object = self.obj_expr.generate_code(code, code.add_temp())
+        code.add_instruction(GET_SLOT(dest, object, self.index))
+        return dest
+
+    check_error = False
+
 class SlotSet(object):
     def __init__(self, obj_expr, index, set_expr):
         self.obj_expr = obj_expr
@@ -634,6 +742,18 @@ class SlotSet(object):
         self.set_expr = self.set_expr.resolve_block_refs(parent)
         return self
 
+    def collect_blocks(self, block_list):
+        self.obj_expr.collect_blocks(block_list)
+        self.set_expr.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        value = self.set_expr.generate_code(code, code.add_temp())
+        object = self.obj_expr.generate_code(code, code.add_temp())
+        code.add_instruction(SET_SLOT(object, self.index, value))
+        return VOID
+
+    check_error = False
+
 class Number(object):
     def __init__(self, mantissa, exponent):
         self.mantissa = mantissa
@@ -648,9 +768,18 @@ class Number(object):
     def resolve_block_refs(self, parent):
         return self
 
+    def collect_blocks(self, block_list):
+        pass
+
+    def generate_code(self, code, dest):
+        code.add_instruction(LOAD_NUMBER(dest, self.mantissa, self.exponent))
+        return dest
+
+    check_error = False
+
 class String(object):
-    def __init__(self, value):
-        self.value = value
+    def __init__(self, string):
+        self.string = string
 
     def __str__(self):
         return "(string '" + self.value + "')"
@@ -661,6 +790,15 @@ class String(object):
     def resolve_block_refs(self, parent):
         return self
 
+    def collect_blocks(self, block_list):
+        pass
+
+    def generate_code(self, code, dest):
+        code.add_instruction(LOAD_STRING(dest, self.string))
+        return dest
+
+    check_error = False
+
 class TopLevel(object):
     def lookup_var(self, symbol):
         pass
@@ -668,8 +806,142 @@ class TopLevel(object):
     def lookup_receiver(self, symbol):
         pass
 
-    def get_block_ref(self, block_id):
+    def get_block_ref(self, block):
         pass
+
+class Label(object):
+    def __init__(self, name, location):
+        self.name = name
+        self.location = location
+
+class MethodCode(object):
+    def __init__(self, num_args, num_locals):
+        self.num_args = num_args
+        self.locals = [LOCAL(i) for i in range(num_args + num_locals)]
+        self.instructions = []
+        self.labels = []
+        self.dest = self.add_temp()
+
+    def add_temp(self):
+        local = LOCAL(len(self.locals))
+        self.locals.append(local)
+        return local
+
+    def here(self):
+        return len(self.instructions)
+
+    def add_label(self):
+        label = Label('.L%d' % len(self.labels), self.here())
+        self.labels.append(label)
+        return label
+
+    def add_instruction(self, instruction):
+        index = len(self.instructions)
+        self.instructions.append(instruction)
+        return index
+
+    def build_labels_dict(self):
+        labels_dict = {}
+        for label in self.labels:
+            if label.location not in labels_dict:
+                labels_dict[label.location] = []
+            labels_dict[label.location].append(label.name)
+        return labels_dict
+
+class LOCAL(object):
+    def __init__(self, index):
+        self.index = index
+
+    def __str__(self):
+        return '%%%d' % self.index
+
+class SELF(object):
+    def __str__(self):
+        return '%self'
+
+class VOID(object):
+    def __str__(self):
+        return '%void'
+
+SELF = SELF()
+VOID = VOID()
+
+class SEND(object):
+    def __init__(self, dest, symbol, receiver, args):
+        self.dest = dest
+        self.symbol = symbol
+        self.receiver = receiver
+        self.args = args
+
+    def __str__(self):
+        return '%s := SEND %s %s %s' % (self.dest, self.symbol, self.receiver, format_list(self.args))
+
+class CREATE(object):
+    def __init__(self, dest, block_id, args):
+        self.dest = dest
+        self.block_id = block_id
+        self.args = args
+
+    def __str__(self):
+        return '%s := CREATE %s %s' % (self.dest, self.block_id, format_list(self.args))
+
+class CREATE_ARRAY(object):
+    def __init__(self, dest, size):
+        self.dest = dest
+        self.size = size
+
+    def __str__(self):
+        return '%s := CREATE_ARRAY %s' % (self.dest, self.size)
+
+class LOAD_NUMBER(object):
+    def __init__(self, dest, mantissa, exponent):
+        self.dest = dest
+        self.mantissa = mantissa
+        self.exponent = exponent
+
+    def __str__(self):
+        return '%s := %s%s' % (self.dest, self.mantissa, 'e' + self.exponent if self.exponent else '')
+
+class LOAD_STRING(object):
+    def __init__(self, dest, string):
+        self.dest = dest
+        self.string = string
+
+    def __str__(self):
+        return "%s := '%s'" % (self.dest, self.string)
+
+class GET_SLOT(object):
+    def __init__(self, dest, object, index):
+        self.dest = dest
+        self.object = object
+        self.index = index
+
+    def __str__(self):
+        return '%s := %s[%s]' % (self.dest, self.object, self.index)
+
+class SET_SLOT(object):
+    def __init__(self, object, index, value):
+        self.object = object
+        self.index = index
+        self.value = value
+
+    def __str__(self):
+        return '%s[%s] := %s' % (self.object, self.index, self.value)
+
+class ON_ERROR(object):
+    def __init__(self, dest, label):
+        self.dest = dest
+        self.label = label
+
+    def __str__(self):
+        return 'ON ERROR %s GOTO %s' % (self.dest, self.label.name)
+
+class RETURN(object):
+    def __init__(self, dest):
+        self.dest = dest
+
+    def __str__(self):
+        return 'RETURN %s' % self.dest
 
 Self = Self()
 TopLevel = TopLevel()
@@ -683,17 +955,62 @@ def parse_file(filename):
         source = f.read()
     return Parser(source, filename).block()
 
+builtin_data_types = ['False', 'True', 'Small-Integer']
+builtin_object_types = ['String', 'Array']
+
+def allocate_block_ids(block_list):
+    block_id = len(builtin_data_types)
+    for block in block_list:
+        if block.is_constant:
+            block.block_id = block_id
+            block_id += 1
+    first_object_id = block_id
+    block_id += len(builtin_object_types)
+    for block in block_list:
+        if not block.is_constant:
+            block.block_id = block_id
+            block_id += 1
+    return first_object_id, block_id
+
+def build_code_table(block_list):
+    code_table = {}
+    for block in block_list:
+        for method in block.methods.values():
+            if method.symbol not in code_table:
+                code_table[method.symbol] = {}
+            code_table[method.symbol][block.block_id] = method.generate_code()
+    return code_table
+
+def print_code_table(code_table):
+    for symbol, methods in sorted(code_table.items()):
+        print('MESSAGE', symbol, '{')
+        for block_id, code in sorted(methods.items()):
+            print('    BLOCK', block_id, '{')
+            labels_dict = code.build_labels_dict()
+            for i, instruction in enumerate(code.instructions):
+                for label in labels_dict.get(i, ()):
+                    print('    %s:' % label)
+                print ('       ', instruction)
+            print('    }')
+        print('}')
+
 def compile_file(filename):
     ast = parse_file(filename)
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(TopLevel)
     ast = ast.resolve_block_refs(TopLevel)
-    return ast
+    block_list = []
+    ast.collect_blocks(block_list)
+    first_object_id, num_block_ids = allocate_block_ids(block_list)
+    print('# Allocated %d block IDs, 0-%d data types, %d-%d object types\n' % (
+        num_block_ids, first_object_id - 1, first_object_id, num_block_ids - 1))
+    code_table = build_code_table(block_list)
+    print_code_table(code_table)
 
 if __name__ == '__main__':
     import sys
     for filename in sys.argv[1:]:
         try:
-            print(compile_file(filename))
+            compile_file(filename)
         except SyntaxError as e:
             print(e)
