@@ -305,9 +305,12 @@ class Parser(ParserState):
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
-            significand = int(whole, 10)
-            exponent = int(exponent, 10) if exponent is not None else 0
-            if decimal is not None:
+            whole_stripped = whole.rstrip('0')
+            significand = int(whole_stripped, 10)
+            trailing = len(whole) - len(whole_stripped)
+            exponent = (int(exponent, 10) if exponent else 0) + trailing
+            decimal = decimal.rstrip('0') if decimal else ''
+            if decimal:
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
             return Number(significand, exponent)
@@ -786,7 +789,7 @@ class Number(object):
         self.exponent = exponent
 
     def __str__(self):
-        return '(number %s%s)' % (self.significand, 'e' + self.exponent if self.exponent else '')
+        return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
 
     def resolve_free_vars(self, parent):
         return self
@@ -808,7 +811,7 @@ class String(object):
         self.string = string
 
     def __str__(self):
-        return "(string '" + self.value + "')"
+        return "(string '" + self.string + "')"
 
     def resolve_free_vars(self, parent):
         return self
@@ -937,7 +940,7 @@ class LOAD_NUMBER(object):
         self.exponent = exponent
 
     def __str__(self):
-        return '%s := %s%s' % (self.dest, self.significand, 'e' + self.exponent if self.exponent else '')
+        return '%s := %s%s' % (self.dest, self.significand, 'e%s' % self.exponent if self.exponent else '')
 
 class LOAD_STRING(object):
     def __init__(self, dest, string):
