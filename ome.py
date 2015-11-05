@@ -571,8 +571,8 @@ class Method(object):
     def collect_blocks(self, block_list):
         self.expr.collect_blocks(block_list)
 
-    def generate_code(self):
-        code = MethodCode(len(self.args), len(self.locals) - len(self.args))
+    def generate_code(self, program):
+        code = MethodCode(program, len(self.args), len(self.locals) - len(self.args))
         dest = self.expr.generate_code(code, code.add_temp())
         code.add_instruction(RETURN(dest))
         return code
@@ -814,21 +814,21 @@ class Number(object):
     def collect_blocks(self, block_list):
         pass
 
-    def encode(self):
+    def encode(self, program):
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
             if MIN_INT <= value <= MAX_INT:
-                return encode_tagged_value(builtin_type_tag['Small-Integer'], value & MASK_INT)
+                return encode_tagged_value(program.tag_integer, value & MASK_INT)
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
             raise Exception('Number out of range: %se%s' % (self.significand, self.exponent))
 
         value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
-        return encode_tagged_value(builtin_type_tag['Small-Decimal'], value)
+        return encode_tagged_value(program.tag_decimal, value)
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_VALUE(dest, self.encode()))
+        code.add_instruction(LOAD_VALUE(dest, self.encode(code.program)))
         return dest
 
     check_error = False
@@ -871,7 +871,8 @@ class Label(object):
         self.location = location
 
 class MethodCode(object):
-    def __init__(self, num_args, num_locals):
+    def __init__(self, program, num_args, num_locals):
+        self.program = program
         self.num_args = num_args
         self.locals = [LOCAL(i) for i in range(num_args + num_locals)]
         self.instructions = []
@@ -1016,68 +1017,78 @@ reserved_names = {
     'self': Self,
 }
 
+builtin_data_types = ['False', 'True', 'Empty', 'Small-Integer', 'Small-Decimal']
+builtin_object_types = ['String', 'Array']
+
+class Program(object):
+    def __init__(self, ast):
+        self.block_list = []
+        self.type_tag = {}
+        self.code_table = {}
+
+        ast.collect_blocks(self.block_list)
+        self.allocate_block_ids()
+        self.build_code_table()
+
+    def allocate_block_ids(self):
+        block_id = 0
+        for tag in builtin_data_types:
+            self.type_tag[tag] = block_id
+            block_id += 1
+        for block in self.block_list:
+            if block.is_constant:
+                block.block_id = block_id
+                block_id += 1
+        self.first_object_id = block_id
+        for tag in builtin_object_types:
+            self.type_tag[tag] = block_id
+            block_id += 1
+        for block in self.block_list:
+            if not block.is_constant:
+                block.block_id = block_id
+                block_id += 1
+        self.num_block_ids = block_id
+
+        self.tag_integer = self.type_tag['Small-Integer']
+        self.tag_decimal = self.type_tag['Small-Decimal']
+        self.tag_string = self.type_tag['String']
+        self.tag_array = self.type_tag['Array']
+
+    def build_code_table(self):
+        for block in self.block_list:
+            for method in block.methods.values():
+                if method.symbol not in self.code_table:
+                    self.code_table[method.symbol] = {}
+                self.code_table[method.symbol][block.block_id] = method.generate_code(self)
+
+        print('# Allocated %d block IDs, 0-%d data types, %d-%d object types\n' % (
+            self.num_block_ids, self.first_object_id - 1, self.first_object_id, self.num_block_ids - 1))
+
+    def print_code_table(self):
+        for symbol, methods in sorted(self.code_table.items()):
+            print('MESSAGE', symbol, '{')
+            for block_id, code in sorted(methods.items()):
+                print('    BLOCK', block_id, '{')
+                labels_dict = code.build_labels_dict()
+                for i, instruction in enumerate(code.instructions):
+                    for label in labels_dict.get(i, ()):
+                        print('    %s:' % label)
+                    print ('       ', instruction)
+                print('    }')
+            print('}')
+
 def parse_file(filename):
     with open(filename) as f:
         source = f.read()
     return Parser(source, filename).block()
-
-builtin_data_types = ['False', 'True', 'Empty', 'Small-Integer', 'Small-Decimal']
-builtin_object_types = ['String', 'Array']
-builtin_type_tag = {}
-
-def allocate_block_ids(block_list):
-    block_id = 0
-    for tag in builtin_data_types:
-        builtin_type_tag[tag] = block_id
-        block_id += 1
-    for block in block_list:
-        if block.is_constant:
-            block.block_id = block_id
-            block_id += 1
-    first_object_id = block_id
-    for tag in builtin_object_types:
-        builtin_type_tag[tag] = block_id
-        block_id += 1
-    for block in block_list:
-        if not block.is_constant:
-            block.block_id = block_id
-            block_id += 1
-    return first_object_id, block_id
-
-def build_code_table(block_list):
-    code_table = {}
-    for block in block_list:
-        for method in block.methods.values():
-            if method.symbol not in code_table:
-                code_table[method.symbol] = {}
-            code_table[method.symbol][block.block_id] = method.generate_code()
-    return code_table
-
-def print_code_table(code_table):
-    for symbol, methods in sorted(code_table.items()):
-        print('MESSAGE', symbol, '{')
-        for block_id, code in sorted(methods.items()):
-            print('    BLOCK', block_id, '{')
-            labels_dict = code.build_labels_dict()
-            for i, instruction in enumerate(code.instructions):
-                for label in labels_dict.get(i, ()):
-                    print('    %s:' % label)
-                print ('       ', instruction)
-            print('    }')
-        print('}')
 
 def compile_file(filename):
     ast = parse_file(filename)
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(TopLevel)
     ast = ast.resolve_block_refs(TopLevel)
-    block_list = []
-    ast.collect_blocks(block_list)
-    first_object_id, num_block_ids = allocate_block_ids(block_list)
-    print('# Allocated %d block IDs, 0-%d data types, %d-%d object types\n' % (
-        num_block_ids, first_object_id - 1, first_object_id, num_block_ids - 1))
-    code_table = build_code_table(block_list)
-    print_code_table(code_table)
+    program = Program(ast)
+    program.print_code_table()
 
 if __name__ == '__main__':
     import sys
