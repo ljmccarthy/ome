@@ -794,9 +794,6 @@ class SlotSet(object):
 
     check_error = False
 
-def encode_tagged_value(tag, value):
-    return tag | (value << 16)
-
 MIN_INT = -2**47
 MAX_INT = 2**47 - 1
 MIN_EXPONENT = -2**7
@@ -830,17 +827,18 @@ class Number(object):
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
             if MIN_INT <= value <= MAX_INT:
-                return encode_tagged_value(program.tag_integer, value & MASK_INT)
+                return (program.tag_integer, value & MASK_INT)
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
             self.parse_state.error('Number out of range')
 
         value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
-        return encode_tagged_value(program.tag_decimal, value)
+        return (program.tag_decimal, value)
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_VALUE(dest, self.encode(code.program)))
+        tag, value = self.encode(code.program)
+        code.add_instruction(LOAD_VALUE(dest, tag, value))
         return dest
 
     check_error = False
@@ -974,12 +972,13 @@ class CREATE_ARRAY(object):
         return '%s := CREATE_ARRAY %s' % (self.dest, self.size)
 
 class LOAD_VALUE(object):
-    def __init__(self, dest, value):
+    def __init__(self, dest, tag, value):
         self.dest = dest
+        self.tag = tag
         self.value = value
 
     def __str__(self):
-        return '%s := $%016X' % (self.dest, self.value)
+        return '%s := $%04X:%012X' % (self.dest, self.tag, self.value)
 
 class LOAD_STRING(object):
     def __init__(self, dest, string):
