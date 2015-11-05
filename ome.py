@@ -232,7 +232,7 @@ class Parser(ParserState):
                 self.error('Mutable variables are only allowed in blocks')
             if not isinstance(statement, Send) or statement.receiver or not maybe_assign:
                 self.error('Left hand side of assignment must be a name')
-            name = self.check_name(statement.message)
+            name = self.check_name(statement.symbol)
             statement = LocalVariable(name, self.expr())
         return statement
 
@@ -322,12 +322,12 @@ def format_list(xs):
 class Send(object):
     def __init__(self, receiver, message, args):
         self.receiver = receiver
-        self.message = message
+        self.symbol = message
         self.args = args
 
     def __str__(self):
         args = (' ' if self.args else '') + format_list(self.args)
-        return '(send %s %s%s)' % (self.message, self.receiver or '<free>', args)
+        return '(send %s %s%s)' % (self.symbol, self.receiver or '<free>', args)
 
     def resolve_free_vars(self, parent):
         for i, arg in enumerate(self.args):
@@ -336,12 +336,12 @@ class Send(object):
             self.receiver = self.receiver.resolve_free_vars(parent)
         else:
             if len(self.args) == 0:
-                ref = parent.lookup_var(self.message)
+                ref = parent.lookup_var(self.symbol)
                 if ref:
                     return ref
-            self.receiver_block = parent.lookup_receiver(self.message)
+            self.receiver_block = parent.lookup_receiver(self.symbol)
             if not self.receiver_block:
-                raise Exception("Receiver could not be resolved for '%s'" % self.message)
+                raise Exception("Receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
@@ -353,15 +353,16 @@ class Send(object):
             block = self.receiver_block
             if block.is_constant and block != parent.find_block():
                 # No need to get block ref for constant blocks
-                self.receiver = block.constant_ref
+                receiver = block.constant_ref
             else:
                 receiver = parent.get_block_ref(block)
                 # Direct slot access optimisation
-                if len(self.args) == 0 and self.message in block.vars:
-                    return SlotGet(receiver, block.vars[self.message].index)
-                if len(self.args) == 1 and self.message[:-1] in block.vars:
-                    return SlotSet(receiver, block.vars[self.message[:-1]].index, self.args[0])
-                self.receiver = receiver
+                if len(self.args) == 0 and self.symbol in block.vars:
+                    return SlotGet(receiver, block.vars[self.symbol].index)
+                if len(self.args) == 1 and self.symbol[:-1] in block.vars:
+                    return SlotSet(receiver, block.vars[self.symbol[:-1]].index, self.args[0])
+            # Convert Send to a Call since we know which type of block we're sending to
+            return Call(block, receiver, self.symbol, self.args)
         return self
 
     def collect_blocks(self, block_list):
@@ -372,7 +373,32 @@ class Send(object):
     def generate_code(self, code, dest):
         receiver = self.receiver.generate_code(code, code.add_temp())
         args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
-        code.add_instruction(SEND(dest, self.message, receiver, args))
+        code.add_instruction(SEND(dest, self.symbol, receiver, args))
+        return dest
+
+    check_error = True
+
+class Call(object):
+    def __init__(self, block, receiver, message, args):
+        self.block = block
+        self.receiver = receiver
+        self.symbol = message
+        self.args = args
+
+    def __str__(self):
+        args = (' ' if self.args else '') + format_list(self.args)
+        block_id = getattr(self.block, 'block_id', '<blockid>')
+        return '(call %s/%s %s%s)' % (self.symbol, block_id, self.receiver, args)
+
+    def collect_blocks(self, block_list):
+        self.receiver.collect_blocks(block_list)
+        for arg in self.args:
+            arg.collect_blocks(block_list)
+
+    def generate_code(self, code, dest):
+        receiver = self.receiver.generate_code(code, code.add_temp())
+        args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
+        code.add_instruction(CALL(dest, self.block.block_id, self.symbol, receiver, args))
         return dest
 
     check_error = True
@@ -875,6 +901,17 @@ class SEND(object):
 
     def __str__(self):
         return '%s := SEND %s %s %s' % (self.dest, self.symbol, self.receiver, format_list(self.args))
+
+class CALL(object):
+    def __init__(self, dest, block_id, symbol, receiver, args):
+        self.dest = dest
+        self.block_id = block_id
+        self.symbol = symbol
+        self.receiver = receiver
+        self.args = args
+
+    def __str__(self):
+        return '%s := CALL %s/%s %s %s' % (self.dest, self.symbol, self.block_id, self.receiver, format_list(self.args))
 
 class CREATE(object):
     def __init__(self, dest, block_id, args):
