@@ -305,7 +305,7 @@ class Parser(ParserState):
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
-            whole_stripped = whole.rstrip('0')
+            whole_stripped = whole.rstrip('0') or '0'
             significand = int(whole_stripped, 10)
             trailing = len(whole) - len(whole_stripped)
             exponent = (int(exponent, 10) if exponent else 0) + trailing
@@ -783,6 +783,20 @@ class SlotSet(object):
 
     check_error = False
 
+def encode_tagged_value(tag, value):
+    return tag | (value << 16)
+
+MIN_INT = -2**47
+MAX_INT = 2**47 - 1
+MIN_EXPONENT = -2**7
+MAX_EXPONENT = 2**7 - 1
+MIN_SIGNIFICAND = -2**39
+MAX_SIGNIFICAND = 2**39 - 1
+
+MASK_INT = (1 << 48) - 1
+MASK_EXPONENT = (1 << 8) - 1
+MASK_SIGNIFICAND = (1 << 40) - 1
+
 class Number(object):
     def __init__(self, significand, exponent):
         self.significand = significand
@@ -800,8 +814,21 @@ class Number(object):
     def collect_blocks(self, block_list):
         pass
 
+    def encode(self):
+        if self.exponent >= 0:
+            value = self.significand * 10**self.exponent
+            if MIN_INT <= value <= MAX_INT:
+                return encode_tagged_value(builtin_type_tag['Small-Integer'], value & MASK_INT)
+
+        if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
+        and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
+            raise Exception('Number out of range: %se%s' % (self.significand, self.exponent))
+
+        value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
+        return encode_tagged_value(builtin_type_tag['Small-Decimal'], value)
+
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_NUMBER(dest, self.significand, self.exponent))
+        code.add_instruction(LOAD_VALUE(dest, self.encode()))
         return dest
 
     check_error = False
@@ -933,14 +960,13 @@ class CREATE_ARRAY(object):
     def __str__(self):
         return '%s := CREATE_ARRAY %s' % (self.dest, self.size)
 
-class LOAD_NUMBER(object):
-    def __init__(self, dest, significand, exponent):
+class LOAD_VALUE(object):
+    def __init__(self, dest, value):
         self.dest = dest
-        self.significand = significand
-        self.exponent = exponent
+        self.value = value
 
     def __str__(self):
-        return '%s := %s%s' % (self.dest, self.significand, 'e%s' % self.exponent if self.exponent else '')
+        return '%s := $%016X' % (self.dest, self.value)
 
 class LOAD_STRING(object):
     def __init__(self, dest, string):
@@ -995,17 +1021,23 @@ def parse_file(filename):
         source = f.read()
     return Parser(source, filename).block()
 
-builtin_data_types = ['False', 'True', 'Small-Integer']
+builtin_data_types = ['False', 'True', 'Empty', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
+builtin_type_tag = {}
 
 def allocate_block_ids(block_list):
-    block_id = len(builtin_data_types)
+    block_id = 0
+    for tag in builtin_data_types:
+        builtin_type_tag[tag] = block_id
+        block_id += 1
     for block in block_list:
         if block.is_constant:
             block.block_id = block_id
             block_id += 1
     first_object_id = block_id
-    block_id += len(builtin_object_types)
+    for tag in builtin_object_types:
+        builtin_type_tag[tag] = block_id
+        block_id += 1
     for block in block_list:
         if not block.is_constant:
             block.block_id = block_id
