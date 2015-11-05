@@ -43,16 +43,24 @@ class ParserState(object):
 
     def copy_state(self):
         state = ParserState(self.stream)
-        state.copy(self)
+        state.set_state(self)
         return state
 
-    def error(self, message):
+    @property
+    def current_line(self):
         m = re_newline.search(self.stream, self.pos)
-        line = self.stream[self.line_pos : m.start() if m else len(self.stream)]
-        col = self.pos - self.line_pos
-        arrow = ' ' * col + '^'
+        return self.stream[self.line_pos : m.start() if m else len(self.stream)]
+
+    @property
+    def column(self):
+        return self.pos - self.line_pos
+
+    def error(self, message):
+        line = self.current_line
+        column = self.column
+        arrow = ' ' * column + '^'
         raise SyntaxError('Error in "%s", line %d, column %d: %s\n  %s\n  %s' % (
-            self.stream_name, self.line_number, col, message, line, arrow))
+            self.stream_name, self.line_number, column, message, line, arrow))
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
@@ -256,6 +264,7 @@ class Parser(ParserState):
 
     def expr(self):
         expr = None
+        parse_state = self.copy_state()
         self.scan()
         if not self.peek(re_keyword):
             expr = self.unaryexpr()
@@ -268,7 +277,7 @@ class Parser(ParserState):
                 symbol += ','
                 args.append(self.unaryexpr())
         if args:
-            expr = Send(expr, symbol, args)
+            expr = Send(expr, symbol, args, parse_state)
         return expr
 
     def unaryexpr(self):
@@ -296,12 +305,13 @@ class Parser(ParserState):
             array = self.array()
             self.expect_token(']', "Expected ']'")
             return array
+        parse_state = self.copy_state()
         m = self.expr_token(re_name)
         if m:
             name = m.group()
             if name in reserved_names:
                 return reserved_names[name]
-            return Send(None, name, [])
+            return Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
@@ -313,7 +323,7 @@ class Parser(ParserState):
             if decimal:
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
-            return Number(significand, exponent)
+            return Number(significand, exponent, parse_state)
         m = self.expr_token(re_string)
         if m:
             return String(m.group(1))
@@ -323,10 +333,11 @@ def format_list(xs):
     return ' '.join(str(x) for x in xs)
 
 class Send(object):
-    def __init__(self, receiver, message, args):
+    def __init__(self, receiver, message, args, parse_state=None):
         self.receiver = receiver
         self.symbol = message
         self.args = args
+        self.parse_state = parse_state
 
     def __str__(self):
         args = (' ' if self.args else '') + format_list(self.args)
@@ -344,7 +355,7 @@ class Send(object):
                     return ref
             self.receiver_block = parent.lookup_receiver(self.symbol)
             if not self.receiver_block:
-                raise Exception("Receiver could not be resolved for '%s'" % self.symbol)
+                self.parse_state.error("Receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
@@ -597,7 +608,7 @@ class Sequence(object):
 
     def resolve_free_vars(self, parent):
         self.parent = parent
-        self.method = self.find_method()
+        self.method = parent.find_method()
         self.vars = {}
         for i, statement in enumerate(self.statements):
             self.statements[i] = statement.resolve_free_vars(self)
@@ -798,9 +809,10 @@ MASK_EXPONENT = (1 << 8) - 1
 MASK_SIGNIFICAND = (1 << 40) - 1
 
 class Number(object):
-    def __init__(self, significand, exponent):
+    def __init__(self, significand, exponent, parse_state):
         self.significand = significand
         self.exponent = exponent
+        self.parse_state = parse_state
 
     def __str__(self):
         return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
@@ -822,7 +834,7 @@ class Number(object):
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
-            raise Exception('Number out of range: %se%s' % (self.significand, self.exponent))
+            self.parse_state.error('Number out of range')
 
         value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
         return encode_tagged_value(program.tag_decimal, value)
@@ -1054,15 +1066,16 @@ class Program(object):
         self.tag_string = self.type_tag['String']
         self.tag_array = self.type_tag['Array']
 
+        print('# Allocated %d block IDs, 0-%d for data types, %d-%d for object types\n' % (
+            self.num_block_ids, self.first_object_id - 1,
+            self.first_object_id, self.num_block_ids - 1))
+
     def build_code_table(self):
         for block in self.block_list:
             for method in block.methods.values():
                 if method.symbol not in self.code_table:
                     self.code_table[method.symbol] = {}
                 self.code_table[method.symbol][block.block_id] = method.generate_code(self)
-
-        print('# Allocated %d block IDs, 0-%d data types, %d-%d object types\n' % (
-            self.num_block_ids, self.first_object_id - 1, self.first_object_id, self.num_block_ids - 1))
 
     def print_code_table(self):
         for symbol, methods in sorted(self.code_table.items()):
