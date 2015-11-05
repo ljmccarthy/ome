@@ -305,12 +305,12 @@ class Parser(ParserState):
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
-            mantissa = int(whole, 10)
+            significand = int(whole, 10)
             exponent = int(exponent, 10) if exponent is not None else 0
             if decimal is not None:
-                mantissa = mantissa * 10**(len(decimal)) + int(decimal, 10)
+                significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
-            return Number(mantissa, exponent)
+            return Number(significand, exponent)
         m = self.expr_token(re_string)
         if m:
             return String(m.group(1))
@@ -781,12 +781,12 @@ class SlotSet(object):
     check_error = False
 
 class Number(object):
-    def __init__(self, mantissa, exponent):
-        self.mantissa = mantissa
+    def __init__(self, significand, exponent):
+        self.significand = significand
         self.exponent = exponent
 
     def __str__(self):
-        return '(number %s%s)' % (self.mantissa, 'e' + self.exponent if self.exponent else '')
+        return '(number %s%s)' % (self.significand, 'e' + self.exponent if self.exponent else '')
 
     def resolve_free_vars(self, parent):
         return self
@@ -798,7 +798,7 @@ class Number(object):
         pass
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_NUMBER(dest, self.mantissa, self.exponent))
+        code.add_instruction(LOAD_NUMBER(dest, self.significand, self.exponent))
         return dest
 
     check_error = False
@@ -931,13 +931,13 @@ class CREATE_ARRAY(object):
         return '%s := CREATE_ARRAY %s' % (self.dest, self.size)
 
 class LOAD_NUMBER(object):
-    def __init__(self, dest, mantissa, exponent):
+    def __init__(self, dest, significand, exponent):
         self.dest = dest
-        self.mantissa = mantissa
+        self.significand = significand
         self.exponent = exponent
 
     def __str__(self):
-        return '%s := %s%s' % (self.dest, self.mantissa, 'e' + self.exponent if self.exponent else '')
+        return '%s := %s%s' % (self.dest, self.significand, 'e' + self.exponent if self.exponent else '')
 
 class LOAD_STRING(object):
     def __init__(self, dest, string):
