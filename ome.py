@@ -400,11 +400,11 @@ class Send(object):
             else:
                 receiver = parent.get_block_ref(block)
                 # Direct slot access optimisation
-                if len(self.args) == 0 and self.symbol in block.vars:
-                    var = block.vars[self.symbol]
+                if len(self.args) == 0 and self.symbol in block.instance_vars:
+                    var = block.instance_vars[self.symbol]
                     return SlotGet(receiver, var.index, var.mutable)
-                if len(self.args) == 1 and self.symbol[:-1] in block.vars:
-                    var = block.vars[self.symbol[:-1]]
+                if len(self.args) == 1 and self.symbol[:-1] in block.instance_vars:
+                    var = block.instance_vars[self.symbol[:-1]]
                     return SlotSet(receiver, var.index, self.args[0])
             # Convert Send to a Call since we know which type of block we're sending to
             return Call(block, receiver, self.symbol, self.args)
@@ -462,12 +462,14 @@ class BlockVariable(object):
 
 class Block(object):
     def __init__(self, vars, methods):
-        self.vars_list = vars
-        self.vars = {var.name: var for var in self.vars_list}
-        self.methods = {method.symbol: method for method in methods}
+        self.slots = vars
+        self.instance_vars = {var.name: var for var in self.slots}
+        self.closure_vars = {}
         self.block_refs = {}
         self.blocks_needed = set()
-        self.private_methods = set()
+        self.methods = {method.symbol: method for method in methods}
+        self.private_accessors = set()
+
         # Generate getter and setter methods
         for var in vars:
             setter = var.name + ':'
@@ -476,12 +478,12 @@ class Block(object):
                 if var.mutable:
                     self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
             else:
-                self.private_methods.add(var.name)
+                self.private_accessors.add(var.name)
                 if var.mutable:
-                    self.private_methods.add(setter)
+                    self.private_accessors.add(setter)
 
     def __str__(self):
-        args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.vars_list) + ')' if self.vars_list else ''
+        args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.slots) + ')' if self.slots else ''
         methods = ' ' + format_list(x[1] for x in sorted(self.methods.items())) if self.methods else ''
         return '(block%s%s)' % (args, methods)
 
@@ -489,7 +491,7 @@ class Block(object):
         return self
 
     def resolve_free_vars(self, parent):
-        for var in self.vars_list:
+        for var in self.slots:
             var.init_ref = parent.lookup_var(var.name)
         self.parent = parent
         for method in self.methods.values():
@@ -497,7 +499,7 @@ class Block(object):
         return self
 
     def resolve_block_refs(self, parent):
-        self.is_constant = (len(self.vars_list) == 0 and all(block.is_constant for block in self.blocks_needed))
+        self.is_constant = (len(self.slots) == 0 and all(block.is_constant for block in self.blocks_needed))
         if self.is_constant:
             self.constant_ref = ConstantBlock(self)
         for method in self.methods.values():
@@ -505,18 +507,18 @@ class Block(object):
         return self
 
     def lookup_var(self, symbol):
-        if symbol in self.vars:
-            return self.vars[symbol].self_ref
-        if symbol not in self.methods:
+        if symbol in self.closure_vars:
+            return self.closure_vars[symbol].self_ref
+        if symbol not in self.methods and symbol not in self.instance_vars:
             ref = self.parent.lookup_var(symbol)
             if ref:
-                var = BlockVariable(symbol, False, len(self.vars_list), ref)
-                self.vars[symbol] = var
-                self.vars_list.append(var)
+                var = BlockVariable(symbol, False, len(self.slots), ref)
+                self.closure_vars[symbol] = var
+                self.slots.append(var)
                 return var.self_ref
 
     def lookup_receiver(self, symbol):
-        if symbol in self.methods or symbol in self.private_methods:
+        if symbol in self.methods or symbol in self.private_accessors:
             return self
         block = self.parent.lookup_receiver(symbol)
         if block:
@@ -529,9 +531,9 @@ class Block(object):
         if block in self.block_refs:
             return self.block_refs[block]
         init_ref = self.parent.get_block_ref(block)
-        var = BlockVariable('<blockref>', False, len(self.vars_list), init_ref)
-        self.vars_list.append(var)
-        self.vars[var.name] = var
+        var = BlockVariable('<blockref>', False, len(self.slots), init_ref)
+        self.slots.append(var)
+        self.closure_vars[var.name] = var
         self.block_refs[block] = var.self_ref
         return var.self_ref
 
@@ -541,7 +543,7 @@ class Block(object):
             method.collect_blocks(block_list)
 
     def generate_code(self, code, dest):
-        args = [var.generate_code(code) for var in self.vars_list]
+        args = [var.generate_code(code) for var in self.slots]
         code.add_instruction(CREATE(dest, self.tag, args))
         return dest
 
