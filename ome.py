@@ -424,8 +424,8 @@ class Call(object):
 
     def __str__(self):
         args = (' ' if self.args else '') + format_list(self.args)
-        block_id = getattr(self.block, 'block_id', '<blockid>')
-        return '(call %s/%s %s%s)' % (self.symbol, block_id, self.receiver, args)
+        tag = getattr(self.block, 'tag', '<tag>')
+        return '(call %s/%s %s%s)' % (self.symbol, tag, self.receiver, args)
 
     def collect_blocks(self, block_list):
         self.receiver.collect_blocks(block_list)
@@ -435,7 +435,7 @@ class Call(object):
     def generate_code(self, code, dest):
         receiver = self.receiver.generate_code(code, code.add_temp())
         args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
-        code.add_instruction(CALL(dest, self.block.block_id, self.symbol, receiver, args))
+        code.add_instruction(CALL(dest, self.block.tag, self.symbol, receiver, args))
         return dest
 
     check_error = True
@@ -527,7 +527,7 @@ class Block(object):
 
     def generate_code(self, code, dest):
         args = [var.generate_code(code) for var in self.vars_list]
-        code.add_instruction(CREATE(dest, self.block_id, args))
+        code.add_instruction(CREATE(dest, self.tag, args))
         return dest
 
     check_error = False
@@ -745,7 +745,7 @@ class ConstantBlock(TerminalNode):
         return '<constant-block>'
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_VALUE(dest, self.block.block_id, 0))
+        code.add_instruction(LOAD_VALUE(dest, self.block.tag, 0))
         return dest
 
 class LocalGet(TerminalNode):
@@ -948,24 +948,24 @@ class SEND(object):
         return '%s := SEND %s %s %s' % (self.dest, self.symbol, self.receiver, format_list(self.args))
 
 class CALL(object):
-    def __init__(self, dest, block_id, symbol, receiver, args):
+    def __init__(self, dest, tag, symbol, receiver, args):
         self.dest = dest
-        self.block_id = block_id
+        self.tag = tag
         self.symbol = symbol
         self.receiver = receiver
         self.args = args
 
     def __str__(self):
-        return '%s := CALL %s/%s %s %s' % (self.dest, self.symbol, self.block_id, self.receiver, format_list(self.args))
+        return '%s := CALL %s/%s %s %s' % (self.dest, self.symbol, self.tag, self.receiver, format_list(self.args))
 
 class CREATE(object):
-    def __init__(self, dest, block_id, args):
+    def __init__(self, dest, tag, args):
         self.dest = dest
-        self.block_id = block_id
+        self.tag = tag
         self.args = args
 
     def __str__(self):
-        return '%s := CREATE %s %s' % (self.dest, self.block_id, format_list(self.args))
+        return '%s := CREATE %s %s' % (self.dest, self.tag, format_list(self.args))
 
 class CREATE_ARRAY(object):
     def __init__(self, dest, size):
@@ -1039,27 +1039,27 @@ class Program(object):
         self.code_table = {}
 
         ast.collect_blocks(self.block_list)
-        self.allocate_block_ids()
+        self.allocate_tag_ids()
         self.build_code_table()
 
-    def allocate_block_ids(self):
-        block_id = 0
-        for tag in builtin_data_types:
-            self.type_tag[tag] = block_id
-            block_id += 1
+    def allocate_tag_ids(self):
+        tag = 0
+        for type_name in builtin_data_types:
+            self.type_tag[type_name] = tag
+            tag += 1
         for block in self.block_list:
             if block.is_constant:
-                block.block_id = block_id
-                block_id += 1
-        self.first_object_id = block_id
-        for tag in builtin_object_types:
-            self.type_tag[tag] = block_id
-            block_id += 1
+                block.tag = tag
+                tag += 1
+        self.first_object_id = tag
+        for type_name in builtin_object_types:
+            self.type_tag[type_name] = tag
+            tag += 1
         for block in self.block_list:
             if not block.is_constant:
-                block.block_id = block_id
-                block_id += 1
-        self.num_block_ids = block_id
+                block.tag = tag
+                tag += 1
+        self.num_tags = tag
 
         self.tag_empty = self.type_tag['Empty']
         self.tag_integer = self.type_tag['Small-Integer']
@@ -1068,21 +1068,21 @@ class Program(object):
         self.tag_array = self.type_tag['Array']
 
         print('# Allocated %d block IDs, 0-%d for data types, %d-%d for object types\n' % (
-            self.num_block_ids, self.first_object_id - 1,
-            self.first_object_id, self.num_block_ids - 1))
+            self.num_tags, self.first_object_id - 1,
+            self.first_object_id, self.num_tags - 1))
 
     def build_code_table(self):
         for block in self.block_list:
             for method in block.methods.values():
                 if method.symbol not in self.code_table:
                     self.code_table[method.symbol] = {}
-                self.code_table[method.symbol][block.block_id] = method.generate_code(self)
+                self.code_table[method.symbol][block.tag] = method.generate_code(self)
 
     def print_code_table(self):
         for symbol, methods in sorted(self.code_table.items()):
             print('MESSAGE', symbol, '{')
-            for block_id, code in sorted(methods.items()):
-                print('    BLOCK', block_id, '{')
+            for tag, code in sorted(methods.items()):
+                print('    BLOCK', tag, '{')
                 labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
                     for label in labels_dict.get(i, ()):
