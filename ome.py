@@ -968,8 +968,7 @@ class MethodCode(object):
                 error_label = self.instructions[error_label.location].label
             instruction.label = error_label
 
-        used_labels = set(inst.label for inst in self.iter_instructions_by_type(ON_ERROR))
-        self.labels.intersection_update(used_labels)
+        self.labels = set(inst.label for inst in self.iter_instructions_by_type(ON_ERROR))
 
     def build_labels_dict(self):
         labels_dict = {}
