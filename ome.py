@@ -231,6 +231,8 @@ class Parser(ParserState):
         self.scan()
         if self.pos < len(self.stream) and not self.peek('}'):
             self.error('Expected declaration or end of block')
+        if not vars and not methods:
+            return EmptyBlock
         block = Block(vars, methods)
         if statements:
             statements.append(block)
@@ -704,10 +706,7 @@ class Array(object):
 
     check_error = False
 
-class Self(object):
-    def __str__(self):
-        return 'self'
-
+class TerminalNode(object):
     def resolve_free_vars(self, parent):
         return self
 
@@ -717,45 +716,47 @@ class Self(object):
     def collect_blocks(self, block_list):
         pass
 
+    check_error = False
+
+class Self(TerminalNode):
+    def __str__(self):
+        return 'self'
+
     def generate_code(self, code, dest):
         return SELF
 
-    check_error = False
+Self = Self()
 
-class ConstantBlock(object):
+class EmptyBlock(TerminalNode):
+    def __str__(self):
+        return '(block)'
+
+    def generate_code(self, code, dest):
+        code.add_instruction(LOAD_VALUE(dest, code.program.tag_empty, 0))
+        return dest
+
+EmptyBlock = EmptyBlock()
+
+class ConstantBlock(TerminalNode):
     def __init__(self, block):
         self.block = block
 
     def __str__(self):
         return '<constant-block>'
 
-    def collect_blocks(self, block_list):
-        pass
-
     def generate_code(self, code, dest):
-        code.add_instruction(CREATE(dest, self.block.block_id, []))
+        code.add_instruction(LOAD_VALUE(dest, self.block.block_id, 0))
         return dest
 
-class LocalGet(object):
+class LocalGet(TerminalNode):
     def __init__(self, index):
         self.index = index
 
     def __str__(self):
         return '(local-get %d)' % self.index
 
-    def resolve_free_vars(self, parent):
-        return self
-
-    def resolve_block_refs(self, parent):
-        return self
-
-    def collect_blocks(self, block_list):
-        pass
-
     def generate_code(self, code, dest):
         return code.locals[self.index]
-
-    check_error = False
 
 class SlotGet(object):
     def __init__(self, obj_expr, index):
@@ -828,7 +829,7 @@ MASK_INT = (1 << 48) - 1
 MASK_EXPONENT = (1 << 8) - 1
 MASK_SIGNIFICAND = (1 << 40) - 1
 
-class Number(object):
+class Number(TerminalNode):
     def __init__(self, significand, exponent, parse_state):
         self.significand = significand
         self.exponent = exponent
@@ -836,15 +837,6 @@ class Number(object):
 
     def __str__(self):
         return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
-
-    def resolve_free_vars(self, parent):
-        return self
-
-    def resolve_block_refs(self, parent):
-        return self
-
-    def collect_blocks(self, block_list):
-        pass
 
     def encode(self, program):
         if self.exponent >= 0:
@@ -864,29 +856,16 @@ class Number(object):
         code.add_instruction(LOAD_VALUE(dest, tag, value))
         return dest
 
-    check_error = False
-
-class String(object):
+class String(TerminalNode):
     def __init__(self, string):
         self.string = string
 
     def __str__(self):
         return "(string '" + self.string + "')"
 
-    def resolve_free_vars(self, parent):
-        return self
-
-    def resolve_block_refs(self, parent):
-        return self
-
-    def collect_blocks(self, block_list):
-        pass
-
     def generate_code(self, code, dest):
         code.add_instruction(LOAD_STRING(dest, self.string))
         return dest
-
-    check_error = False
 
 class TopLevel(object):
     def lookup_var(self, symbol):
@@ -897,6 +876,8 @@ class TopLevel(object):
 
     def get_block_ref(self, block):
         pass
+
+TopLevel = TopLevel()
 
 class Label(object):
     def __init__(self, name, location):
@@ -1044,9 +1025,6 @@ class RETURN(object):
     def __str__(self):
         return 'RETURN %s' % self.dest
 
-Self = Self()
-TopLevel = TopLevel()
-
 reserved_names = {
     'self': Self,
 }
@@ -1083,6 +1061,7 @@ class Program(object):
                 block_id += 1
         self.num_block_ids = block_id
 
+        self.tag_empty = self.type_tag['Empty']
         self.tag_integer = self.type_tag['Small-Integer']
         self.tag_decimal = self.type_tag['Small-Decimal']
         self.tag_string = self.type_tag['String']
