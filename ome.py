@@ -6,8 +6,9 @@ import re
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
 re_comment = re.compile(r'(?:#|--)([^\r\n]*)')
-re_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
-re_keyword = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
+re_name = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
+re_arg_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
+re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
 re_number = re.compile(r'([+-]?[0-9]+)(?:\.([0-9]+))?(?:e([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\'|[^\r\n'])*)'")
 re_assign = re.compile(r'=|:=')
@@ -59,8 +60,8 @@ class ParserState(object):
         line = self.current_line
         column = self.column
         arrow = ' ' * column + '^'
-        raise SyntaxError('Error in "%s", line %d, column %d: %s\n  %s\n  %s' % (
-            self.stream_name, self.line_number, column, message, line, arrow))
+        raise SyntaxError('In "%s", line %d, column %d\n    %s\n    %s\nError: %s' % (
+            self.stream_name, self.line_number, column, line, arrow, message))
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
@@ -149,7 +150,7 @@ class Parser(ParserState):
                 break
             yield m
 
-    def check_name(self, name):
+    def check_name(self, name, parse_state):
         if name in reserved_names:
             self.error('%s is a reserved name' % name)
         return name
@@ -158,20 +159,24 @@ class Parser(ParserState):
         self.scan()
         if self.peek(re_keyword):
             self.error(message)
-        return self.expect_token(re_name, message).group()
+        return self.expect_token(re_arg_name, message).group()
 
     def signature(self):
         argnames = []
         symbol = ''
         for m in self.repeat_token(re_keyword):
-            symbol += m.group()
+            part = m.group()
+            if part[0] == '~' and symbol:
+                self.error('Expected keyword')
+            symbol += part
             argnames.append(self.argument_name())
             for m in self.repeat_token(','):
                 symbol += ','
                 argnames.append(self.argument_name())
         if not symbol:
+            parse_state = self.copy_state()
             m = self.expect_token(re_name, 'Expected name or keyword')
-            symbol = self.check_name(m.group())
+            symbol = self.check_name(m.group(), parse_state)
         return symbol, argnames
 
     def statement_lines(self):
@@ -200,12 +205,13 @@ class Parser(ParserState):
             self.scan()
             if self.peek(re_keyword):
                 break
+            parse_state = self.copy_state()
             m = self.token(re_name)
             if not m:
                 break
-            name = self.check_name(m.group())
+            name = self.check_name(m.group(), parse_state)
             if name in defined_symbols:
-                self.error("Variable '%s' is already defined" % name)
+                parse_state.error("Variable '%s' is already defined" % name)
             mutable = self.expect_token(re_assign, "Expected '=' or ':='").group() == ':='
             statements.append(LocalVariable(name, self.expr()))
             vars.append(BlockVariable(name, mutable, len(vars)))            
@@ -233,14 +239,17 @@ class Parser(ParserState):
 
     def statement(self):
         maybe_assign = self.peek(re_name)
+        parse_state = self.copy_state()
         statement = self.expr()
         m = self.token(re_assign)
         if m:
             if m.group() == ':=':
                 self.error('Mutable variables are only allowed in blocks')
             if not isinstance(statement, Send) or statement.receiver or not maybe_assign:
-                self.error('Left hand side of assignment must be a name')
-            name = self.check_name(statement.symbol)
+                parse_state.error('Left hand side of assignment must be a name')
+            if statement.symbol[0] == '~':
+                parse_state.error('Local variables cannot be private')
+            name = self.check_name(statement.symbol, parse_state)
             statement = LocalVariable(name, self.expr())
         return statement
 
@@ -270,12 +279,20 @@ class Parser(ParserState):
             expr = self.unaryexpr()
         symbol = ''
         args = []
+        kw_parse_state = self.copy_state()
         for m in self.repeat_expr_token(re_keyword):
-            symbol += m.group()
+            part = m.group()
+            if part[0] == '~':
+                if symbol:
+                    kw_parse_state.error('Expected keyword')
+                if expr:
+                    kw_parse_state.error('Private message sent to an explicit receiver')
+            symbol += part
             args.append(self.unaryexpr())
             for m in self.repeat_expr_token(','):
                 symbol += ','
                 args.append(self.unaryexpr())
+            kw_parse_state = self.copy_state()
         if args:
             expr = Send(expr, symbol, args, parse_state)
         return expr
@@ -286,10 +303,14 @@ class Parser(ParserState):
             self.scan()
             if self.peek(re_keyword):
                 break
+            parse_state = self.copy_state()
             m = self.expr_token(re_name)
             if not m:
                 break
-            expr = Send(expr, m.group(), [])
+            name = m.group()
+            if name[0] == '~':
+                parse_state.error('Private message sent to an explicit receiver')
+            expr = Send(expr, name, [])
         return expr
 
     def atom(self):
@@ -421,6 +442,7 @@ class BlockVariable(object):
     def __init__(self, name, mutable, index, init_ref=None):
         self.name = name
         self.mutable = mutable
+        self.private = name[0] == '~'
         self.index = index
         self.init_ref = init_ref
         self.self_ref = SlotGet(Self, index)
@@ -437,10 +459,11 @@ class Block(object):
         self.blocks_needed = set()
         # Generate getter and setter methods
         for var in vars:
-            self.methods[var.name] = Method(var.name, [], var.self_ref)
-            if var.mutable:
-                setter = var.name + ':'
-                self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
+            if not var.private:
+                self.methods[var.name] = Method(var.name, [], var.self_ref)
+                if var.mutable:
+                    setter = var.name + ':'
+                    self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.vars_list) + ')' if self.vars_list else ''
