@@ -468,14 +468,15 @@ class Block(object):
         self.private_methods = set()
         # Generate getter and setter methods
         for var in vars:
+            setter = var.name + ':'
             if not var.private:
                 self.methods[var.name] = Method(var.name, [], var.self_ref)
                 if var.mutable:
-                    self.methods[var.name + ':'] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
+                    self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
             else:
                 self.private_methods.add(var.name)
                 if var.mutable:
-                    self.private_methods.add(var.name + ':')
+                    self.private_methods.add(setter)
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.vars_list) + ')' if self.vars_list else ''
