@@ -239,6 +239,12 @@ class Parser(ParserState):
             return Sequence(statements)
         return block
 
+    def toplevel(self):
+        block = self.block()
+        if self.pos < len(self.stream):
+            self.error('Expected declaration or end of file')
+        return block
+
     def statement(self):
         maybe_assign = self.peek(re_name)
         parse_state = self.copy_state()
@@ -459,13 +465,17 @@ class Block(object):
         self.methods = {method.symbol: method for method in methods}
         self.block_refs = {}
         self.blocks_needed = set()
+        self.private_methods = set()
         # Generate getter and setter methods
         for var in vars:
             if not var.private:
                 self.methods[var.name] = Method(var.name, [], var.self_ref)
                 if var.mutable:
-                    setter = var.name + ':'
-                    self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
+                    self.methods[var.name + ':'] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
+            else:
+                self.private_methods.add(var.name)
+                if var.mutable:
+                    self.private_methods.add(var.name + ':')
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.vars_list) + ')' if self.vars_list else ''
@@ -503,7 +513,7 @@ class Block(object):
                 return var.self_ref
 
     def lookup_receiver(self, symbol):
-        if symbol in self.methods:
+        if symbol in self.methods or symbol in self.private_methods:
             return self
         block = self.parent.lookup_receiver(symbol)
         if block:
@@ -1096,7 +1106,7 @@ class Program(object):
 def parse_file(filename):
     with open(filename) as f:
         source = f.read()
-    return Parser(source, filename).block()
+    return Parser(source, filename).toplevel()
 
 def compile_file(filename):
     ast = parse_file(filename)
