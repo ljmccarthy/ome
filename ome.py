@@ -492,6 +492,8 @@ class Block(object):
         return self
 
     def lookup_var(self, symbol):
+        if symbol in self.vars:
+            return self.vars[symbol].self_ref
         if symbol not in self.methods:
             ref = self.parent.lookup_var(symbol)
             if ref:
@@ -956,7 +958,7 @@ class CALL(object):
         self.args = args
 
     def __str__(self):
-        return '%s := CALL %s/%s %s %s' % (self.dest, self.symbol, self.tag, self.receiver, format_list(self.args))
+        return '%s := CALL $%04X %s %s %s' % (self.dest, self.tag, self.symbol, self.receiver, format_list(self.args))
 
 class CREATE(object):
     def __init__(self, dest, tag, args):
@@ -965,7 +967,7 @@ class CREATE(object):
         self.args = args
 
     def __str__(self):
-        return '%s := CREATE %s %s' % (self.dest, self.tag, format_list(self.args))
+        return '%s := CREATE $%04X %s' % (self.dest, self.tag, format_list(self.args))
 
 class CREATE_ARRAY(object):
     def __init__(self, dest, size):
@@ -1067,7 +1069,7 @@ class Program(object):
         self.tag_string = self.type_tag['String']
         self.tag_array = self.type_tag['Array']
 
-        print('# Allocated %d block IDs, 0-%d for data types, %d-%d for object types\n' % (
+        print('# Allocated %d tag IDs, 0-%d for data types, %d-%d for object types\n' % (
             self.num_tags, self.first_object_id - 1,
             self.first_object_id, self.num_tags - 1))
 
@@ -1082,7 +1084,7 @@ class Program(object):
         for symbol, methods in sorted(self.code_table.items()):
             print('MESSAGE', symbol, '{')
             for tag, code in sorted(methods.items()):
-                print('    BLOCK', tag, '{')
+                print('    TAG', tag, '{')
                 labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
                     for label in labels_dict.get(i, ()):
