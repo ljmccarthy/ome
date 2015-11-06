@@ -401,9 +401,11 @@ class Send(object):
                 receiver = parent.get_block_ref(block)
                 # Direct slot access optimisation
                 if len(self.args) == 0 and self.symbol in block.vars:
-                    return SlotGet(receiver, block.vars[self.symbol].index)
+                    var = block.vars[self.symbol]
+                    return SlotGet(receiver, var.index, var.mutable)
                 if len(self.args) == 1 and self.symbol[:-1] in block.vars:
-                    return SlotSet(receiver, block.vars[self.symbol[:-1]].index, self.args[0])
+                    var = block.vars[self.symbol[:-1]]
+                    return SlotSet(receiver, var.index, self.args[0])
             # Convert Send to a Call since we know which type of block we're sending to
             return Call(block, receiver, self.symbol, self.args)
         return self
@@ -453,7 +455,7 @@ class BlockVariable(object):
         self.private = name[0] == '~'
         self.index = index
         self.init_ref = init_ref
-        self.self_ref = SlotGet(Self, index)
+        self.self_ref = SlotGet(Self, index, mutable)
 
     def generate_code(self, code):
         return self.init_ref.generate_code(code, code.add_temp())
@@ -772,9 +774,10 @@ class LocalGet(TerminalNode):
         return code.locals[self.index]
 
 class SlotGet(object):
-    def __init__(self, obj_expr, index):
+    def __init__(self, obj_expr, index, mutable):
         self.obj_expr = obj_expr
         self.index = index
+        self.mutable = mutable
 
     def __str__(self):
         return '(slot-get %s %d)' % (self.obj_expr, self.index)
@@ -1093,9 +1096,9 @@ class Program(object):
 
     def print_code_table(self):
         for symbol, methods in sorted(self.code_table.items()):
-            print('MESSAGE', symbol, '{')
+            print('MESSAGE %s {' % symbol)
             for tag, code in sorted(methods.items()):
-                print('    TAG', tag, '{')
+                print('    TAG $%04X {' % tag)
                 labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
                     for label in labels_dict.get(i, ()):
