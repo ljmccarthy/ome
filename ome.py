@@ -689,9 +689,8 @@ class Sequence(object):
         error_label = None
         for statement in self.statements[:-1]:
             dest = statement.generate_code(code)
-            if dest != VOID:
-                code.set_retval(dest)
             if statement.check_error:
+                code.set_retval(dest)
                 if not error_label:
                     error_label = code.add_label()
                 code.add_instruction(ON_ERROR(error_label))
