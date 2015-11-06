@@ -196,7 +196,7 @@ class Parser(ParserState):
 
     def block(self):
         methods = []
-        vars = []
+        slots = []
         statements = []
         defined_symbols = set()
         defined_methods = set()
@@ -214,7 +214,7 @@ class Parser(ParserState):
                 parse_state.error("Variable '%s' is already defined" % name)
             mutable = self.expect_token(re_assign, "Expected '=' or ':='").group() == ':='
             statements.append(LocalVariable(name, self.expr()))
-            vars.append(BlockVariable(name, mutable, len(vars)))            
+            slots.append(BlockVariable(name, mutable, len(slots)))
             defined_symbols.add(name)
             if mutable:
                 defined_symbols.add(name + ':')
@@ -231,9 +231,9 @@ class Parser(ParserState):
         self.scan()
         if self.pos < len(self.stream) and not self.peek('}'):
             self.error('Expected declaration or end of block')
-        if not vars and not methods:
+        if not slots and not methods:
             return EmptyBlock
-        block = Block(vars, methods)
+        block = Block(slots, methods)
         if statements:
             statements.append(block)
             return Sequence(statements)
@@ -443,7 +443,8 @@ class Call(object):
     def generate_code(self, code, dest):
         receiver = self.receiver.generate_code(code, code.add_temp())
         args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
-        code.add_instruction(CALL(dest, self.block.tag, self.symbol, receiver, args))
+        tag = self.block.tag if hasattr(self.block, 'tag') else self.block.constant_tag
+        code.add_instruction(CALL(dest, tag, self.symbol, receiver, args))
         return dest
 
     check_error = True
@@ -461,31 +462,34 @@ class BlockVariable(object):
         return self.init_ref.generate_code(code, code.add_temp())
 
 class Block(object):
-    def __init__(self, vars, methods):
-        self.slots = vars
-        self.instance_vars = {var.name: var for var in self.slots}
+    def __init__(self, slots, methods):
+        self.slots = slots  # list of BlockVariables for instance vars, closure vars and block references
+        self.methods = {method.symbol: method for method in methods}
+        self.instance_vars = {var.name: var for var in slots}
         self.closure_vars = {}
         self.block_refs = {}
         self.blocks_needed = set()
-        self.methods = {method.symbol: method for method in methods}
-        self.private_accessors = set()
+        self.symbols = set(self.methods)  # Set of all symbols this block defines
+        self.symbols.update(self.instance_vars)
 
         # Generate getter and setter methods
-        for var in vars:
+        for var in slots:
             setter = var.name + ':'
             if not var.private:
                 self.methods[var.name] = Method(var.name, [], var.self_ref)
                 if var.mutable:
                     self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
-            else:
-                self.private_accessors.add(var.name)
-                if var.mutable:
-                    self.private_accessors.add(setter)
+            if var.mutable:
+                self.symbols.add(setter)
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.slots) + ')' if self.slots else ''
         methods = ' ' + format_list(x[1] for x in sorted(self.methods.items())) if self.methods else ''
         return '(block%s%s)' % (args, methods)
+
+    @property
+    def is_constant(self):
+        return len(self.slots) == 0 and all(block.is_constant for block in self.blocks_needed)
 
     def find_block(self):
         return self
@@ -499,7 +503,6 @@ class Block(object):
         return self
 
     def resolve_block_refs(self, parent):
-        self.is_constant = (len(self.slots) == 0 and all(block.is_constant for block in self.blocks_needed))
         if self.is_constant:
             self.constant_ref = ConstantBlock(self)
         for method in self.methods.values():
@@ -509,7 +512,7 @@ class Block(object):
     def lookup_var(self, symbol):
         if symbol in self.closure_vars:
             return self.closure_vars[symbol].self_ref
-        if symbol not in self.methods and symbol not in self.instance_vars:
+        if symbol not in self.symbols:
             ref = self.parent.lookup_var(symbol)
             if ref:
                 var = BlockVariable(symbol, False, len(self.slots), ref)
@@ -518,7 +521,7 @@ class Block(object):
                 return var.self_ref
 
     def lookup_receiver(self, symbol):
-        if symbol in self.methods or symbol in self.private_accessors:
+        if symbol in self.symbols:
             return self
         block = self.parent.lookup_receiver(symbol)
         if block:
@@ -532,9 +535,8 @@ class Block(object):
             return self.block_refs[block]
         init_ref = self.parent.get_block_ref(block)
         var = BlockVariable('<blockref>', False, len(self.slots), init_ref)
-        self.slots.append(var)
-        self.closure_vars[var.name] = var
         self.block_refs[block] = var.self_ref
+        self.slots.append(var)
         return var.self_ref
 
     def collect_blocks(self, block_list):
@@ -544,7 +546,10 @@ class Block(object):
 
     def generate_code(self, code, dest):
         args = [var.generate_code(code) for var in self.slots]
-        code.add_instruction(CREATE(dest, self.tag, args))
+        if hasattr(self, 'tag'):
+            code.add_instruction(CREATE(dest, self.tag, args))
+        else:
+            code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.constant_tag))
         return dest
 
     check_error = False
@@ -695,7 +700,7 @@ class Sequence(object):
 
     @property
     def check_error(self):
-        return self.statements[-1].check_error
+        return any(statement.check_error for statement in self.statements)
 
 class Array(object):
     def __init__(self, elems):
@@ -753,7 +758,7 @@ class EmptyBlock(TerminalNode):
         return '(block)'
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_VALUE(dest, code.program.tag_empty, 0))
+        code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, 0))
         return dest
 
 EmptyBlock = EmptyBlock()
@@ -766,7 +771,7 @@ class ConstantBlock(TerminalNode):
         return '<constant-block>'
 
     def generate_code(self, code, dest):
-        code.add_instruction(LOAD_VALUE(dest, self.block.tag, 0))
+        code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.block.constant_tag))
         return dest
 
 class LocalGet(TerminalNode):
@@ -1059,7 +1064,7 @@ reserved_names = {
     'self': Self,
 }
 
-builtin_data_types = ['False', 'True', 'Empty', 'Small-Integer', 'Small-Decimal']
+builtin_data_types = ['False', 'True', 'Constant-Block', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
 
 MAX_TAG = 2**16 - 1
@@ -1076,33 +1081,39 @@ class Program(object):
 
     def allocate_tag_ids(self):
         tag = 0
+        constant_tag = 1  # 0 is reserved for empty block {}
+
         for type_name in builtin_data_types:
             self.type_tag[type_name] = tag
             tag += 1
+        self.first_object_id = tag
+
         for block in self.block_list:
             if block.is_constant:
-                block.tag = tag
-                tag += 1
-        self.first_object_id = tag
+                block.constant_tag = constant_tag
+                constant_tag += 1
+
         for type_name in builtin_object_types:
             self.type_tag[type_name] = tag
             tag += 1
+
         for block in self.block_list:
             if not block.is_constant:
                 block.tag = tag
                 tag += 1
+
         self.num_tags = tag
         if tag > MAX_TAG:
             raise Error('Exhausted all tag IDs, your program is too big!')
 
-        self.tag_empty = self.type_tag['Empty']
+        self.tag_constant_block = self.type_tag['Constant-Block']
         self.tag_integer = self.type_tag['Small-Integer']
         self.tag_decimal = self.type_tag['Small-Decimal']
         self.tag_string = self.type_tag['String']
         self.tag_array = self.type_tag['Array']
 
-        print('# Allocated %d tag IDs, 0-%d for data types, %d-%d for object types\n' % (
-            self.num_tags, self.first_object_id - 1,
+        print('# Allocated %d tag IDs, %d constant tag IDs, 0-%d for data types, %d-%d for object types\n' % (
+            self.num_tags, constant_tag, self.first_object_id - 1,
             self.first_object_id, self.num_tags - 1))
 
     def build_code_table(self):
@@ -1110,7 +1121,8 @@ class Program(object):
             for method in block.methods.values():
                 if method.symbol not in self.code_table:
                     self.code_table[method.symbol] = {}
-                self.code_table[method.symbol][block.tag] = method.generate_code(self)
+                tag = block.tag if hasattr(block, 'tag') else ((block.constant_tag << 16) | self.tag_constant_block)
+                self.code_table[method.symbol][tag] = method.generate_code(self)
 
     def print_code_table(self):
         for symbol, methods in sorted(self.code_table.items()):
@@ -1121,7 +1133,7 @@ class Program(object):
                 for i, instruction in enumerate(code.instructions):
                     for label in labels_dict.get(i, ()):
                         print('    %s:' % label)
-                    print ('       ', instruction)
+                    print ('        %s' % instruction)
                 print('    }')
             print('}')
 
