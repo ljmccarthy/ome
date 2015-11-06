@@ -635,9 +635,8 @@ class Method(object):
 
     def generate_code(self, program):
         code = MethodCode(program, len(self.args), len(self.locals) - len(self.args))
-        dest = self.expr.generate_code(code)
-        if dest != RETVAL:
-            code.add_instruction(MOV(RETVAL, dest))
+        code.set_retval(self.expr.generate_code(code))
+        code.optimise_error_branches()
         return code
 
 class Sequence(object):
@@ -689,7 +688,9 @@ class Sequence(object):
     def generate_code(self, code):
         error_label = None
         for statement in self.statements[:-1]:
-            code.set_retval(statement.generate_code(code))
+            dest = statement.generate_code(code)
+            if dest != VOID:
+                code.set_retval(dest)
             if statement.check_error:
                 if not error_label:
                     error_label = code.add_label()
@@ -924,7 +925,7 @@ class MethodCode(object):
         self.num_args = num_args
         self.locals = [LOCAL(i) for i in range(num_args + num_locals)]
         self.instructions = []
-        self.labels = []
+        self.labels = set()
         self.dest = self.add_temp()
 
     def add_temp(self):
@@ -937,13 +938,11 @@ class MethodCode(object):
 
     def add_label(self):
         label = Label('.L%d' % len(self.labels), self.here())
-        self.labels.append(label)
+        self.labels.add(label)
         return label
 
     def add_instruction(self, instruction):
-        index = len(self.instructions)
         self.instructions.append(instruction)
-        return index
 
     def retval(self, local):
         if local != RETVAL:
@@ -953,8 +952,24 @@ class MethodCode(object):
         return temp
 
     def set_retval(self, source):
-        if source != RETVAL and source != VOID:
+        if source != RETVAL:
             self.add_instruction(MOV(RETVAL, source))
+
+    def iter_instructions_by_type(self, type):
+        for instruction in self.instructions:
+            if isinstance(instruction, type):
+                yield instruction
+
+    def optimise_error_branches(self):
+        for instruction in self.iter_instructions_by_type(ON_ERROR):
+            error_label = instruction.label
+            while error_label.location < len(self.instructions) \
+            and isinstance(self.instructions[error_label.location], ON_ERROR):
+                error_label = self.instructions[error_label.location].label
+            instruction.label = error_label
+
+        used_labels = set(inst.label for inst in self.iter_instructions_by_type(ON_ERROR))
+        self.labels.intersection_update(used_labels)
 
     def build_labels_dict(self):
         labels_dict = {}
