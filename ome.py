@@ -570,7 +570,11 @@ class LocalVariable(object):
         self.expr.collect_blocks(block_list)
 
     def generate_code(self, code, dest):
-        return self.expr.generate_code(code, self.local_ref.generate_code(code, VOID))
+        local_dest = self.local_ref.generate_code(code, VOID)
+        expr_dest = self.expr.generate_code(code, local_dest)
+        if expr_dest != local_dest:
+            code.add_instruction(MOV(local_dest, expr_dest))
+        return local_dest
 
     check_error = False
 
@@ -992,6 +996,14 @@ class CREATE_ARRAY(object):
 
     def __str__(self):
         return '%s := CREATE_ARRAY %s' % (self.dest, self.size)
+
+class MOV(object):
+    def __init__(self, dest, source):
+        self.dest = dest
+        self.source = source
+
+    def __str__(self):
+        return '%s := %s' % (self.dest, self.source)
 
 class LOAD_VALUE(object):
     def __init__(self, dest, tag, value):
