@@ -415,11 +415,11 @@ class Send(object):
         for arg in self.args:
             arg.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
-        receiver = self.receiver.generate_code(code, code.add_temp())
-        args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
-        code.add_instruction(SEND(dest, self.symbol, receiver, args))
-        return dest
+    def generate_code(self, code):
+        receiver = code.retval(self.receiver.generate_code(code))
+        args = [code.retval(arg.generate_code(code)) for arg in self.args]
+        code.add_instruction(SEND(self.symbol, receiver, args))
+        return RETVAL
 
     check_error = True
 
@@ -440,12 +440,12 @@ class Call(object):
         for arg in self.args:
             arg.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
-        receiver = self.receiver.generate_code(code, code.add_temp())
-        args = [arg.generate_code(code, code.add_temp()) for arg in self.args]
+    def generate_code(self, code):
+        receiver = code.retval(self.receiver.generate_code(code))
+        args = [code.retval(arg.generate_code(code)) for arg in self.args]
         tag = self.block.tag if hasattr(self.block, 'tag') else self.block.constant_tag
-        code.add_instruction(CALL(dest, tag, self.symbol, receiver, args))
-        return dest
+        code.add_instruction(CALL(tag, self.symbol, receiver, args))
+        return RETVAL
 
     check_error = True
 
@@ -459,7 +459,7 @@ class BlockVariable(object):
         self.self_ref = SlotGet(Self, index, mutable)
 
     def generate_code(self, code):
-        return self.init_ref.generate_code(code, code.add_temp())
+        return self.init_ref.generate_code(code)
 
 class Block(object):
     def __init__(self, slots, methods):
@@ -544,8 +544,9 @@ class Block(object):
         for method in self.methods.values():
             method.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
         args = [var.generate_code(code) for var in self.slots]
+        dest = code.add_temp()
         if hasattr(self, 'tag'):
             code.add_instruction(CREATE(dest, self.tag, args))
         else:
@@ -574,12 +575,11 @@ class LocalVariable(object):
     def collect_blocks(self, block_list):
         self.expr.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
-        local_dest = self.local_ref.generate_code(code, VOID)
-        expr_dest = self.expr.generate_code(code, local_dest)
-        if expr_dest != local_dest:
-            code.add_instruction(MOV(local_dest, expr_dest))
-        return local_dest
+    def generate_code(self, code):
+        local = self.local_ref.generate_code(code)
+        expr = self.expr.generate_code(code)
+        code.add_instruction(MOV(local, expr))
+        return VOID
 
     check_error = False
 
@@ -635,8 +635,9 @@ class Method(object):
 
     def generate_code(self, program):
         code = MethodCode(program, len(self.args), len(self.locals) - len(self.args))
-        dest = self.expr.generate_code(code, code.add_temp())
-        code.add_instruction(RETURN(dest))
+        dest = self.expr.generate_code(code)
+        if dest != RETVAL:
+            code.add_instruction(MOV(RETVAL, dest))
         return code
 
 class Sequence(object):
@@ -685,18 +686,18 @@ class Sequence(object):
         for statement in self.statements:
             statement.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
         error_label = None
         for statement in self.statements[:-1]:
-            statement.generate_code(code, dest)
+            code.set_retval(statement.generate_code(code))
             if statement.check_error:
                 if not error_label:
                     error_label = code.add_label()
-                code.add_instruction(ON_ERROR(dest, error_label))
-        dest = self.statements[-1].generate_code(code, dest)
+                code.add_instruction(ON_ERROR(error_label))
+        code.set_retval(self.statements[-1].generate_code(code))
         if error_label:
             error_label.location = code.here()
-        return dest
+        return RETVAL
 
     @property
     def check_error(self):
@@ -723,11 +724,12 @@ class Array(object):
         for elem in self.elems:
             elem.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
+        dest = code.add_temp()
         code.add_instruction(CREATE_ARRAY(dest, len(self.elems)))
         for i, elem in enumerate(self.elems):
-            elem_dest = elem.generate_code(code, code.add_temp())
-            code.add_instruction(SET_SLOT(dest, i, elem_dest))
+            elem = elem.generate_code(code)
+            code.add_instruction(SET_SLOT(dest, i, elem))
         return dest
 
     check_error = False
@@ -748,7 +750,7 @@ class Self(TerminalNode):
     def __str__(self):
         return 'self'
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
         return SELF
 
 Self = Self()
@@ -757,7 +759,8 @@ class EmptyBlock(TerminalNode):
     def __str__(self):
         return '(block)'
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
+        dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, 0))
         return dest
 
@@ -770,7 +773,8 @@ class ConstantBlock(TerminalNode):
     def __str__(self):
         return '<constant-block>'
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
+        dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.block.constant_tag))
         return dest
 
@@ -781,7 +785,7 @@ class LocalGet(TerminalNode):
     def __str__(self):
         return '(local-get %d)' % self.index
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
         return code.locals[self.index]
 
 class SlotGet(object):
@@ -807,8 +811,9 @@ class SlotGet(object):
     def collect_blocks(self, block_list):
         self.obj_expr.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
-        object = self.obj_expr.generate_code(code, code.add_temp())
+    def generate_code(self, code):
+        object = self.obj_expr.generate_code(code)
+        dest = code.add_temp()
         code.add_instruction(GET_SLOT(dest, object, self.index))
         return dest
 
@@ -837,9 +842,9 @@ class SlotSet(object):
         self.obj_expr.collect_blocks(block_list)
         self.set_expr.collect_blocks(block_list)
 
-    def generate_code(self, code, dest):
-        value = self.set_expr.generate_code(code, code.add_temp())
-        object = self.obj_expr.generate_code(code, code.add_temp())
+    def generate_code(self, code):
+        object = self.obj_expr.generate_code(code)
+        value = self.set_expr.generate_code(code)
         code.add_instruction(SET_SLOT(object, self.index, value))
         return VOID
 
@@ -878,8 +883,9 @@ class Number(TerminalNode):
         value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
         return (program.tag_decimal, value)
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
         tag, value = self.encode(code.program)
+        dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, tag, value))
         return dest
 
@@ -890,7 +896,8 @@ class String(TerminalNode):
     def __str__(self):
         return "(string '" + self.string + "')"
 
-    def generate_code(self, code, dest):
+    def generate_code(self, code):
+        dest = code.add_temp()
         code.add_instruction(LOAD_STRING(dest, self.string))
         return dest
 
@@ -938,6 +945,17 @@ class MethodCode(object):
         self.instructions.append(instruction)
         return index
 
+    def retval(self, local):
+        if local != RETVAL:
+            return local
+        temp = self.add_temp()
+        self.add_instruction(MOV(temp, RETVAL))
+        return temp
+
+    def set_retval(self, source):
+        if source != RETVAL and source != VOID:
+            self.add_instruction(MOV(RETVAL, source))
+
     def build_labels_dict(self):
         labels_dict = {}
         for label in self.labels:
@@ -961,29 +979,32 @@ class VOID(object):
     def __str__(self):
         return '%void'
 
+class RETVAL(object):
+    def __str__(self):
+        return '%retval'
+
 SELF = SELF()
 VOID = VOID()
+RETVAL = RETVAL()
 
 class SEND(object):
-    def __init__(self, dest, symbol, receiver, args):
-        self.dest = dest
+    def __init__(self, symbol, receiver, args):
         self.symbol = symbol
         self.receiver = receiver
         self.args = args
 
     def __str__(self):
-        return '%s := SEND %s %s %s' % (self.dest, self.symbol, self.receiver, format_list(self.args))
+        return 'SEND %s %s %s' % (self.symbol, self.receiver, format_list(self.args))
 
 class CALL(object):
-    def __init__(self, dest, tag, symbol, receiver, args):
-        self.dest = dest
+    def __init__(self, tag, symbol, receiver, args):
         self.tag = tag
         self.symbol = symbol
         self.receiver = receiver
         self.args = args
 
     def __str__(self):
-        return '%s := CALL $%04X %s %s %s' % (self.dest, self.tag, self.symbol, self.receiver, format_list(self.args))
+        return 'CALL $%04X %s %s %s' % (self.tag, self.symbol, self.receiver, format_list(self.args))
 
 class CREATE(object):
     def __init__(self, dest, tag, args):
@@ -1046,12 +1067,11 @@ class SET_SLOT(object):
         return '%s[%s] := %s' % (self.object, self.index, self.value)
 
 class ON_ERROR(object):
-    def __init__(self, dest, label):
-        self.dest = dest
+    def __init__(self, label):
         self.label = label
 
     def __str__(self):
-        return 'ON ERROR %s GOTO %s' % (self.dest, self.label.name)
+        return 'ON ERROR GOTO %s' % (self.label.name)
 
 class RETURN(object):
     def __init__(self, dest):
@@ -1134,6 +1154,8 @@ class Program(object):
                     for label in labels_dict.get(i, ()):
                         print('    %s:' % label)
                     print ('        %s' % instruction)
+                for label in labels_dict.get(i + 1, ()):
+                    print('    %s:' % label)
                 print('    }')
             print('}')
 
