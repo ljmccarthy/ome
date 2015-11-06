@@ -14,7 +14,7 @@ re_string = re.compile(r"'((?:\\'|[^\r\n'])*)'")
 re_assign = re.compile(r'=|:=')
 re_end_token = re.compile(r'[|)}\]]')
 
-class SyntaxError(Exception):
+class Error(Exception):
     pass
 
 class ParserState(object):
@@ -60,7 +60,7 @@ class ParserState(object):
         line = self.current_line
         column = self.column
         arrow = ' ' * column + '^'
-        raise SyntaxError('In "%s", line %d, column %d\n    %s\n    %s\nError: %s' % (
+        raise Error('In "%s", line %d, column %d\n    %s\n    %s\nError: %s' % (
             self.stream_name, self.line_number, column, line, arrow, message))
 
 class Parser(ParserState):
@@ -1048,6 +1048,8 @@ reserved_names = {
 builtin_data_types = ['False', 'True', 'Empty', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
 
+MAX_TAG = 2**16 - 1
+
 class Program(object):
     def __init__(self, ast):
         self.block_list = []
@@ -1076,6 +1078,8 @@ class Program(object):
                 block.tag = tag
                 tag += 1
         self.num_tags = tag
+        if tag > MAX_TAG:
+            raise Error('Exhausted all tag IDs, your program is too big!')
 
         self.tag_empty = self.type_tag['Empty']
         self.tag_integer = self.type_tag['Small-Integer']
@@ -1125,5 +1129,5 @@ if __name__ == '__main__':
     for filename in sys.argv[1:]:
         try:
             compile_file(filename)
-        except SyntaxError as e:
+        except Error as e:
             print(e)
