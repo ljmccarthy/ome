@@ -13,6 +13,7 @@ re_number = re.compile(r'([+-]?[0-9]+)(?:\.([0-9]+))?(?:e([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\'|[^\r\n'])*)'")
 re_assign = re.compile(r'=|:=')
 re_end_token = re.compile(r'[|)}\]]')
+re_symbol_part = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
 
 class Error(Exception):
     pass
@@ -470,27 +471,27 @@ class BlockVariable(object):
 class Block(object):
     def __init__(self, slots, methods):
         self.slots = slots  # list of BlockVariables for instance vars, closure vars and block references
-        self.methods = {method.symbol: method for method in methods}
+        self.methods = methods
         self.instance_vars = {var.name: var for var in slots}
         self.closure_vars = {}
         self.block_refs = {}
         self.blocks_needed = set()
-        self.symbols = set(self.methods)  # Set of all symbols this block defines
-        self.symbols.update(self.instance_vars)
+        self.symbols = set(self.instance_vars)  # Set of all symbols this block defines
+        self.symbols.update(method.symbol for method in self.methods)
 
         # Generate getter and setter methods
         for var in slots:
             setter = var.name + ':'
-            if not var.private:
-                self.methods[var.name] = Method(var.name, [], var.self_ref)
-                if var.mutable:
-                    self.methods[setter] = Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, [])))
             if var.mutable:
                 self.symbols.add(setter)
+            if not var.private:
+                self.methods.append(Method(var.name, [], var.self_ref))
+                if var.mutable:
+                    self.methods.append(Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, []))))
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.slots) + ')' if self.slots else ''
-        methods = ' ' + format_list(x[1] for x in sorted(self.methods.items())) if self.methods else ''
+        methods = ' ' + format_list(self.methods) if self.methods else ''
         return '(block%s%s)' % (args, methods)
 
     @property
@@ -504,14 +505,14 @@ class Block(object):
         for var in self.slots:
             var.init_ref = parent.lookup_var(var.name)
         self.parent = parent
-        for method in self.methods.values():
+        for method in self.methods:
             method.resolve_free_vars(self)
         return self
 
     def resolve_block_refs(self, parent):
         if self.is_constant:
             self.constant_ref = ConstantBlock(self)
-        for method in self.methods.values():
+        for method in self.methods:
             method.resolve_block_refs(self)
         return self
 
@@ -547,7 +548,7 @@ class Block(object):
 
     def collect_blocks(self, block_list):
         block_list.append(self)
-        for method in self.methods.values():
+        for method in self.methods:
             method.collect_blocks(block_list)
 
     def generate_code(self, code):
@@ -1015,21 +1016,23 @@ RETVAL = RETVAL()
 class SEND(object):
     def __init__(self, symbol, receiver, args):
         self.symbol = symbol
+        self.label = symbol_to_label(symbol)
         self.receiver = receiver
         self.args = args
 
     def __str__(self):
-        return 'SEND %s %s %s' % (self.symbol, self.receiver, format_list(self.args))
+        return 'SEND %s %s %s' % (self.receiver, self.symbol, format_list(self.args))
 
 class CALL(object):
     def __init__(self, tag, symbol, receiver, args):
         self.tag = tag
         self.symbol = symbol
+        self.label = symbol_to_label(symbol)
         self.receiver = receiver
         self.args = args
 
     def __str__(self):
-        return 'CALL $%04X %s %s %s' % (self.tag, self.symbol, self.receiver, format_list(self.args))
+        return 'CALL %s $%04X:%s %s' % (self.receiver, self.tag, self.symbol, format_list(self.args))
 
 class CREATE(object):
     def __init__(self, dest, tag, args):
@@ -1098,6 +1101,19 @@ class ON_ERROR(object):
     def __str__(self):
         return 'ON ERROR GOTO %s' % (self.label.name)
 
+def symbol_to_label(symbol):
+    '''
+    Encodes a symbol into a form that can be used for an assembly label, e.g.
+        foo            foo__0
+        foo:           foo__1
+        foo-bar-baz    foo_bar_baz__0
+        foo:,,         foo__3
+        foo4:,,bar5:,  foo4__3bar5__2
+    '''
+    return ''.join(
+        name.replace('-', '_') + '__' + str(len(args))
+        for name, args in re_symbol_part.findall(symbol))
+
 builtin_data_types = ['False', 'True', 'Constant-Block', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
 
@@ -1105,7 +1121,7 @@ class Program(object):
     def __init__(self, ast):
         self.block_list = []
         self.type_tag = {}
-        self.code_table = {}
+        self.code_table = []  # list of (symbol, [list of (tag, method)])
 
         ast.collect_blocks(self.block_list)
         self.allocate_tag_ids()
@@ -1149,17 +1165,21 @@ class Program(object):
             self.first_object_id, self.num_tags - 1))
 
     def build_code_table(self):
+        methods = {}
         for block in self.block_list:
-            for method in block.methods.values():
-                if method.symbol not in self.code_table:
-                    self.code_table[method.symbol] = {}
+            for method in block.methods:
+                if method.symbol not in methods:
+                    methods[method.symbol] = []
                 tag = block.tag if hasattr(block, 'tag') else ((block.constant_tag << NUM_TAG_BITS) | self.tag_constant_block)
-                self.code_table[method.symbol][tag] = method.generate_code(self)
+                methods[method.symbol].append((tag, method.generate_code(self)))
+        for symbol in sorted(methods.keys()):
+            self.code_table.append((symbol, methods[symbol]))
+        methods.clear()
 
     def print_code_table(self):
-        for symbol, methods in sorted(self.code_table.items()):
+        for symbol, methods in self.code_table:
             print('MESSAGE %s {' % symbol)
-            for tag, code in sorted(methods.items()):
+            for tag, code in methods:
                 print('    TAG $%04X {' % tag)
                 labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
