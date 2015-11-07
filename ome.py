@@ -161,6 +161,10 @@ class Parser(ParserState):
             self.error(message)
         return self.expect_token(re_arg_name, message).group()
 
+    def check_num_params(self, n, parse_state):
+        if n >= 16:
+            parse_state.error('Seriously? %d parameters? Take a step back and redesign your code' % n)
+
     def signature(self):
         argnames = []
         symbol = ''
@@ -177,6 +181,7 @@ class Parser(ParserState):
             parse_state = self.copy_state()
             m = self.expect_token(re_name, 'Expected name or keyword')
             symbol = self.check_name(m.group(), parse_state)
+        self.check_num_params(len(argnames), self)
         return symbol, argnames
 
     def statement_lines(self):
@@ -302,6 +307,7 @@ class Parser(ParserState):
                 args.append(self.unaryexpr())
             kw_parse_state = self.copy_state()
         if args:
+            self.check_num_params(len(args), parse_state)
             expr = Send(expr, symbol, args, parse_state)
         return expr
 
@@ -1085,13 +1091,6 @@ class ON_ERROR(object):
 
     def __str__(self):
         return 'ON ERROR GOTO %s' % (self.label.name)
-
-class RETURN(object):
-    def __init__(self, dest):
-        self.dest = dest
-
-    def __str__(self):
-        return 'RETURN %s' % self.dest
 
 reserved_names = {
     'self': Self,
