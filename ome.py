@@ -752,15 +752,6 @@ class TerminalNode(object):
 
     check_error = False
 
-class Self(TerminalNode):
-    def __str__(self):
-        return 'self'
-
-    def generate_code(self, code):
-        return SELF
-
-Self = Self()
-
 class EmptyBlock(TerminalNode):
     def __str__(self):
         return '(block)'
@@ -784,6 +775,19 @@ class ConstantBlock(TerminalNode):
         code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.block.constant_tag))
         return dest
 
+class Self(TerminalNode):
+    def __str__(self):
+        return 'self'
+
+    def generate_code(self, code):
+        return code.locals[0]
+
+Self = Self()
+
+reserved_names = {
+    'self': Self,
+}
+
 class LocalGet(TerminalNode):
     def __init__(self, index):
         self.index = index
@@ -792,7 +796,7 @@ class LocalGet(TerminalNode):
         return '(local-get %d)' % self.index
 
     def generate_code(self, code):
-        return code.locals[self.index]
+        return code.locals[self.index + 1]
 
 class SlotGet(object):
     def __init__(self, obj_expr, index, mutable):
@@ -935,7 +939,7 @@ class MethodCode(object):
     def __init__(self, program, num_args, num_locals):
         self.program = program
         self.num_args = num_args
-        self.locals = [LOCAL(i) for i in range(num_args + num_locals)]
+        self.locals = [LOCAL(i) for i in range(1 + num_args + num_locals)]
         self.instructions = []
         self.labels = set()
         self.dest = self.add_temp()
@@ -997,10 +1001,6 @@ class LOCAL(object):
     def __str__(self):
         return '%%%d' % self.index
 
-class SELF(object):
-    def __str__(self):
-        return '%self'
-
 class VOID(object):
     def __str__(self):
         return '%void'
@@ -1009,7 +1009,6 @@ class RETVAL(object):
     def __str__(self):
         return '%retval'
 
-SELF = SELF()
 VOID = VOID()
 RETVAL = RETVAL()
 
@@ -1098,10 +1097,6 @@ class ON_ERROR(object):
 
     def __str__(self):
         return 'ON ERROR GOTO %s' % (self.label.name)
-
-reserved_names = {
-    'self': Self,
-}
 
 builtin_data_types = ['False', 'True', 'Constant-Block', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
