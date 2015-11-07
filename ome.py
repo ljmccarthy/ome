@@ -586,7 +586,7 @@ class LocalVariable(object):
         local = self.local_ref.generate_code(code)
         expr = self.expr.generate_code(code)
         code.add_instruction(MOV(local, expr))
-        return VOID
+        return local
 
     check_error = False
 
@@ -643,7 +643,7 @@ class Method(object):
     def generate_code(self, program):
         code = MethodCode(program, len(self.args), len(self.locals) - len(self.args))
         code.set_retval(self.expr.generate_code(code))
-        code.optimise_error_branches()
+        code.optimise()
         return code
 
 class Sequence(object):
@@ -828,7 +828,7 @@ class SlotGet(object):
         code.add_instruction(GET_SLOT(dest, object, self.index))
         return dest
 
-    check_error = False
+    check_error = True
 
 class SlotSet(object):
     def __init__(self, obj_expr, index, set_expr):
@@ -857,9 +857,9 @@ class SlotSet(object):
         object = self.obj_expr.generate_code(code)
         value = self.set_expr.generate_code(code)
         code.add_instruction(SET_SLOT(object, self.index, value))
-        return VOID
+        return value
 
-    check_error = False
+    check_error = True
 
 NUM_BITS = 64
 NUM_TAG_BITS = 16
@@ -972,20 +972,45 @@ class MethodCode(object):
         if source != RETVAL:
             self.add_instruction(MOV(RETVAL, source))
 
+    def optimise(self):
+        self.optimise_error_branches()
+        self.eliminate_aliases()
+
     def iter_instructions_by_type(self, type):
         for instruction in self.instructions:
             if isinstance(instruction, type):
                 yield instruction
 
     def optimise_error_branches(self):
-        for instruction in self.iter_instructions_by_type(ON_ERROR):
-            error_label = instruction.label
+        for ins in self.iter_instructions_by_type(ON_ERROR):
+            error_label = ins.label
             while error_label.location < len(self.instructions) \
             and isinstance(self.instructions[error_label.location], ON_ERROR):
                 error_label = self.instructions[error_label.location].label
-            instruction.label = error_label
+            ins.label = error_label
 
-        self.labels = set(inst.label for inst in self.iter_instructions_by_type(ON_ERROR))
+        self.labels = set(ins.label for ins in self.iter_instructions_by_type(ON_ERROR))
+
+    def eliminate_aliases(self):
+        aliases = {}
+        labels = {label.location: label for label in self.labels}
+        instructions = []
+        location = 0
+        for location, ins in enumerate(self.instructions):
+            if location in labels:
+                labels[location].location = len(instructions)
+            if isinstance(ins, MOV) and isinstance(ins.source, LOCAL) and isinstance(ins.dest, LOCAL):
+                aliases[ins.dest.index] = aliases.get(ins.source.index, ins.source.index)
+            else:
+                for i, arg in enumerate(getattr(ins, 'args', [])):
+                    if isinstance(arg, LOCAL) and arg.index in aliases:
+                        ins.args[i] = self.locals[aliases[arg.index]]
+                if hasattr(ins, 'object') and ins.object.index in aliases:
+                    ins.object = self.locals[aliases[ins.object.index]]
+                instructions.append(ins)
+        if location + 1 in labels:
+            labels[location + 1].location = len(instructions)
+        self.instructions = instructions
 
     def build_labels_dict(self):
         labels_dict = {}
@@ -1002,15 +1027,10 @@ class LOCAL(object):
     def __str__(self):
         return '%%%d' % self.index
 
-class VOID(object):
-    def __str__(self):
-        return '%void'
-
 class RETVAL(object):
     def __str__(self):
         return '%retval'
 
-VOID = VOID()
 RETVAL = RETVAL()
 
 class SEND(object):
