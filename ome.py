@@ -993,23 +993,47 @@ class MethodCode(object):
 
     def eliminate_aliases(self):
         aliases = {}
+        retval_aliases = set()
         labels = {label.location: label for label in self.labels}
         instructions = []
         location = 0
-        for location, ins in enumerate(self.instructions):
+
+        def flush_retval_aliases():
+            if retval_aliases:
+                saved_retval = retval_aliases.pop()
+                instructions.append(MOV(saved_retval, RETVAL))
+                for needs_retval in retval_aliases:
+                    aliases[needs_retval.index] = saved_retval.index
+                retval_aliases.clear()
+
+        def update_labels(location):
             if location in labels:
                 labels[location].location = len(instructions)
-            if isinstance(ins, MOV) and isinstance(ins.source, LOCAL) and isinstance(ins.dest, LOCAL):
-                aliases[ins.dest.index] = aliases.get(ins.source.index, ins.source.index)
+
+        for location, ins in enumerate(self.instructions):
+            update_labels(location)
+            if location in labels:
+                labels[location].location = len(instructions)
+            if isinstance(ins, MOV):
+                if ins.dest == RETVAL:
+                    if ins.source.index not in retval_aliases:
+                        flush_retval_aliases()
+                        instructions.append(ins)
+                elif ins.source == RETVAL:
+                    retval_aliases.add(ins.dest.index)
+                else:
+                    aliases[ins.dest.index] = aliases.get(ins.source.index, ins.source.index)
             else:
+                if ins.invalidates_retval:
+                    flush_retval_aliases()
                 for i, arg in enumerate(getattr(ins, 'args', [])):
                     if isinstance(arg, LOCAL) and arg.index in aliases:
                         ins.args[i] = self.locals[aliases[arg.index]]
                 if hasattr(ins, 'object') and ins.object.index in aliases:
                     ins.object = self.locals[aliases[ins.object.index]]
                 instructions.append(ins)
-        if location + 1 in labels:
-            labels[location + 1].location = len(instructions)
+
+        update_labels(location + 1)
         self.instructions = instructions
 
     def build_labels_dict(self):
@@ -1034,6 +1058,8 @@ class RETVAL(object):
 RETVAL = RETVAL()
 
 class SEND(object):
+    invalidates_retval = True
+
     def __init__(self, symbol, receiver, args):
         self.symbol = symbol
         self.label = symbol_to_label(symbol)
@@ -1044,6 +1070,8 @@ class SEND(object):
         return 'SEND %s %s %s' % (self.receiver, self.symbol, format_list(self.args))
 
 class CALL(object):
+    invalidates_retval = True
+
     def __init__(self, tag, symbol, receiver, args):
         self.tag = tag
         self.symbol = symbol
@@ -1055,6 +1083,8 @@ class CALL(object):
         return 'CALL %s $%04X:%s %s' % (self.receiver, self.tag, self.symbol, format_list(self.args))
 
 class CREATE(object):
+    invalidates_retval = False
+
     def __init__(self, dest, tag, args):
         self.dest = dest
         self.tag = tag
@@ -1064,6 +1094,8 @@ class CREATE(object):
         return '%s := CREATE $%04X %s' % (self.dest, self.tag, format_list(self.args))
 
 class CREATE_ARRAY(object):
+    invalidates_retval = False
+
     def __init__(self, dest, size):
         self.dest = dest
         self.size = size
@@ -1079,6 +1111,10 @@ class MOV(object):
     def __str__(self):
         return '%s := %s' % (self.dest, self.source)
 
+    @property
+    def invalidates_retval(self):
+        return self.dest == RETVAL
+
 class LOAD_VALUE(object):
     def __init__(self, dest, tag, value):
         self.dest = dest
@@ -1088,6 +1124,10 @@ class LOAD_VALUE(object):
     def __str__(self):
         return '%s := $%04X:%012X' % (self.dest, self.tag, self.value)
 
+    @property
+    def invalidates_retval(self):
+        return self.dest == RETVAL
+
 class LOAD_STRING(object):
     def __init__(self, dest, string):
         self.dest = dest
@@ -1095,6 +1135,10 @@ class LOAD_STRING(object):
 
     def __str__(self):
         return "%s := '%s'" % (self.dest, self.string)
+
+    @property
+    def invalidates_retval(self):
+        return self.dest == RETVAL
 
 class GET_SLOT(object):
     def __init__(self, dest, object, index):
@@ -1105,7 +1149,13 @@ class GET_SLOT(object):
     def __str__(self):
         return '%s := %s[%s]' % (self.dest, self.object, self.index)
 
+    @property
+    def invalidates_retval(self):
+        return self.dest == RETVAL
+
 class SET_SLOT(object):
+    invalidates_retval = False
+
     def __init__(self, object, index, value):
         self.object = object
         self.index = index
@@ -1115,6 +1165,8 @@ class SET_SLOT(object):
         return '%s[%s] := %s' % (self.object, self.index, self.value)
 
 class ON_ERROR(object):
+    invalidates_retval = False
+
     def __init__(self, label):
         self.label = label
 
