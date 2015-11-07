@@ -1001,7 +1001,7 @@ class MethodCode(object):
         def flush_retval_aliases():
             if retval_aliases:
                 saved_retval = retval_aliases.pop()
-                instructions.append(MOV(saved_retval, RETVAL))
+                instructions.append(MOV(self.locals[saved_retval], RETVAL))
                 for needs_retval in retval_aliases:
                     aliases[needs_retval.index] = saved_retval.index
                 retval_aliases.clear()
