@@ -856,16 +856,23 @@ class SlotSet(object):
 
     check_error = False
 
-MIN_INT = -2**47
-MAX_INT = 2**47 - 1
-MIN_EXPONENT = -2**7
-MAX_EXPONENT = 2**7 - 1
-MIN_SIGNIFICAND = -2**39
-MAX_SIGNIFICAND = 2**39 - 1
+NUM_BITS = 64
+NUM_TAG_BITS = 16
+NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
+NUM_EXPONENT_BITS = 8
+NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
 
-MASK_INT = (1 << 48) - 1
-MASK_EXPONENT = (1 << 8) - 1
-MASK_SIGNIFICAND = (1 << 40) - 1
+MAX_TAG = 2**NUM_TAG_BITS - 1
+MIN_INT = -2**(NUM_DATA_BITS-1)
+MAX_INT = 2**(NUM_DATA_BITS-1) - 1
+MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
+MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
+MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
+MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
+
+MASK_INT = (1 << NUM_DATA_BITS) - 1
+MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
+MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
 class Number(TerminalNode):
     def __init__(self, significand, exponent, parse_state):
@@ -1099,8 +1106,6 @@ reserved_names = {
 builtin_data_types = ['False', 'True', 'Constant-Block', 'Small-Integer', 'Small-Decimal']
 builtin_object_types = ['String', 'Array']
 
-MAX_TAG = 2**16 - 1
-
 class Program(object):
     def __init__(self, ast):
         self.block_list = []
@@ -1153,7 +1158,7 @@ class Program(object):
             for method in block.methods.values():
                 if method.symbol not in self.code_table:
                     self.code_table[method.symbol] = {}
-                tag = block.tag if hasattr(block, 'tag') else ((block.constant_tag << 16) | self.tag_constant_block)
+                tag = block.tag if hasattr(block, 'tag') else ((block.constant_tag << NUM_TAG_BITS) | self.tag_constant_block)
                 self.code_table[method.symbol][tag] = method.generate_code(self)
 
     def print_code_table(self):
