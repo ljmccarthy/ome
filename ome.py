@@ -1055,7 +1055,7 @@ class MethodCode(object):
         return len(self.instructions)
 
     def add_label(self):
-        label = Label('.L%d' % len(self.labels), self.here())
+        label = Label('L%d' % len(self.labels), self.here())
         self.labels.add(label)
         return label
 
@@ -1315,16 +1315,50 @@ def make_send_label(symbol):
 def make_call_label(tag, symbol):
     return 'OME_method_%04X_%s' % (tag, symbol_to_label(symbol))
 
+class CodeEmitter(object):
+    def __init__(self):
+        self.output = []
+
+    def __call__(self, format, *args):
+        self.output.append('\t' + format % args)
+
+    def label(self, name):
+        self.output.append('.%s:' % name)
+
+    def comment(self, format, *args):
+        self.output.append('\t; ' + format % args)
+
+class ProcedureCodeEmitter(CodeEmitter):
+    def __init__(self, label):
+        self.header_output = []
+        self.output = [label + ':']
+        self.tail_emitters = []
+
+    def header_comment(self, format, *args):
+        self.header_output.append('; ' + format % args)
+
+    def tail_emitter(self, label):
+        emitter = CodeEmitter()
+        emitter.label(label)
+        self.tail_emitters.append(emitter)
+        return emitter
+
+    def get_output(self):
+        lines = self.header_output[:]
+        lines.extend(self.output)
+        for emitter in self.tail_emitters:
+            lines.extend(emitter.output)
+        lines.append('')
+        return '\n'.join(lines)
+
 class CodeGenerator(object):
-    def __init__(self, program, code, target_type):
-        self.target = target_type(self)
+    def __init__(self, program, code, target_type, emitter):
+        self.emit = emitter
+        self.target = target_type(self, self.emit)
         self.program = program
         self.instructions = code.instructions
         self.labels = code.build_labels_dict()
         self.tag_string = program.tag_string
-        self.output = []
-        self.head_output = []
-        self.tail_output = []
 
         num_reg_args = min(code.num_args, self.target.num_arg_regs)
         num_stack_args = max(0, code.num_args - num_reg_args)
@@ -1344,7 +1378,7 @@ class CodeGenerator(object):
         for loc, ins in enumerate(self.instructions):
             if loc in self.labels:
                 for label in self.labels[loc]:
-                    self.output.append(label + ':')
+                    self.emit.label(label)
 
             # Remove locals from registers that are no longer in the live set
             for local_id in set(self.locals_register.keys()) - ins.live_set_before:
@@ -1363,7 +1397,9 @@ class CodeGenerator(object):
 
             locals_locations = ['%s: %%%d' % (reg, local) for reg, local in self.register_locals.items()]
             locals_locations.extend('sp[%d]: %%%d' % (slot, local) for slot, local in self.stack_locals.items())
-            self.output.append('\n\t; %s {%s}' % (ins, ', '.join(locals_locations)))
+            if loc > 0:
+                self.emit('')
+            self.emit('; %s {%s}', ins, ', '.join(locals_locations))
 
             self.live_set_before = ins.live_set_before
             self.live_set_after = ins.live_set_after
@@ -1371,10 +1407,10 @@ class CodeGenerator(object):
 
         if loc + 1 in self.labels:
             for label in self.labels[loc + 1]:
-                self.output.append(label + ':')
+                self.emit.label(label)
 
         self.target.emit_return()
-        self.output.extend(self.tail_output)
+        return self.emit.get_output()
 
     def find_desired_regs(self):
         desired_regs = {}
@@ -1408,7 +1444,7 @@ class CodeGenerator(object):
             #if evicted_local in self.live_set_after:
             if evicted_local not in self.stack_locals:
                 slot = self.allocate_stack_slot()
-                self.output.append('\t; %%%d evicted to [%d]' % (evicted_local, slot))
+                self.emit('; %%%d evicted to [%d]', evicted_local, slot)
                 self.locals_stack[evicted_local] = slot
                 self.stack_locals[slot] = evicted_local
                 self.target.emit_mov_to_stack(slot, reg)
@@ -1565,28 +1601,16 @@ class Target_x86_64(object):
     temp_registers = ('r10', 'r11')
     num_arg_regs = len(argument_registers)
 
-    def __init__(self, codegen):
+    def __init__(self, codegen, emitter):
         self.gen = codegen
+        self.emit = emitter
         self.num_jumpback_labels = 0
 
     def add_gc_jumpback_label(self):
-        return_label = '.gc_return_%d' % self.num_jumpback_labels
-        full_label = '.gc_full_%d' % self.num_jumpback_labels
+        return_label = 'gc_return_%d' % self.num_jumpback_labels
+        full_label = 'gc_full_%d' % self.num_jumpback_labels
         self.num_jumpback_labels += 1
         return (return_label, full_label)
-
-    def emit(self, format, *args):
-        self.gen.output.append('\t' + (format % args))
-
-    def emit_label(self, label):
-        self.gen.output.append(label + ':')
-
-    def tail_emit(self, format, *args):
-        self.gen.tail_output.append('\t' + (format % args))
-
-    def tail_emit_label(self, label):
-        self.gen.tail_output.append('')
-        self.gen.tail_output.append(label + ':')
 
     def emit_load_constant(self, dst, value):
         self.emit('mov %s, 0x%x', dst, value)
@@ -1621,7 +1645,7 @@ class Target_x86_64(object):
 
     def CREATE(self, dest_reg, ins):
         return_label, full_label = self.add_gc_jumpback_label()
-        self.emit_label(return_label)
+        self.emit.label(return_label)
         self.emit('mov %s, %s', dest_reg, self.nursery_bump_pointer)
         self.emit('add %s, %s', self.nursery_bump_pointer, len(ins.args) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
@@ -1633,9 +1657,9 @@ class Target_x86_64(object):
         if ins.tag != 0:
             self.emit('or %s, %s', dest_reg, ins.tag)
 
-        self.tail_emit_label(full_label)
-        self.tail_emit('call OME_collect_nursery')
-        self.tail_emit('jmp %s', return_label)
+        tail_emit = self.emit.tail_emitter(full_label)
+        tail_emit('call OME_collect_nursery')
+        tail_emit('jmp %s', return_label)
 
     def CREATE_ARRAY(self, dest_reg, ins):
         pass
@@ -1725,7 +1749,7 @@ class Program(object):
                 labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
                     for label in labels_dict.get(i, ()):
-                        print('    %s:' % label)
+                        print('    .%s:' % label)
                     print('        %s {%s}' % (
                         instruction, ', '.join(map(str, instruction.live_set_before))))
                 for label in labels_dict.get(i + 1, ()):
@@ -1734,17 +1758,18 @@ class Program(object):
 
             print('}')
 
+    def generate_assembly_code(self, target_type, code, tag, symbol):
+        emitter = ProcedureCodeEmitter(make_call_label(tag, symbol))
+        emitter.header_comment('$%04X %s', tag, symbol)
+        gen = CodeGenerator(self, code, Target_x86_64, emitter)
+        gen.generate()
+        return emitter.get_output()
+
     def print_assembly_code(self):
         print('bits 64\n')
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                print('; $%04X %s' % (tag, symbol))
-                print('%s:' % make_call_label(tag, symbol))
-                gen = CodeGenerator(self, code, Target_x86_64)
-                gen.generate()
-                for line in gen.output:
-                    print(line)
-                print()
+                print(self.generate_assembly_code(Target_x86_64, code, tag, symbol))
         print('OME_data:')
         for string in self.string_table:
             print('\tdb ' + ', '.join('%d' % x for x in string))
@@ -1769,6 +1794,7 @@ def compile_file(filename):
     ast = ast.resolve_free_vars(TopLevel)
     ast = ast.resolve_block_refs(TopLevel)
     program = Program(ast)
+    #program.print_code_table()
     program.print_assembly_code()
 
 if __name__ == '__main__':
