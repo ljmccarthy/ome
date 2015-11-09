@@ -1018,6 +1018,20 @@ def eliminate_aliases(instructions, labels):
     update_labels(location + 1)
     return instructions_out
 
+def renumber_locals(instructions, num_args):
+    """Renumbers locals in the order of creation without any gaps."""
+
+    locals_map = {i: i for i in range(num_args)}
+
+    for ins in instructions:
+        for i, arg in enumerate(ins.args):
+            ins.args[i] = locals_map[arg]
+        if hasattr(ins, 'dest'):
+            assert ins.dest not in locals_map
+            new_dest = len(locals_map)
+            locals_map[ins.dest] = new_dest
+            ins.dest = new_dest
+
 class Label(object):
     def __init__(self, name, location):
         self.name = name
@@ -1062,6 +1076,7 @@ class MethodCode(object):
     def optimise(self):
         self.optimise_error_branches()
         self.instructions = eliminate_aliases(self.instructions, self.labels)
+        renumber_locals(self.instructions, self.num_args)
         find_live_ranges(self.instructions, self.num_args)
 
     def iter_instructions_by_type(self, type):
