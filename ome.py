@@ -787,7 +787,7 @@ class Self(TerminalNode):
         return 'self'
 
     def generate_code(self, code):
-        return code.locals[0]
+        return 0
 
 Self = Self()
 
@@ -803,7 +803,7 @@ class LocalGet(TerminalNode):
         return '(local-get %d)' % self.local_index
 
     def generate_code(self, code):
-        return code.locals[self.local_index + 1]
+        return self.local_index + 1
 
 class SlotGet(object):
     def __init__(self, obj_expr, slot_index, mutable):
@@ -937,6 +937,87 @@ class TopLevel(object):
 
 TopLevel = TopLevel()
 
+def find_live_ranges(instructions, num_args):
+    """Find the set of live locals for each instruction."""
+
+    init_point = {i: 0 for i in range(num_args)}
+    dead_point = {i: 0 for i in range(num_args)}
+
+    for loc, ins in enumerate(instructions):
+        if hasattr(ins, 'dest'):
+            init_point[ins.dest] = loc
+            dead_point[ins.dest] = loc
+        for local in ins.args:
+            dead_point[local] = loc
+
+    def reverse_dict(d):
+        result = {}
+        for key, value in d.items():
+            if value not in result:
+                result[value] = []
+            result[value].append(key)
+        return result
+
+    init_locations = reverse_dict(init_point)
+    dead_locations = reverse_dict(dead_point)
+
+    live_set = set(range(num_args))
+    for loc, ins in enumerate(instructions):
+        ins.live_set_before = frozenset(live_set)
+        live_set.update(init_locations.get(loc, []))
+        live_set.difference_update(dead_locations.get(loc, []))
+        ins.live_set_after = frozenset(live_set)
+
+    # Sanity check
+    for ins in instructions:
+        for arg in ins.args:
+            assert arg in ins.live_set_before
+
+def eliminate_aliases(instructions, labels):
+    """Eliminate all local variable aliases (i.e. ALIAS instructions)."""
+
+    aliases = {}
+    retval_aliases = set()
+    labels = {label.location: label for label in labels}
+    instructions_out = []
+    location = 0
+
+    def flush_retval_aliases():
+        if retval_aliases:
+            saved_retval = retval_aliases.pop()
+            instructions_out.append(GET_RETVAL(saved_retval))
+            for needs_retval in retval_aliases:
+                aliases[needs_retval] = saved_retval
+            retval_aliases.clear()
+
+    def update_labels(location):
+        if location in labels:
+            labels[location].location = len(instructions_out)
+
+    def remove_aliases_from_args(ins):
+        for i, arg in enumerate(ins.args):
+            if arg in aliases:
+                ins.args[i] = aliases[arg]
+
+    for location, ins in enumerate(instructions):
+        update_labels(location)
+        if isinstance(ins, ALIAS):
+            aliases[ins.dest] = aliases.get(ins.source, ins.source)
+        elif isinstance(ins, GET_RETVAL):
+            retval_aliases.add(ins.dest)
+        elif isinstance(ins, SET_RETVAL):
+            flush_retval_aliases()
+            remove_aliases_from_args(ins)
+            instructions_out.append(ins)
+        else:
+            if ins.invalidates_retval or any(local in retval_aliases for local in ins.args):
+                flush_retval_aliases()
+            remove_aliases_from_args(ins)
+            instructions_out.append(ins)
+
+    update_labels(location + 1)
+    return instructions_out
+
 class Label(object):
     def __init__(self, name, location):
         self.name = name
@@ -946,14 +1027,14 @@ class MethodCode(object):
     def __init__(self, program, num_args, num_locals):
         self.program = program
         self.num_args = num_args + 1  # self is arg 0
-        self.locals = list(range(1 + num_args + num_locals))
+        self.num_locals = num_args + num_locals + 1
         self.instructions = []
         self.labels = set()
         self.dest = self.add_temp()
 
     def add_temp(self):
-        local = len(self.locals)
-        self.locals.append(local)
+        local = self.num_locals
+        self.num_locals += 1
         return local
 
     def here(self):
@@ -980,8 +1061,8 @@ class MethodCode(object):
 
     def optimise(self):
         self.optimise_error_branches()
-        self.eliminate_aliases()
-        self.find_live_ranges()
+        self.instructions = eliminate_aliases(self.instructions, self.labels)
+        find_live_ranges(self.instructions, self.num_args)
 
     def iter_instructions_by_type(self, type):
         for instruction in self.instructions:
@@ -997,87 +1078,6 @@ class MethodCode(object):
             ins.label = error_label
 
         self.labels = set(ins.label for ins in self.iter_instructions_by_type(ON_ERROR))
-
-    def eliminate_aliases(self):
-        """Eliminate all local variable aliases (i.e. ALIAS instructions)."""
-
-        aliases = {}
-        retval_aliases = set()
-        labels = {label.location: label for label in self.labels}
-        instructions = []
-        location = 0
-
-        def flush_retval_aliases():
-            if retval_aliases:
-                saved_retval = retval_aliases.pop()
-                instructions.append(GET_RETVAL(self.locals[saved_retval]))
-                for needs_retval in retval_aliases:
-                    aliases[needs_retval] = saved_retval
-                retval_aliases.clear()
-
-        def update_labels(location):
-            if location in labels:
-                labels[location].location = len(instructions)
-
-        def remove_aliases_from_args(ins):
-            for i, arg in enumerate(ins.args):
-                if arg in aliases:
-                    ins.args[i] = self.locals[aliases[arg]]
-
-        for location, ins in enumerate(self.instructions):
-            update_labels(location)
-            if isinstance(ins, ALIAS):
-                aliases[ins.dest] = aliases.get(ins.source, ins.source)
-            elif isinstance(ins, GET_RETVAL):
-                retval_aliases.add(ins.dest)
-            elif isinstance(ins, SET_RETVAL):
-                flush_retval_aliases()
-                remove_aliases_from_args(ins)
-                instructions.append(ins)
-            else:
-                if ins.invalidates_retval or any(local in retval_aliases for local in ins.args):
-                    flush_retval_aliases()
-                remove_aliases_from_args(ins)
-                instructions.append(ins)
-
-        update_labels(location + 1)
-        self.instructions = instructions
-
-    def find_live_ranges(self):
-        """Find the set of live locals for each instruction."""
-
-        init_point = {i: 0 for i in range(self.num_args)}
-        dead_point = {i: 0 for i in range(self.num_args)}
-
-        for loc, ins in enumerate(self.instructions):
-            if hasattr(ins, 'dest'):
-                init_point[ins.dest] = loc
-                dead_point[ins.dest] = loc
-            for local in ins.args:
-                dead_point[local] = loc
-
-        def reverse_dict(d):
-            result = {}
-            for key, value in d.items():
-                if value not in result:
-                    result[value] = []
-                result[value].append(key)
-            return result
-
-        init_locations = reverse_dict(init_point)
-        dead_locations = reverse_dict(dead_point)
-
-        live_set = set(range(self.num_args))
-        for loc, ins in enumerate(self.instructions):
-            ins.live_set_before = frozenset(live_set)
-            live_set.update(init_locations.get(loc, []))
-            live_set.difference_update(dead_locations.get(loc, []))
-            ins.live_set_after = frozenset(live_set)
-
-        # Sanity check
-        for ins in self.instructions:
-            for arg in ins.args:
-                assert arg in ins.live_set_before
 
     def build_labels_dict(self):
         labels_dict = {}
