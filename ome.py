@@ -3,7 +3,6 @@
 
 import re
 import struct
-from contextlib import contextmanager
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
@@ -368,17 +367,18 @@ class Parser(ParserState):
         self.error('Expected expression')
 
 def format_list(xs):
-    return ' '.join(str(x) for x in xs)
+    return ' ' + ' '.join(str(x) for x in xs) if xs else ''
 
 class Send(object):
-    def __init__(self, receiver, message, args, parse_state=None):
+    def __init__(self, receiver, symbol, args, parse_state=None):
         self.receiver = receiver
-        self.symbol = message
+        self.symbol = symbol
         self.args = args
         self.parse_state = parse_state
+        self.receiver_block = None
 
     def __str__(self):
-        args = (' ' if self.args else '') + format_list(self.args)
+        args = format_list(self.args)
         return '(send %s %s%s)' % (self.symbol, self.receiver or '<free>', args)
 
     def resolve_free_vars(self, parent):
@@ -405,18 +405,16 @@ class Send(object):
             block = self.receiver_block
             if block.is_constant and block != parent.find_block():
                 # No need to get block ref for constant blocks
-                receiver = block.constant_ref
+                self.receiver = block.constant_ref
             else:
-                receiver = parent.get_block_ref(block)
+                self.receiver = parent.get_block_ref(block)
                 # Direct slot access optimisation
                 if len(self.args) == 0 and self.symbol in block.instance_vars:
                     var = block.instance_vars[self.symbol]
-                    return SlotGet(receiver, var.slot_index, var.mutable)
+                    return SlotGet(self.receiver, var.slot_index, var.mutable)
                 if len(self.args) == 1 and self.symbol[:-1] in block.instance_vars:
                     var = block.instance_vars[self.symbol[:-1]]
-                    return SlotSet(receiver, var.slot_index, self.args[0])
-            # Convert Send to a Call since we know which type of block we're sending to
-            return Call(block, receiver, self.symbol, self.args)
+                    return SlotSet(self.receiver, var.slot_index, self.args[0])
         return self
 
     def collect_blocks(self, block_list):
@@ -428,35 +426,14 @@ class Send(object):
         receiver = self.receiver.generate_code(code)
         args = [arg.generate_code(code) for arg in self.args]
         dest = code.add_temp()
-        send_label = make_send_label(self.symbol)
-        code.add_instruction(CALL(dest, receiver, args, send_label, symbol=self.symbol))
-        return dest
 
-    check_error = True
+        if self.receiver_block:
+            tag = get_block_tag(self.receiver_block)
+            call_label = make_call_label(tag, self.symbol)
+        else:
+            tag = None
+            call_label = make_send_label(self.symbol)
 
-class Call(object):
-    def __init__(self, block, receiver, message, args):
-        self.block = block
-        self.receiver = receiver
-        self.symbol = message
-        self.args = args
-
-    def __str__(self):
-        args = (' ' if self.args else '') + format_list(self.args)
-        tag = getattr(self.block, 'tag', '<tag>')
-        return '(call %s/%s %s%s)' % (self.symbol, tag, self.receiver, args)
-
-    def collect_blocks(self, block_list):
-        self.receiver.collect_blocks(block_list)
-        for arg in self.args:
-            arg.collect_blocks(block_list)
-
-    def generate_code(self, code):
-        receiver = self.receiver.generate_code(code)
-        args = [arg.generate_code(code) for arg in self.args]
-        tag = self.block.tag if hasattr(self.block, 'tag') else self.block.constant_tag
-        dest = code.add_temp()
-        call_label = make_call_label(tag, self.symbol)
         code.add_instruction(CALL(dest, receiver, args, call_label, symbol=self.symbol, tag=tag))
         return dest
 
@@ -497,8 +474,7 @@ class Block(object):
 
     def __str__(self):
         args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.slots) + ')' if self.slots else ''
-        methods = ' ' + format_list(self.methods) if self.methods else ''
-        return '(block%s%s)' % (args, methods)
+        return '(block%s%s)' % (args, format_list(self.methods))
 
     @property
     def is_constant(self):
@@ -609,8 +585,7 @@ class Method(object):
         self.expr = expr
 
     def __str__(self):
-        args = ' ' + format_list(self.args) if self.args else ''
-        return '(define (%s%s) %s)' % (self.symbol, args, self.expr)
+        return '(define (%s%s) %s)' % (self.symbol, format_list(self.args), self.expr)
 
     def add_local(self):
         ref = LocalGet(len(self.locals))
@@ -646,7 +621,7 @@ class Method(object):
     def collect_blocks(self, block_list):
         self.expr.collect_blocks(block_list)
 
-    def generate_code(self, program):
+    def generate_code(self):
         code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args))
         code.add_instruction(RETURN(self.expr.generate_code(code)))
         #print('optimising %s' % self.symbol)
@@ -658,7 +633,7 @@ class Sequence(object):
         self.statements = statements
 
     def __str__(self):
-        return '(begin %s)' % format_list(self.statements)
+        return '(begin%s)' % format_list(self.statements)
 
     def add_local(self, name):
         ref = self.method.add_local()
@@ -730,7 +705,7 @@ class Array(object):
         self.elems = elems
 
     def __str__(self):
-        return '(array %s)' % format_list(self.elems)
+        return '(array%s)' % format_list(self.elems)
 
     def resolve_free_vars(self, parent):
         for i, elem in enumerate(self.elems):
@@ -1223,7 +1198,7 @@ def maximum_call_args(instructions):
 
 def get_call_registers(call_ins, arg_regs):
     """
-    Returns a dict locals to registers for each register used
+    Returns a dict mapping locals to registers for each register used
     to pass arguments to the call instruction.
     """
     call_regs = {}
@@ -1379,14 +1354,11 @@ class DumbCodeGenerator(object):
         self.load_local(ins.value, self.r2)
         self.target.emit_set_slot_tagged(self.r1, ins.slot_index, self.r2)
 
-    def emit_call(self, ins, label):
+    def CALL(self, ins):
         for i, arg in enumerate(ins.args):
             self.load_local(arg, self.target.arg_registers[i])
-        self.target.emit_call(label, 0)
+        self.target.emit_call(ins.call_label, 0)
         self.save_local(ins.dest, self.target.return_register)
-
-    def CALL(self, ins):
-        self.emit_call(ins, ins.call_label)
 
     def LOAD_VALUE(self, ins):
         self.target.emit_load_constant(self.r1, encode_tagged_value(ins.value, ins.tag))
@@ -1425,8 +1397,7 @@ class Target_x86_64(object):
     arg_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
     return_register = 'rax'
     temp_registers = ('r10', 'r11')
-    working_register = 'rax'  # Free to use temporarily for any instruction sequnces
-    num_arg_regs = len(arg_registers)
+    working_register = 'rax'  # Free to use temporarily for any instruction sequences
 
     def __init__(self, emitter):
         self.emit = emitter
@@ -1564,7 +1535,8 @@ class DataTable(object):
              + '\n'.join('\tdb ' + ','.join('%d' % byte for byte in data) for data in self.data))
 
 class Program(object):
-    def __init__(self, ast):
+    def __init__(self, ast, target_type):
+        self.target_type = target_type
         self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = DataTable()
@@ -1597,7 +1569,7 @@ class Program(object):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 tag = get_block_tag(block)
-                methods[method.symbol].append((tag, method.generate_code(self)))
+                methods[method.symbol].append((tag, method.generate_code()))
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
         methods.clear()
@@ -1619,7 +1591,7 @@ class Program(object):
         print('section .text\n')
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                codegen = DumbCodeGenerator(code, tag, symbol, Target_x86_64, self.data_table)
+                codegen = DumbCodeGenerator(code, tag, symbol, self.target_type, self.data_table)
                 print(codegen.generate())
         print(self.data_table.generate_assembly())
 
@@ -1628,12 +1600,12 @@ def parse_file(filename):
         source = f.read()
     return Parser(source, filename).toplevel()
 
-def compile_file(filename):
+def compile_file(filename, target_type=Target_x86_64):
     ast = parse_file(filename)
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(TopLevel)
     ast = ast.resolve_block_refs(TopLevel)
-    program = Program(ast)
+    program = Program(ast, target_type)
     program.print_code_table()
     #program.print_assembly_code()
 
