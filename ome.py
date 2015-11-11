@@ -425,10 +425,12 @@ class Send(object):
             arg.collect_blocks(block_list)
 
     def generate_code(self, code):
-        receiver = code.retval(self.receiver.generate_code(code))
-        args = [code.retval(arg.generate_code(code)) for arg in self.args]
-        code.add_instruction(SEND(self.symbol, receiver, args))
-        return RETVAL
+        receiver = self.receiver.generate_code(code)
+        args = [arg.generate_code(code) for arg in self.args]
+        dest = code.add_temp()
+        send_label = make_send_label(self.symbol)
+        code.add_instruction(CALL(dest, receiver, args, send_label, symbol=self.symbol))
+        return dest
 
     check_error = True
 
@@ -450,11 +452,13 @@ class Call(object):
             arg.collect_blocks(block_list)
 
     def generate_code(self, code):
-        receiver = code.retval(self.receiver.generate_code(code))
-        args = [code.retval(arg.generate_code(code)) for arg in self.args]
+        receiver = self.receiver.generate_code(code)
+        args = [arg.generate_code(code) for arg in self.args]
         tag = self.block.tag if hasattr(self.block, 'tag') else self.block.constant_tag
-        code.add_instruction(CALL(tag, self.symbol, receiver, args))
-        return RETVAL
+        dest = code.add_temp()
+        call_label = make_call_label(tag, self.symbol)
+        code.add_instruction(CALL(dest, receiver, args, call_label, symbol=self.symbol, tag=tag))
+        return dest
 
     check_error = True
 
@@ -559,7 +563,7 @@ class Block(object):
         if hasattr(self, 'tag'):
             code.add_instruction(CREATE(dest, self.tag, args))
         else:
-            code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.constant_tag))
+            code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.constant_tag))
         return dest
 
     check_error = False
@@ -587,10 +591,7 @@ class LocalVariable(object):
     def generate_code(self, code):
         local = self.local_ref.generate_code(code)
         expr = self.expr.generate_code(code)
-        if expr == RETVAL:
-            code.add_instruction(GET_RETVAL(local))
-        else:
-            code.add_instruction(ALIAS(local, expr))
+        code.add_instruction(ALIAS(local, expr))
         return local
 
     check_error = False
@@ -646,8 +647,8 @@ class Method(object):
         self.expr.collect_blocks(block_list)
 
     def generate_code(self, program):
-        code = MethodCode(program, len(self.args), len(self.locals) - len(self.args))
-        code.set_retval(self.expr.generate_code(code))
+        code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args))
+        code.add_instruction(RETURN(self.expr.generate_code(code)))
         #print('optimising %s' % self.symbol)
         code.optimise()
         return code
@@ -698,6 +699,7 @@ class Sequence(object):
         for statement in self.statements:
             statement.collect_blocks(block_list)
 
+    """
     def generate_code(self, code):
         error_label = None
         for statement in self.statements[:-1]:
@@ -711,6 +713,13 @@ class Sequence(object):
         if error_label:
             error_label.location = code.here()
         return RETVAL
+    """
+
+    def generate_code(self, code):
+        """Simple version with no error branching logic."""
+        for statement in self.statements[:-1]:
+            statement.generate_code(code)
+        return self.statements[-1].generate_code(code)
 
     @property
     def check_error(self):
@@ -765,7 +774,7 @@ class EmptyBlock(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, 0))
+        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, 0))
         return dest
 
 EmptyBlock = EmptyBlock()
@@ -779,7 +788,7 @@ class ConstantBlock(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, code.program.tag_constant_block, self.block.constant_tag))
+        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.constant_tag))
         return dest
 
 class Self(TerminalNode):
@@ -860,8 +869,8 @@ class SlotSet(object):
         self.set_expr.collect_blocks(block_list)
 
     def generate_code(self, code):
-        object = code.retval(self.obj_expr.generate_code(code))
-        value = code.retval(self.set_expr.generate_code(code))
+        object = self.obj_expr.generate_code(code)
+        value = self.set_expr.generate_code(code)
         code.add_instruction(SET_SLOT(object, self.slot_index, value))
         return value
 
@@ -881,6 +890,8 @@ MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
 MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
 MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
 
+MASK_TAG = (1 << NUM_TAG_BITS) - 1
+MASK_DATA = (1 << NUM_DATA_BITS) - 1
 MASK_INT = (1 << NUM_DATA_BITS) - 1
 MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
@@ -894,21 +905,21 @@ class Number(TerminalNode):
     def __str__(self):
         return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
 
-    def encode(self, program):
+    def encode_value(self):
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
             if MIN_INT <= value <= MAX_INT:
-                return (program.tag_integer, value & MASK_INT)
+                return (Tag_Small_Integer, value & MASK_INT)
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
             self.parse_state.error('Number out of range')
 
         value = ((self.significand & MASK_SIGNIFICAND) << 8) | (self.exponent & MASK_EXPONENT)
-        return (program.tag_decimal, value)
+        return (Tag_Small_Decimal, value)
 
     def generate_code(self, code):
-        tag, value = self.encode(code.program)
+        tag, value = self.encode_value()
         dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, tag, value))
         return dest
@@ -937,85 +948,217 @@ class TopLevel(object):
 
 TopLevel = TopLevel()
 
-def find_live_ranges(instructions, num_args):
-    """Find the set of live locals for each instruction."""
+def format_instruction_args(args):
+    return ' ' + ' '.join('%%%s' % x for x in args) if args else ''
 
-    init_point = {i: 0 for i in range(num_args)}
-    dead_point = {i: 0 for i in range(num_args)}
+class Instruction(object):
+    args = ()
+    label = None
 
+class CALL(Instruction):
+    def __init__(self, dest, receiver, args, call_label, symbol=None, tag=None):
+        self.dest = dest
+        self.args = [receiver] + args
+        self.call_label = call_label
+        self.symbol = symbol
+        self.tag = tag
+
+    def __str__(self):
+        return '%%%s = CALL %s%s' % (self.dest, self.call_label, format_instruction_args(self.args))
+
+    def emit(self, target):
+        target.CALL(self)
+
+class CREATE(Instruction):
+    def __init__(self, dest, tag, args):
+        self.dest = dest
+        self.tag = tag
+        self.args = args
+
+    def __str__(self):
+        return '%%%s = CREATE $%04X%s' % (self.dest, self.tag, format_instruction_args(self.args))
+
+    def emit(self, target):
+        target.CREATE(self)
+
+class CREATE_ARRAY(Instruction):
+    def __init__(self, dest, size):
+        self.dest = dest
+        self.size = size
+
+    def __str__(self):
+        return '%%%s = CREATE_ARRAY %s' % (self.dest, self.size)
+
+    def emit(self, target):
+        target.CREATE_ARRAY(self)
+
+class ALIAS(Instruction):
+    def __init__(self, dest, source):
+        self.dest = dest
+        self.args = [source]
+
+    def __str__(self):
+        return '%%%s = %%%s' % (self.dest, self.source)
+
+    @property
+    def source(self):
+        return self.args[0]
+
+    def emit(self, target):
+        target.ALIAS(self)
+
+class LOAD_VALUE(Instruction):
+    def __init__(self, dest, tag, value):
+        self.dest = dest
+        self.tag = tag
+        self.value = value
+
+    def __str__(self):
+        return '%%%s = $%04X:%012X' % (self.dest, self.tag, self.value)
+
+    def emit(self, target):
+        target.LOAD_VALUE(self)
+
+class LOAD_STRING(Instruction):
+    def __init__(self, dest, string):
+        self.dest = dest
+        self.string = string
+
+    def __str__(self):
+        return "%%%s = '%s'" % (self.dest, self.string)
+
+    def emit(self, target):
+        target.LOAD_STRING(self)
+
+class GET_SLOT(Instruction):
+    def __init__(self, dest, object, slot_index):
+        self.dest = dest
+        self.args = [object]
+        self.slot_index = slot_index
+
+    def __str__(self):
+        return '%%%s = %%%s[%d]' % (self.dest, self.object, self.slot_index)
+
+    @property
+    def object(self):
+        return self.args[0]
+
+    def emit(self, target):
+        target.GET_SLOT(self)
+
+class SET_SLOT(Instruction):
+    def __init__(self, object, slot_index, value):
+        self.args = [object, value]
+        self.slot_index = slot_index
+
+    @property
+    def object(self):
+        return self.args[0]
+
+    @property
+    def value(self):
+        return self.args[1]
+
+    def __str__(self):
+        return '%%%s[%d] := %%%s' % (self.object, self.slot_index, self.value)
+
+    def emit(self, target):
+        target.SET_SLOT(self)
+
+class ON_ERROR(Instruction):
+    def __init__(self, label):
+        self.label = label
+
+    def __str__(self):
+        return 'ON ERROR GOTO %s' % (self.label.name)
+
+    def emit(self, target):
+        target.ON_ERROR(self)
+
+class RETURN(Instruction):
+    def __init__(self, source):
+        self.args = [source]
+
+    @property
+    def source(self):
+        return self.args[0]
+
+    def __str__(self):
+        return 'RETURN %%%s' % self.source
+
+    def emit(self, target):
+        target.RETURN(self)
+
+class SPILL(Instruction):
+    def __init__(self, register, stack_slot):
+        self.register = register
+        self.stack_slot = stack_slot
+
+    def __str__(self):
+        return 'stack[%d] := %%%s' % (self.stack_slot, self.register)
+
+class UNSPILL(Instruction):
+    def __init__(self, register, stack_slot):
+        self.register = register
+        self.stack_slot = stack_slot
+
+    def __str__(self):
+        return '%%%s := stack[%d]' % (self.register, self.stack_slot)
+
+def apply_labels_to_instructions(instructions, labels):
+    labels = {label.location: label.name for label in labels}
     for loc, ins in enumerate(instructions):
-        if hasattr(ins, 'dest'):
-            init_point[ins.dest] = loc
-            dead_point[ins.dest] = loc
-        for local in ins.args:
-            dead_point[local] = loc
+        if loc in labels:
+            ins.label = labels[loc]
 
-    def reverse_dict(d):
-        result = {}
-        for key, value in d.items():
-            if value not in result:
-                result[value] = []
-            result[value].append(key)
-        return result
-
-    init_locations = reverse_dict(init_point)
-    dead_locations = reverse_dict(dead_point)
-
-    live_set = set(range(num_args))
-    for loc, ins in enumerate(instructions):
-        ins.live_set_before = frozenset(live_set)
-        live_set.update(init_locations.get(loc, []))
-        live_set.difference_update(dead_locations.get(loc, []))
-        ins.live_set_after = frozenset(live_set)
-
-    # Sanity check
-    for ins in instructions:
-        for arg in ins.args:
-            assert arg in ins.live_set_before
-
-def eliminate_aliases(instructions, labels):
+def eliminate_aliases(instructions):
     """Eliminate all local variable aliases (i.e. ALIAS instructions)."""
 
     aliases = {}
-    retval_aliases = set()
-    labels = {label.location: label for label in labels}
     instructions_out = []
-    location = 0
-
-    def flush_retval_aliases():
-        if retval_aliases:
-            saved_retval = retval_aliases.pop()
-            instructions_out.append(GET_RETVAL(saved_retval))
-            for needs_retval in retval_aliases:
-                aliases[needs_retval] = saved_retval
-            retval_aliases.clear()
-
-    def update_labels(location):
-        if location in labels:
-            labels[location].location = len(instructions_out)
-
-    def remove_aliases_from_args(ins):
-        for i, arg in enumerate(ins.args):
-            if arg in aliases:
-                ins.args[i] = aliases[arg]
 
     for location, ins in enumerate(instructions):
-        update_labels(location)
         if isinstance(ins, ALIAS):
             aliases[ins.dest] = aliases.get(ins.source, ins.source)
-        elif isinstance(ins, GET_RETVAL):
-            retval_aliases.add(ins.dest)
-        elif isinstance(ins, SET_RETVAL):
-            flush_retval_aliases()
-            remove_aliases_from_args(ins)
-            instructions_out.append(ins)
         else:
-            if ins.invalidates_retval or any(local in retval_aliases for local in ins.args):
-                flush_retval_aliases()
-            remove_aliases_from_args(ins)
+            for i, arg in enumerate(ins.args):
+                if arg in aliases:
+                    ins.args[i] = aliases[arg]
             instructions_out.append(ins)
 
-    update_labels(location + 1)
+    return instructions_out
+
+def move_constants_to_usage_points(instructions, num_locals):
+    """
+    Remove LOAD_VALUE/LOAD_STRING instructions and re-inserts loading to a
+    new local just before they are needed. This reduces the size of the live
+    set since it is only needed for an instance and can be re-loaded again
+    as needed.
+    """
+
+    instructions_out = []
+    constant_values = {}
+    constant_strings = {}
+
+    for ins in instructions:
+        if isinstance(ins, LOAD_VALUE):
+            constant_values[ins.dest] = ins
+        elif isinstance(ins, LOAD_STRING):
+            constant_strings[ins.dest] = ins
+        else:
+            for i, arg in enumerate(ins.args):
+                if arg in constant_values:
+                    cins = constant_values[arg]
+                    instructions_out.append(LOAD_VALUE(num_locals, cins.tag, cins.value))
+                    ins.args[i] = num_locals
+                    num_locals += 1
+                elif arg in constant_strings:
+                    cins = constant_strings[arg]
+                    instructions_out.append(LOAD_STRING(num_locals, cins.string))
+                    ins.args[i] = num_locals
+                    num_locals += 1
+            instructions_out.append(ins)
+
     return instructions_out
 
 def renumber_locals(instructions, num_args):
@@ -1032,18 +1175,83 @@ def renumber_locals(instructions, num_args):
             locals_map[ins.dest] = new_dest
             ins.dest = new_dest
 
+    return len(locals_map)
+
+def find_local_usage_points(instructions, num_args):
+    usage_points = {i: [] for i in range(num_args)}
+    for loc, ins in enumerate(instructions):
+        if hasattr(ins, 'dest'):
+            usage_points[ins.dest] = [loc]
+        for local in ins.args:
+            usage_points[local].append(loc)
+    return usage_points
+
+def find_usage_distances(instructions, num_args):
+    """
+    For each instruction, find the the distance to the next use of each local
+    variable in the live set.
+    """
+    usage_distances = []
+    current_distance = {}
+    created_point = {}
+
+    for loc, ins in reversed(list(enumerate(instructions))):
+        used_here = set(ins.args)
+        if hasattr(ins, 'dest'):
+            used_here.add(ins.dest)
+            created_point[ins.dest] = loc
+        not_used_here = set(current_distance.keys()) - used_here
+        for local in used_here:
+            current_distance[local] = 0
+        for local in not_used_here:
+            current_distance[local] += 1
+        usage_distances.append(current_distance.copy())
+
+    usage_distances.reverse()
+    for local, created_loc in created_point.items():
+        for loc in range(created_loc):
+            del usage_distances[loc][local]
+
+    return usage_distances
+
+def maximum_call_args(instructions):
+    n = 0
+    for ins in instructions:
+        if isinstance(ins, CALL):
+            n = max(n, len(ins.args))
+    return n
+
+def get_call_registers(call_ins, arg_regs):
+    """
+    Returns a dict locals to registers for each register used
+    to pass arguments to the call instruction.
+    """
+    call_regs = {}
+    num_reg_args = min(len(call_ins.args), len(arg_regs))
+    for i in range(num_reg_args):
+        call_regs[call_ins.args[i]] = arg_regs[i]
+    return call_regs
+
+def split_call_ranges(instructions):
+    call_ranges = []
+    start = 0
+    for loc, ins in enumerate(instructions):
+        if isinstance(ins, CALL):
+            call_ranges.append((instructions[start:loc], ins))
+            start = loc + 1
+    return call_ranges, instructions[start:]
+
 class Label(object):
     def __init__(self, name, location):
         self.name = name
         self.location = location
 
-class MethodCode(object):
-    def __init__(self, program, num_args, num_locals):
-        self.program = program
+class MethodCodeBuilder(object):
+    def __init__(self, num_args, num_locals):
         self.num_args = num_args + 1  # self is arg 0
         self.num_locals = num_args + num_locals + 1
         self.instructions = []
-        self.labels = set()
+        self.labels = []
         self.dest = self.add_temp()
 
     def add_temp(self):
@@ -1055,246 +1263,242 @@ class MethodCode(object):
         return len(self.instructions)
 
     def add_label(self):
-        label = Label('L%d' % len(self.labels), self.here())
-        self.labels.add(label)
+        if self.labels:
+            last_label = self.labels[-1]
+            if last_label.location == self.here():
+                return last_label
+        label = Label('.L%d' % len(self.labels), self.here())
+        self.labels.append(label)
         return label
 
     def add_instruction(self, instruction):
         self.instructions.append(instruction)
 
-    def retval(self, local):
-        if local != RETVAL:
-            return local
-        temp = self.add_temp()
-        self.add_instruction(GET_RETVAL(temp))
-        return temp
-
-    def set_retval(self, source):
-        if source != RETVAL:
-            self.add_instruction(SET_RETVAL(source))
-
     def optimise(self):
-        self.optimise_error_branches()
-        self.instructions = eliminate_aliases(self.instructions, self.labels)
-        renumber_locals(self.instructions, self.num_args)
-        find_live_ranges(self.instructions, self.num_args)
+        apply_labels_to_instructions(self.instructions, self.labels)
+        self.instructions = eliminate_aliases(self.instructions)
+        self.instructions = move_constants_to_usage_points(self.instructions, self.num_locals)
+        self.num_locals = renumber_locals(self.instructions, self.num_args)
 
-    def iter_instructions_by_type(self, type):
-        for instruction in self.instructions:
-            if isinstance(instruction, type):
-                yield instruction
+class CodeEmitter(object):
+    def __init__(self):
+        self.output = []
 
-    def optimise_error_branches(self):
-        for ins in self.iter_instructions_by_type(ON_ERROR):
-            error_label = ins.label
-            while error_label.location < len(self.instructions) \
-            and isinstance(self.instructions[error_label.location], ON_ERROR):
-                error_label = self.instructions[error_label.location].label
-            ins.label = error_label
+    def __call__(self, format, *args):
+        self.output.append('\t' + format % args)
 
-        self.labels = set(ins.label for ins in self.iter_instructions_by_type(ON_ERROR))
+    def label(self, name):
+        self.output.append('%s:' % name)
 
-    def build_labels_dict(self):
-        labels_dict = {}
-        for label in self.labels:
-            if label.location not in labels_dict:
-                labels_dict[label.location] = []
-            labels_dict[label.location].append(label.name)
-        return labels_dict
+    def comment(self, format, *args):
+        self.output.append('\t; ' + format % args)
 
-class RETVAL(object):
-    def __str__(self):
-        return '%retval'
-
-RETVAL = RETVAL()
-
-def format_instruction_args(args):
-    return ' ' + ' '.join('%%%d' % x for x in args) if args else ''
-
-class SEND(object):
-    invalidates_retval = True
-
-    def __init__(self, symbol, receiver, args):
-        self.symbol = symbol
-        self.label = symbol_to_label(symbol)
-        self.args = [receiver] + args
-
-    def __str__(self):
-        return 'SEND %%%d %s%s' % (self.args[0], self.symbol, format_instruction_args(self.args[1:]))
-
-    def emit(self, target):
-        target.SEND(self)
-
-class CALL(object):
-    invalidates_retval = True
-
-    def __init__(self, tag, symbol, receiver, args):
-        self.tag = tag
-        self.symbol = symbol
-        self.label = symbol_to_label(symbol)
-        self.args = [receiver] + args
-
-    def __str__(self):
-        return 'CALL %%%d $%04X:%s%s' % (self.args[0], self.tag, self.symbol, format_instruction_args(self.args[1:]))
-
-    def emit(self, target):
-        target.CALL(self)
-
-class CREATE(object):
-    invalidates_retval = False
-
-    def __init__(self, dest, tag, args):
-        self.dest = dest
-        self.tag = tag
-        self.args = args
-
-    def __str__(self):
-        return '%%%d = CREATE $%04X%s' % (self.dest, self.tag, format_instruction_args(self.args))
-
-    def emit(self, target):
-        target.CREATE(self)
-
-class CREATE_ARRAY(object):
-    invalidates_retval = False
-    args = ()
-
-    def __init__(self, dest, size):
-        self.dest = dest
-        self.size = size
-
-    def __str__(self):
-        return '%%%d = CREATE_ARRAY %s' % (self.dest, self.size)
-
-    def emit(self, target):
-        target.CREATE_ARRAY(self)
-
-class ALIAS(object):
-    invalidates_retval = False
-    args = ()
-
-    def __init__(self, dest, source):
-        self.dest = dest
-        self.args = [source]
-
-    def __str__(self):
-        return '%%%d = %%%d' % (self.dest, self.source)
-
-    @property
-    def source(self):
-        return self.args[0]
-
-    def emit(self, target):
-        target.ALIAS(self)
-
-class GET_RETVAL(object):
-    invalidates_retval = False
-    args = ()
-
-    def __init__(self, dest):
-        self.dest = dest
-
-    def __str__(self):
-        return '%%%d = %%retval' % self.dest
-
-    def emit(self, target):
-        target.GET_RETVAL(self)
-
-class SET_RETVAL(object):
-    invalidates_retval = True
-
-    def __init__(self, source):
-        self.args = [source]
-
-    def __str__(self):
-        return '%%retval := %%%d' % self.source
-
-    @property
-    def source(self):
-        return self.args[0]
-
-    def emit(self, target):
-        target.SET_RETVAL(self)
-
-class LOAD_VALUE(object):
-    invalidates_retval = False
-    args = ()
-
-    def __init__(self, dest, tag, value):
-        self.dest = dest
-        self.tag = tag
-        self.value = value
-
-    def __str__(self):
-        return '%%%d = $%04X:%012X' % (self.dest, self.tag, self.value)
-
-    def emit(self, target):
-        target.LOAD_VALUE(self)
-
-class LOAD_STRING(object):
-    invalidates_retval = False
-    args = ()
-
-    def __init__(self, dest, string):
-        self.dest = dest
-        self.string = string
-
-    def __str__(self):
-        return "%%%d = '%s'" % (self.dest, self.string)
-
-    def emit(self, target):
-        target.LOAD_STRING(self)
-
-class GET_SLOT(object):
-    invalidates_retval = False
-
-    def __init__(self, dest, object, slot_index):
-        self.dest = dest
-        self.args = [object]
-        self.slot_index = slot_index
-
-    def __str__(self):
-        return '%%%d = %%%d[%d]' % (self.dest, self.object, self.slot_index)
-
-    @property
-    def object(self):
-        return self.args[0]
-
-    def emit(self, target):
-        target.GET_SLOT(self)
-
-class SET_SLOT(object):
-    invalidates_retval = False
-
-    def __init__(self, object, slot_index, value):
-        self.args = [object, value]
-        self.slot_index = slot_index
-
-    @property
-    def object(self):
-        return self.args[0]
-
-    @property
-    def value(self):
-        return self.args[1]
-
-    def __str__(self):
-        return '%%%d[%d] := %%%d' % (self.object, self.slot_index, self.value)
-
-    def emit(self, target):
-        target.SET_SLOT(self)
-
-class ON_ERROR(object):
-    invalidates_retval = False
-    args = ()
-
+class ProcedureCodeEmitter(CodeEmitter):
     def __init__(self, label):
-        self.label = label
+        self.header_output = []
+        self.prelude_output = [label + ':']
+        self.output = []
+        self.tail_emitters = []
 
-    def __str__(self):
-        return 'ON ERROR GOTO %s' % (self.label.name)
+    def header_comment(self, format, *args):
+        self.header_output.append('; ' + format % args)
 
-    def emit(self, target):
-        target.ON_ERROR(self)
+    def prelude(self, format, *args):
+        self.prelude_output.append('\t' + format % args)
+
+    def tail_emitter(self, label):
+        emitter = CodeEmitter()
+        emitter.label(label)
+        self.tail_emitters.append(emitter)
+        return emitter
+
+    def get_output(self):
+        lines = self.header_output[:]
+        lines.extend(self.prelude_output)
+        lines.extend(self.output)
+        for emitter in self.tail_emitters:
+            lines.extend(emitter.output)
+        lines.append('')
+        return '\n'.join(lines)
+
+class DumbCodeGenerator(object):
+    def __init__(self, code, tag, symbol, target_type, data_table):
+        self.code = code
+        self.tag = tag
+        self.symbol = symbol
+        self.data_table = data_table
+        self.emit = ProcedureCodeEmitter(make_call_label(tag, symbol))
+        self.target = target_type(self.emit)
+        self.locals_stack = {}
+        self.r1 = self.target.arg_registers[0]
+        self.r2 = self.target.arg_registers[1]
+
+    def generate(self):
+        usage_distances = find_usage_distances(self.code.instructions, self.code.num_args)
+
+        self.num_stack_slots = max(map(len, usage_distances))
+        self.free_stack_slots = set(range(self.num_stack_slots))
+
+        self.emit.header_comment('$%04X %s', self.tag, self.symbol)
+
+        for local in range(self.code.num_args):
+            if local in usage_distances[0]:
+                self.save_local(local, self.target.arg_registers[local])
+
+        for loc, ins in enumerate(self.code.instructions):
+            for local in set(self.locals_stack.keys()) - set(usage_distances[loc].keys()):
+                slot = self.locals_stack[local]
+                self.free_stack_slots.add(slot)
+                del self.locals_stack[local]
+
+            ins.emit(self)
+
+        return self.emit.get_output()
+
+    def get_stack_slot(self, local):
+        if local in self.locals_stack:
+            return self.locals_stack[local]
+        else:
+            slot = self.free_stack_slots.pop()
+            self.locals_stack[local] = slot
+            return slot
+
+    def save_local(self, local, reg):
+        self.target.emit_mov_to_stack(self.get_stack_slot(local), reg)
+
+    def load_local(self, local, reg):
+        self.target.emit_mov_from_stack(reg, self.locals_stack[local])
+
+    def GET_SLOT(self, ins):
+        self.load_local(ins.object, self.r1)
+        self.target.emit_get_slot_tagged(self.r2, self.r1, ins.slot_index)
+        self.save_local(ins.dest, self.r2)
+
+    def SET_SLOT(self, ins):
+        self.load_local(ins.object, self.r1)
+        self.load_local(ins.value, self.r2)
+        self.target.emit_set_slot_tagged(self.r1, ins.slot_index, self.r2)
+
+    def emit_call(self, ins, label):
+        for i, arg in enumerate(ins.args):
+            self.load_local(arg, self.target.arg_registers[i])
+        self.target.emit_call(label, 0)
+        self.save_local(ins.dest, self.target.return_register)
+
+    def CALL(self, ins):
+        self.emit_call(ins, ins.call_label)
+
+    def LOAD_VALUE(self, ins):
+        self.target.emit_load_constant(self.r1, encode_tagged_value(ins.value, ins.tag))
+        self.save_local(ins.dest, self.r1)
+
+    def LOAD_STRING(self, ins):
+        label = self.data_table.allocate_string(ins.string)
+        self.target.emit_load_tagged_label(self.r1, label, Tag_String)
+        self.save_local(ins.dest, self.r1)
+
+    def CREATE(self, ins):
+        self.target.emit_create(self.r1, len(ins.args))
+        for slot_index, arg in enumerate(ins.args):
+            self.load_local(arg, self.r2)
+            self.target.emit_store_slot(self.r1, slot_index, self.r2)
+        self.target.emit_tag_pointer(self.r1, ins.tag)
+        self.save_local(ins.dest, self.r1)
+
+    def CREATE_ARRAY(self, ins):
+        self.target.emit_create(self.r1, len(ins.args))
+        for slot_index, arg in enumerate(ins.args):
+            self.load_local(arg, self.r2)
+            self.target.emit_store_slot(self.r1, slot_index, self.r2)
+        self.target.emit_tag_pointer(self.r1, Tag_Array)
+        self.save_local(ins.dest, self.r1)
+
+    def RETURN(self, ins):
+        self.load_local(ins.source, self.target.return_register)
+        self.target.emit_return(self.num_stack_slots)
+
+class Target_x86_64(object):
+    stack_pointer = 'rsp'
+    context_pointer = 'rbp'
+    nursery_bump_pointer = 'rbx'
+    nursery_limit_pointer = 'r12'
+    arg_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
+    return_register = 'rax'
+    temp_registers = ('r10', 'r11')
+    working_register = 'rax'  # Free to use temporarily for any instruction sequnces
+    num_arg_regs = len(arg_registers)
+
+    def __init__(self, emitter):
+        self.emit = emitter
+        self.num_jumpback_labels = 0
+
+    def add_gc_jumpback_label(self):
+        return_label = '.gc_return_%d' % self.num_jumpback_labels
+        full_label = '.gc_full_%d' % self.num_jumpback_labels
+        self.num_jumpback_labels += 1
+        return (return_label, full_label)
+
+    def emit_load_constant(self, dst, value):
+        self.emit('mov %s, 0x%x', dst, value)
+
+    def emit_load_tagged_label(self, dst, label, tag):
+        self.emit('mov %s, %s', dst, label)
+        self.emit('shl %s, %s', dst, NUM_TAG_BITS)
+        if tag != 0:
+            self.emit('or %s, %s', dst, tag)
+
+    def emit_mov(self, dst, src):
+        self.emit('mov %s, %s', dst, src)
+
+    def emit_mov_from_stack(self, dst, stack_slot):
+        self.emit('mov %s, [rsp + %s]', dst, stack_slot * 8)
+
+    def emit_mov_to_stack(self, stack_slot, src):
+        self.emit('mov [rsp + %s], %s', stack_slot * 8, src)
+
+    def emit_stack_arg(self, offset, arg):
+        self.emit('mov [rsp - %s], %s', offset * 8, arg)
+
+    def emit_call(self, label, num_stack_args):
+        if num_stack_args > 0:
+            self.emit('sub rsp, %s', num_stack_args * 8)
+        self.emit('call %s', label)
+        if num_stack_args > 0:
+            self.emit('add rsp, %s', num_stack_args * 8)
+
+    def emit_return(self, stack_size):
+        if stack_size > 0:
+            self.emit.prelude('sub rsp, %s', stack_size * 8)
+            self.emit('add rsp, %s', stack_size * 8)
+        self.emit('ret')
+
+    def emit_create(self, dest_reg, num_slots):
+        return_label, full_label = self.add_gc_jumpback_label()
+        self.emit.label(return_label)
+        self.emit('mov %s, %s', dest_reg, self.nursery_bump_pointer)
+        self.emit('add %s, %s', self.nursery_bump_pointer, num_slots * 8)
+        self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
+        self.emit('jae %s', full_label)
+
+        tail_emit = self.emit.tail_emitter(full_label)
+        tail_emit('call OME_collect_nursery')
+        tail_emit('jmp %s', return_label)
+
+    def emit_store_slot(self, dest_reg, slot_index, src_reg):
+        self.emit('mov [%s + %s], %s', dest_reg, slot_index * 8, src_reg)
+
+    def emit_tag_pointer(self, reg, tag):
+        self.emit('shl %s, %s', reg, NUM_TAG_BITS)
+        if tag != 0:
+            self.emit('or %s, %s', reg, tag)
+
+    def emit_get_slot_tagged(self, dest_reg, object_reg, slot_index):
+        self.emit('shr %s, %s', object_reg, NUM_TAG_BITS)
+        self.emit('mov %s, [%s + %s]', dest_reg, object_reg, slot_index * 8)
+
+    def emit_set_slot_tagged(self, object_reg, slot_index, value_reg):
+        self.emit('shr %s, %s', object_reg, NUM_TAG_BITS)
+        self.emit('mov [%s + %s], %s', object_reg, slot_index * 8, value_reg)
 
 def symbol_to_label(symbol):
     """
@@ -1315,419 +1519,76 @@ def make_send_label(symbol):
 def make_call_label(tag, symbol):
     return 'OME_method_%04X_%s' % (tag, symbol_to_label(symbol))
 
-class CodeEmitter(object):
+# Tags up to 255 are reserved for non-pointer data types
+Tag_False = 0      # False is represented as all zero bits
+Tag_True = 1       # True is represented as 1
+Tag_Constant = 2
+Tag_Small_Integer = 3
+Tag_Small_Decimal = 4
+Tag_String = 256
+Tag_Array = 257
+Tag_Block = 258    # First ID for user-defined blocks
+
+def encode_tagged_value(value, tag):
+    assert (value & MASK_DATA) == value
+    assert (tag & MASK_TAG) == tag
+    return (value << NUM_TAG_BITS) | tag
+
+def get_block_tag(block):
+    if hasattr(block, 'tag'):
+        return block.tag
+    else:
+        return encode_tagged_value(block.constant_tag, Tag_Constant)
+
+class DataTable(object):
     def __init__(self):
-        self.output = []
+        self.size = 0
+        self.data = []
+        self.string_offsets = {}
 
-    def __call__(self, format, *args):
-        self.output.append('\t' + format % args)
+    def append_data(self, data):
+        offset = self.size
+        self.data.append(data)
+        self.size += len(data)
+        return offset
 
-    def label(self, name):
-        self.output.append('.%s:' % name)
+    def allocate_string(self, string):
+        if string not in self.string_offsets:
+            padding = b'\0' * (8 - (len(string) & 7))  # nul termination padding
+            data = struct.pack('I', len(string)) + string.encode('utf8') + padding
+            self.string_offsets[string] = self.append_data(data)
+        return '(OME_data+%s)' % self.string_offsets[string]
 
-    def comment(self, format, *args):
-        self.output.append('\t; ' + format % args)
-
-class ProcedureCodeEmitter(CodeEmitter):
-    def __init__(self, label):
-        self.header_output = []
-        self.output = [label + ':']
-        self.tail_emitters = []
-
-    def header_comment(self, format, *args):
-        self.header_output.append('; ' + format % args)
-
-    def tail_emitter(self, label):
-        emitter = CodeEmitter()
-        emitter.label(label)
-        self.tail_emitters.append(emitter)
-        return emitter
-
-    def get_output(self):
-        lines = self.header_output[:]
-        lines.extend(self.output)
-        for emitter in self.tail_emitters:
-            lines.extend(emitter.output)
-        lines.append('')
-        return '\n'.join(lines)
-
-class CodeGenerator(object):
-    def __init__(self, program, code, target_type, emitter):
-        self.emit = emitter
-        self.target = target_type(self, self.emit)
-        self.program = program
-        self.instructions = code.instructions
-        self.labels = code.build_labels_dict()
-        self.tag_string = program.tag_string
-
-        num_reg_args = min(code.num_args, self.target.num_arg_regs)
-        num_stack_args = max(0, code.num_args - num_reg_args)
-        self.locals_register = {i: self.target.argument_registers[i] for i in range(num_reg_args)}
-        self.register_locals = {self.target.argument_registers[i]: i for i in range(num_reg_args)}
-        self.locals_stack = {i + num_reg_args: num_stack_args-i-1 for i in range(num_stack_args)}
-        self.stack_locals = {num_stack_args-i-1: i + num_reg_args for i in range(num_stack_args)}
-        self.constant_values = {}
-        self.constant_strings = {}
-        self.num_stack_slots = len(self.stack_locals)
-        self.free_stack_slots = set()
-        self.free_registers = set(self.target.argument_registers[num_reg_args:] + self.target.temp_registers)
-
-    def generate(self):
-        self.find_desired_regs()
-
-        for loc, ins in enumerate(self.instructions):
-            if loc in self.labels:
-                for label in self.labels[loc]:
-                    self.emit.label(label)
-
-            # Remove locals from registers that are no longer in the live set
-            for local_id in set(self.locals_register.keys()) - ins.live_set_before:
-                reg = self.locals_register[local_id]
-                del self.locals_register[local_id]
-                if reg in self.register_locals:
-                    del self.register_locals[reg]
-                self.free_registers.add(reg)
-
-            # Remove locals from stack slots that are no longer in the live set
-            for local_id in set(self.locals_stack.keys()) - ins.live_set_before:
-                slot = self.locals_stack[local_id]
-                del self.locals_stack[local_id]
-                del self.stack_locals[slot]
-                self.free_stack_slots.add(slot)
-
-            locals_locations = ['%s: %%%d' % (reg, local) for reg, local in self.register_locals.items()]
-            locals_locations.extend('sp[%d]: %%%d' % (slot, local) for slot, local in self.stack_locals.items())
-            if loc > 0:
-                self.emit('')
-            self.emit('; %s {%s}', ins, ', '.join(locals_locations))
-
-            self.live_set_before = ins.live_set_before
-            self.live_set_after = ins.live_set_after
-            ins.emit(self)
-
-        if loc + 1 in self.labels:
-            for label in self.labels[loc + 1]:
-                self.emit.label(label)
-
-        self.target.emit_return()
-        return self.emit.get_output()
-
-    def find_desired_regs(self):
-        desired_regs = {}
-        for loc in range(len(self.instructions)-1, -1, -1):
-            ins = self.instructions[loc]
-            if hasattr(ins, 'dest'):
-                ins.desired_dest_reg = desired_regs.get(ins.dest, None)
-            if isinstance(ins, (CALL, SEND)):
-                desired_regs = {}
-                for i in range(min(len(ins.args), len(self.target.argument_registers))):
-                    desired_regs[ins.args[i]] = self.target.argument_registers[i]
-            elif isinstance(ins, SET_RETVAL):
-                desired_regs[ins.source] = self.target.return_register
-
-    def allocate_stack_slot(self):
-        if self.free_stack_slots:
-            return self.free_stack_slots.pop()
-        slot = self.num_stack_slots
-        self.num_stack_slots += 1
-        return slot
-
-    def save_register(self, reg):
-        """
-        Save a register if it contains a local variable that will be needed
-        for subsequent instructions. The variable will still appear to be in
-        the register, so invalidate_register() should be called once it has
-        been modified.
-        """
-        if reg in self.register_locals:
-            evicted_local = self.register_locals[reg]
-            #if evicted_local in self.live_set_after:
-            if evicted_local not in self.stack_locals:
-                slot = self.allocate_stack_slot()
-                self.emit('; %%%d evicted to [%d]', evicted_local, slot)
-                self.locals_stack[evicted_local] = slot
-                self.stack_locals[slot] = evicted_local
-                self.target.emit_mov_to_stack(slot, reg)
-
-    def invalidate_register(self, reg):
-        if reg in self.register_locals:
-            local = self.register_locals[reg]
-            del self.register_locals[reg]
-            if local in self.locals_register:
-                del self.locals_register[local]
-
-    def evict_register(self, reg):
-        if reg in self.register_locals:
-            self.save_register(reg)
-            self.invalidate_register(reg)
-
-    def emit_load_local(self, local, reg):
-        if local in self.constant_values:
-            self.target.emit_load_constant(reg, self.constant_values[local])
-        elif local in self.constant_strings:
-            self.target.emit_load_tagged_label(reg, self.constant_strings[local], self.tag_string)
-        else:
-            self.target.emit_mov_from_stack(reg, self.locals_stack[local])
-
-    def get_copy_of_local_in_register(self, local, reg):
-        if local in self.locals_register:
-            src = self.locals_register[local]
-            if local in self.live_set_after:
-                self.evict_register(reg)
-                self.locals_register[local] = reg
-                self.register_locals[reg] = local
-                if reg != src:
-                    self.target.emit_mov(reg, src)
-        else:
-            self.evict_register(reg)
-            self.emit_load_local(local, reg)
-
-    def get_local_in_register_for_read(self, local, reg):
-        if local in self.locals_register:
-            src = self.locals_register[local]
-            if reg != src:
-                self.evict_register(reg)
-                self.locals_register[local] = reg
-                self.register_locals[reg] = local
-                self.target.emit_mov(reg, src)
-        else:
-            self.evict_register(reg)
-            self.emit_load_local(local, reg)
-
-    @contextmanager
-    def copy_local_to_any_register(self, local):
-        """Temporarily get a copy of a local into any free register that may be modified."""
-        if local in self.locals_register:
-            src = self.locals_register[local]
-            if local not in self.live_set_after:
-                # Not needed after this instruction, no need to copy
-                yield src
-            else:
-                reg = self.free_registers.pop()
-                self.target.emit_mov(reg, src)
-                yield reg
-                self.free_registers.add(reg)
-        else:
-            reg = self.free_registers.pop()
-            self.emit_load_local(local, reg)
-            yield reg
-            self.free_registers.add(reg)
-
-    @contextmanager
-    def get_local_to_any_register_for_read(self, local):
-        """Get a local variable to a register. May not be modified."""
-        if local in self.locals_register:
-            yield self.locals_register[local]
-        else:
-            reg = self.free_registers.pop()
-            self.emit_load_local(local, reg)
-            yield reg
-            self.free_registers.add(reg)
-
-    @contextmanager
-    def get_dest_reg(self, ins):
-        reg = ins.desired_dest_reg or self.target.temp_registers[0]
-        self.evict_register(reg)
-        self.locals_register[ins.dest] = reg
-        self.register_locals[reg] = ins.dest
-        yield reg
-
-    def LOAD_VALUE(self, ins):
-        self.constant_values[ins.dest] = (ins.value << NUM_TAG_BITS) | ins.tag
-
-    def LOAD_STRING(self, ins):
-        self.constant_strings[ins.dest] = self.program.allocate_string(ins.string)
-
-    def emit_call(self, ins, label):
-        # Save needed locals in registers that are not saved across calls
-        for reg in self.target.argument_registers:
-            if reg in self.register_locals:
-                local = self.register_locals[reg]
-                if local in ins.live_set_after:
-                    self.save_register(reg)
-
-        # Load register arguments
-        for i, arg in enumerate(ins.args[:self.target.num_arg_regs]):
-            self.get_copy_of_local_in_register(arg, self.target.argument_registers[i])
-
-        # Load stack arguments
-        for i, arg in enumerate(ins.args[self.target.num_arg_regs:], 1):
-            self.target.emit_stack_arg(i, arg)
-
-        # Registers for saved locals are invalid after the call
-        for reg in self.target.argument_registers:
-            self.invalidate_register(reg)
-
-        num_stack_args = max(0, len(ins.args) - self.target.num_arg_regs)
-        self.target.emit_call(label, num_stack_args)
-
-    def CALL(self, ins):
-        self.emit_call(ins, make_call_label(ins.tag, ins.symbol))
-
-    def SEND(self, ins):
-        self.emit_call(ins, make_send_label(ins.symbol))
-
-    def GET_RETVAL(self, ins):
-        with self.get_dest_reg(ins) as reg:
-            self.target.emit_mov(reg, self.target.return_register)
-
-    def SET_RETVAL(self, ins):
-        self.get_local_in_register_for_read(ins.source, self.target.return_register)
-
-    def GET_SLOT(self, ins):
-        with self.get_dest_reg(ins) as dest_reg:
-            with self.copy_local_to_any_register(ins.object) as object_reg:
-                self.target.GET_SLOT(dest_reg, object_reg, ins.slot_index)
-
-    def SET_SLOT(self, ins):
-        with self.copy_local_to_any_register(ins.object) as object_reg:
-            with self.get_local_to_any_register_for_read(ins.value) as value_reg:
-                self.target.SET_SLOT(object_reg, ins.slot_index, value_reg)
-
-    def CREATE(self, ins):
-        with self.get_dest_reg(ins) as reg:
-            self.target.CREATE(reg, ins)
-
-    def ON_ERROR(self, ins):
-        self.target.ON_ERROR(ins)
-
-class Target_x86_64(object):
-    stack_pointer = 'rsp'
-    context_pointer = 'rbp'
-    nursery_bump_pointer = 'rbx'
-    nursery_limit_pointer = 'r12'
-    argument_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
-    return_register = 'rax'
-    temp_registers = ('r10', 'r11')
-    num_arg_regs = len(argument_registers)
-
-    def __init__(self, codegen, emitter):
-        self.gen = codegen
-        self.emit = emitter
-        self.num_jumpback_labels = 0
-
-    def add_gc_jumpback_label(self):
-        return_label = 'gc_return_%d' % self.num_jumpback_labels
-        full_label = 'gc_full_%d' % self.num_jumpback_labels
-        self.num_jumpback_labels += 1
-        return (return_label, full_label)
-
-    def emit_load_constant(self, dst, value):
-        self.emit('mov %s, 0x%x', dst, value)
-
-    def emit_load_tagged_label(self, dst, label, tag):
-        self.emit('mov %s, %s', dst, label)
-        self.emit('shl %s, %s', dst, NUM_TAG_BITS)
-        if tag != 0:
-            self.emit('or %s, %s', dst, tag)
-
-    def emit_mov(self, dst, src):
-        self.emit('mov %s, %s', dst, src)
-
-    def emit_mov_from_stack(self, dst, src):
-        self.emit('mov %s, [rsp + %s]', dst, src)
-
-    def emit_mov_to_stack(self, dst, src):
-        self.emit('mov [rsp + %s], %s', dst, src)
-
-    def emit_stack_arg(self, offset, arg):
-        self.emit('mov [rsp - %s], %s', offset * 8, self.gen.get_local_in_register_for_read(arg, self.temp_registers[0]))
-
-    def emit_call(self, label, num_stack_args):
-        if num_stack_args > 0:
-            self.emit('sub rsp, %s', num_stack_args * 8)
-        self.emit('call %s', label)
-        if num_stack_args > 0:
-            self.emit('add rsp, %s', num_stack_args * 8)
-
-    def emit_return(self):
-        self.emit('ret')
-
-    def CREATE(self, dest_reg, ins):
-        return_label, full_label = self.add_gc_jumpback_label()
-        self.emit.label(return_label)
-        self.emit('mov %s, %s', dest_reg, self.nursery_bump_pointer)
-        self.emit('add %s, %s', self.nursery_bump_pointer, len(ins.args) * 8)
-        self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
-        self.emit('jae %s', full_label)
-        for i, arg in enumerate(ins.args):
-            with self.gen.copy_local_to_any_register(arg) as arg_reg:
-                self.emit('mov [%s + %s], %s', dest_reg, i * 8, arg_reg)
-        self.emit('shl %s, %s', dest_reg, NUM_TAG_BITS)
-        if ins.tag != 0:
-            self.emit('or %s, %s', dest_reg, ins.tag)
-
-        tail_emit = self.emit.tail_emitter(full_label)
-        tail_emit('call OME_collect_nursery')
-        tail_emit('jmp %s', return_label)
-
-    def CREATE_ARRAY(self, dest_reg, ins):
-        pass
-
-    def GET_SLOT(self, dest_reg, object_reg, index):
-        self.emit('shr %s, %s', object_reg, NUM_TAG_BITS)
-        self.emit('mov %s, [%s + %s]', dest_reg, object_reg, index * 8)
-
-    def SET_SLOT(self, object_reg, index, value_reg):
-        self.emit('shr %s, %s', object_reg, NUM_TAG_BITS)
-        self.emit('mov [%s + %s], %s', object_reg, index * 8, value_reg)
-
-    def ON_ERROR(self, ins):
-        self.emit('test %s, 0x8000', self.return_register)
-        self.emit('jnz %s', ins.label.name)
-
-builtin_data_types = ['False', 'True', 'Constant-Block', 'Small-Integer', 'Small-Decimal']
-builtin_object_types = ['String', 'Array']
+    def generate_assembly(self):
+        return ('section .rodata\n\nOME_data:\n'
+             + '\n'.join('\tdb ' + ','.join('%d' % byte for byte in data) for data in self.data))
 
 class Program(object):
     def __init__(self, ast):
         self.block_list = []
-        self.type_tag = {}
         self.code_table = []  # list of (symbol, [list of (tag, method)])
-        self.string_table_size = 0
-        self.string_table = []
-        self.string_table_offset = {}
+        self.data_table = DataTable()
 
         ast.collect_blocks(self.block_list)
         self.allocate_tag_ids()
+        self.allocate_constant_tag_ids()
         self.build_code_table()
 
     def allocate_tag_ids(self):
-        tag = 0
-        constant_tag = 1  # 0 is reserved for empty block {}
-
-        for type_name in builtin_data_types:
-            self.type_tag[type_name] = tag
-            tag += 1
-        self.first_object_id = tag
-
-        for block in self.block_list:
-            if block.is_constant:
-                block.constant_tag = constant_tag
-                constant_tag += 1
-
-        for type_name in builtin_object_types:
-            self.type_tag[type_name] = tag
-            tag += 1
-
+        tag = Tag_Block
         for block in self.block_list:
             if not block.is_constant:
                 block.tag = tag
                 tag += 1
-
-        self.num_tags = tag
         if tag > MAX_TAG:
             raise Error('Exhausted all tag IDs, your program is too big!')
 
-        self.tag_constant_block = self.type_tag['Constant-Block']
-        self.tag_integer = self.type_tag['Small-Integer']
-        self.tag_decimal = self.type_tag['Small-Decimal']
-        self.tag_string = self.type_tag['String']
-        self.tag_array = self.type_tag['Array']
-
-        #print('# Allocated %d tag IDs, %d constant tag IDs, 0-%d for data types, %d-%d for object types\n' % (
-        #    self.num_tags, constant_tag, self.first_object_id - 1,
-        #    self.first_object_id, self.num_tags - 1))
+    def allocate_constant_tag_ids(self):
+        constant_tag = 1  # 0 is reserved for the empty block
+        for block in self.block_list:
+            if block.is_constant:
+                block.constant_tag = constant_tag
+                constant_tag += 1
 
     def build_code_table(self):
         methods = {}
@@ -1735,7 +1596,7 @@ class Program(object):
             for method in block.methods:
                 if method.symbol not in methods:
                     methods[method.symbol] = []
-                tag = block.tag if hasattr(block, 'tag') else ((block.constant_tag << NUM_TAG_BITS) | self.tag_constant_block)
+                tag = get_block_tag(block)
                 methods[method.symbol].append((tag, method.generate_code(self)))
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
@@ -1746,42 +1607,21 @@ class Program(object):
             print('MESSAGE %s {' % symbol)
             for tag, code in methods:
                 print('    TAG $%04X {' % tag)
-                labels_dict = code.build_labels_dict()
                 for i, instruction in enumerate(code.instructions):
-                    for label in labels_dict.get(i, ()):
-                        print('    .%s:' % label)
-                    print('        %s {%s}' % (
-                        instruction, ', '.join(map(str, instruction.live_set_before))))
-                for label in labels_dict.get(i + 1, ()):
-                    print('    %s:' % label)
+                    if instruction.label:
+                        print('    .%s:' % instruction.label)
+                    print('        %s' % instruction)
                 print('    }')
-
             print('}')
-
-    def generate_assembly_code(self, target_type, code, tag, symbol):
-        emitter = ProcedureCodeEmitter(make_call_label(tag, symbol))
-        emitter.header_comment('$%04X %s', tag, symbol)
-        gen = CodeGenerator(self, code, Target_x86_64, emitter)
-        gen.generate()
-        return emitter.get_output()
 
     def print_assembly_code(self):
         print('bits 64\n')
+        print('section .text\n')
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                print(self.generate_assembly_code(Target_x86_64, code, tag, symbol))
-        print('OME_data:')
-        for string in self.string_table:
-            print('\tdb ' + ', '.join('%d' % x for x in string))
-
-    def allocate_string(self, string):
-        if string not in self.string_table_offset:
-            self.string_table_offset[string] = self.string_table_size
-            padding = b'\0' * (8 - (len(string) & 7))
-            data = struct.pack('I', len(string)) + string.encode('utf8') + padding
-            self.string_table.append(data)
-            self.string_table_size += len(data)
-        return '(OME_data + %s)' % self.string_table_offset[string]
+                codegen = DumbCodeGenerator(code, tag, symbol, Target_x86_64, self.data_table)
+                print(codegen.generate())
+        print(self.data_table.generate_assembly())
 
 def parse_file(filename):
     with open(filename) as f:
@@ -1794,8 +1634,8 @@ def compile_file(filename):
     ast = ast.resolve_free_vars(TopLevel)
     ast = ast.resolve_block_refs(TopLevel)
     program = Program(ast)
-    #program.print_code_table()
-    program.print_assembly_code()
+    program.print_code_table()
+    #program.print_assembly_code()
 
 if __name__ == '__main__':
     import sys
