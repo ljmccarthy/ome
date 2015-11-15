@@ -5,6 +5,44 @@ import re
 import sys
 import struct
 
+NUM_BITS = 64
+NUM_TAG_BITS = 20
+NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
+NUM_EXPONENT_BITS = 8
+NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
+NUM_HEADER_USER_BITS = 32
+
+MAX_TAG = 2**NUM_TAG_BITS - 1
+MIN_INT = -2**(NUM_DATA_BITS-1)
+MAX_INT = 2**(NUM_DATA_BITS-1) - 1
+MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
+MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
+MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
+MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
+MAX_ARRAY_SIZE = 2**NUM_HEADER_USER_BITS - 1
+
+MASK_TAG = (1 << NUM_TAG_BITS) - 1
+MASK_DATA = (1 << NUM_DATA_BITS) - 1
+MASK_INT = (1 << NUM_DATA_BITS) - 1
+MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
+MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
+
+# Tags up to 255 are reserved for non-pointer data types
+Tag_False = 0           # False is represented as all zero bits
+Tag_True = 1            # True is represented as 1
+Tag_Constant = 2
+Tag_Small_Integer = 3
+Tag_Small_Decimal = 4
+Tag_String = 256
+Tag_Array = 257
+Tag_User = 258          # First ID for user-defined blocks
+Constant_Empty = 0      # The empty block
+Constant_TopLevel = 1   # Top-level block for built-ins
+Constant_User = 2       # First ID for user-defined constant blocks
+
+def constant_to_tag(constant):
+    return constant + MAX_TAG + 1
+
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
 re_comment = re.compile(r'(?:#|--)([^\r\n]*)')
@@ -285,6 +323,8 @@ class Parser(ParserState):
         for _ in self.statement_lines():
             elems.append(self.expr())
         self.pop_indent()
+        if len(elems) > MAX_ARRAY_SIZE:
+            self.error('Array size too big.')
         return Array(elems)
 
     def expr(self):
@@ -750,16 +790,23 @@ class TerminalNode(object):
 
     check_error = False
 
-class EmptyBlock(TerminalNode):
+class BuiltInConstantBlock(TerminalNode):
+    def __init__(self, constant_tag):
+        self.constant_tag = constant_tag
+
     def __str__(self):
-        return '(block)'
+        return '<builtin %s>' % self.constant_tag
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, 0))
+        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.constant_tag))
         return dest
 
-EmptyBlock = EmptyBlock()
+class EmptyBlock(BuiltInConstantBlock):
+    def __str__(self):
+        return '(block)'
+
+EmptyBlock = EmptyBlock(Constant_Empty)
 
 class ConstantBlock(TerminalNode):
     def __init__(self, block):
@@ -772,6 +819,30 @@ class ConstantBlock(TerminalNode):
         dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.constant_tag))
         return dest
+
+class BuiltInMethod(object):
+    def __init__(self, symbol, tag, code):
+        self.symbol = symbol
+        self.tag = tag
+        self.code = code
+
+class TopLevelBlock(object):
+    is_constant = True
+    constant_ref = BuiltInConstantBlock(Constant_TopLevel)
+    constant_tag = Constant_TopLevel
+
+    def __init__(self, target_type):
+        self.methods = {method.symbol: method for method in target_type.builtin_methods}
+
+    def lookup_var(self, symbol):
+        pass
+
+    def lookup_receiver(self, symbol):
+        if symbol in self.methods:
+            return self
+
+    def get_block_ref(self, block):
+        pass
 
 class Self(TerminalNode):
     def __str__(self):
@@ -862,26 +933,6 @@ class SlotSet(object):
 
     check_error = True
 
-NUM_BITS = 64
-NUM_TAG_BITS = 20
-NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
-NUM_EXPONENT_BITS = 8
-NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
-
-MAX_TAG = 2**NUM_TAG_BITS - 1
-MIN_INT = -2**(NUM_DATA_BITS-1)
-MAX_INT = 2**(NUM_DATA_BITS-1) - 1
-MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
-MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
-MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
-MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
-
-MASK_TAG = (1 << NUM_TAG_BITS) - 1
-MASK_DATA = (1 << NUM_DATA_BITS) - 1
-MASK_INT = (1 << NUM_DATA_BITS) - 1
-MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
-MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
-
 class Number(TerminalNode):
     def __init__(self, significand, exponent, parse_state):
         self.significand = significand
@@ -921,18 +972,6 @@ class String(TerminalNode):
         dest = code.add_temp()
         code.add_instruction(LOAD_STRING(dest, self.string))
         return dest
-
-class TopLevel(object):
-    def lookup_var(self, symbol):
-        pass
-
-    def lookup_receiver(self, symbol):
-        pass
-
-    def get_block_ref(self, block):
-        pass
-
-TopLevel = TopLevel()
 
 def format_instruction_args(args):
     return ' ' + ' '.join('%%%s' % x for x in args) if args else ''
@@ -1464,8 +1503,10 @@ def allocate_registers(instructions, num_args, target):
     usage_distances = find_usage_distances(instructions, num_args)
     instructions_out = []
 
-    def process_instruction(ins, preferred_regs):
+    def process_instruction(ins, next_ins, preferred_regs):
         locals.remove_inactive_locals(ins.usage_distance.keys())
+        #if isinstance(ins, (TAG, UNTAG)) and ins.source not in next_ins.usage_distance:
+        #    ins.dest = ins.source
         if hasattr(ins, 'dest'):
             locals.get_local_to_register(ins.dest, preferred_regs, ins.usage_distance)
         for arg in ins.args:
@@ -1483,8 +1524,8 @@ def allocate_registers(instructions, num_args, target):
         next_call_ins = instructions[end]
         preferred_regs = get_call_registers(next_call_ins, target.arg_registers)
 
-        for ins in instructions[start:end]:
-            process_instruction(ins, preferred_regs)
+        for i in range(start, end):
+            process_instruction(instructions[i], instructions[i+1], preferred_regs)
 
         locals.prepare_call(next_call_ins, instructions[end + 1])
         instructions_out.extend(locals.get_spills())
@@ -1497,8 +1538,8 @@ def allocate_registers(instructions, num_args, target):
     preferred_regs = {return_ins.source: target.return_register}
     locals.prepare_return()
 
-    for ins in instructions[tail:len(instructions)-1]:
-        process_instruction(ins, preferred_regs)
+    for i in range(tail, len(instructions)-1):
+        process_instruction(instructions[i], instructions[i+1], preferred_regs)
 
     locals.move_to_return_register(return_ins.source)
     instructions_out.extend(locals.get_spills())
@@ -1604,7 +1645,7 @@ def split_tag_range(target, label_format, tags, exit_label, min_tag, max_tag):
     else:
         middle = len(tags) // 2
         middle_label = '.tag_ge_%X' % tags[middle]
-        target.emit_dispatch_compare_gt(tags[middle], middle_label)
+        target.emit_dispatch_compare_gte(tags[middle], middle_label)
         split_tag_range(target, label_format, tags[:middle], exit_label, min_tag, tags[middle] - 1)
         target.emit.label(middle_label)
         split_tag_range(target, label_format, tags[middle:], exit_label, tags[middle], max_tag)
@@ -1617,6 +1658,11 @@ def generate_dispatcher(symbol, tags, target_type):
     target.emit_dispatch(any_constant_tags)
     split_tag_range(target, make_call_label_format(symbol), tags, '.not_understood', 0, 1 << NUM_DATA_BITS)
     return emit.get_output()
+
+def encode_tagged_value(value, tag):
+    assert (value & MASK_DATA) == value
+    assert (tag & MASK_TAG) == tag
+    return (tag << NUM_DATA_BITS) | value
 
 class Target_x86_64(object):
     stack_pointer = 'rsp'
@@ -1649,8 +1695,9 @@ class Target_x86_64(object):
         self.emit.label('.dispatch')
         if any_constant_tags:
             const_emit = self.emit.tail_emitter('.constant')
-            const_emit('mov rax, %s', self.arg_registers[0])
-            const_emit('shl rax, %s', NUM_TAG_BITS)
+            const_emit('xor rax, rax')
+            const_emit('mov eax, edi')
+            const_emit('add rax, 0x%x', 1 << NUM_TAG_BITS)
             const_emit('jmp .dispatch')
         not_understood_emit = self.emit.tail_emitter('.not_understood')
         not_understood_emit('jmp OME_not_understood')
@@ -1660,7 +1707,7 @@ class Target_x86_64(object):
         self.emit('jne %s', exit_label)
         self.emit('jmp %s', tag_label)
 
-    def emit_dispatch_compare_gt(self, tag, gt_label):
+    def emit_dispatch_compare_gte(self, tag, gt_label):
         self.emit('cmp rax, 0x%X', tag)
         self.emit('jae %s', gt_label)
 
@@ -1685,7 +1732,7 @@ class Target_x86_64(object):
             self.emit('add rsp, %s', ins.num_stack_args * 8)
 
     def emit_tag(self, reg, tag):
-        self.emit('shl %s, %s', reg, NUM_TAG_BITS)
+        self.emit('shl %s, %s', reg, NUM_TAG_BITS - 3)
         self.emit('or %s, %s', reg, tag)
         self.emit('ror %s, %s', reg, NUM_TAG_BITS)
 
@@ -1721,7 +1768,7 @@ class Target_x86_64(object):
 
         self.emit.label(return_label)
         self.emit('mov %s, %s', dest, self.nursery_bump_pointer)
-        self.emit('add %s, %s', self.nursery_bump_pointer, num_slots * 8)
+        self.emit('add %s, %s', self.nursery_bump_pointer, (num_slots + 1) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
         self.emit('jae %s', full_label)
 
@@ -1735,6 +1782,138 @@ class Target_x86_64(object):
     def CREATE_ARRAY(self, ins):
         self.emit_create(ins.dest, ins.size)
         self.emit('mov dword [%s-4], %s', ins.dest, ins.size)
+
+    builtin_code = '''\
+%define OME_NUM_TAG_BITS {NUM_TAG_BITS}
+%define OME_NUM_DATA_BITS {NUM_DATA_BITS}
+%define OME_Value(value, tag) (((tag) << OME_NUM_DATA_BITS) | (value))
+%define OME_Constant(value) OME_Value(value, OME_Tag_Constant)
+
+%define OME_Tag_Constant 2
+%define OME_Tag_String 256
+%define OME_Constant_TopLevel 1
+%define OME_Constant_TypeError 2
+
+%define SYS_write 1
+%define SYS_mmap 9
+%define SYS_mprotect 10
+%define SYS_munmap 11
+%define SYS_mremap 25
+%define SYS_exit 60
+
+%define MAP_PRIVATE 0x2
+%define MAP_ANONYMOUS 0x20
+
+%define PROT_READ 0x1
+%define PROT_WRITE 0x2
+%define PROT_EXEC 0x4
+
+global _start
+_start:
+	call OME_allocate_thread_context
+	lea rsp, [rax+0x2000]  ; stack pointer (grows down)
+	mov rbx, rsp           ; GC nursery pointer (grows up)
+	lea r12, [rax+0x9000]  ; GC nursery limit
+	call OME_toplevel
+	mov rdi, rax
+	call {MAIN}
+	xor rdi, rdi
+	test rax, rax
+	jns .success
+	inc rdi
+.success:
+	mov rax, SYS_exit
+	syscall
+
+OME_allocate_thread_context:
+	mov rax, SYS_mmap
+	xor rdi, rdi	  ; addr
+	mov rsi, 0xA000   ; size
+	xor rdx, rdx	  ; PROT_NONE
+	mov r10, MAP_PRIVATE|MAP_ANONYMOUS
+	mov r8, r8
+	dec r8
+	xor r9, r9
+	syscall
+	lea rdi, [rax + 0x1000]  ; save pointer returned by mmap
+	push rdi
+	shr rax, 47   ; test for MAP_FAILED or address that is too big
+	jnz .panic
+	mov rax, SYS_mprotect
+	mov rsi, 0x8000
+	mov rdx, PROT_READ|PROT_WRITE
+	syscall
+	test rax, rax
+	js .panic
+	pop rax
+	ret
+.panic:
+	mov rsi, OME_message_mmap_failed
+	mov rdx, OME_message_mmap_failed.size
+	jmp OME_panic
+
+OME_collect_nursery:
+	lea rsi, [rel OME_message_collect_nursery]
+	mov rdx, OME_message_collect_nursery.size
+OME_panic:
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	mov rax, SYS_exit
+	mov rdi, 1
+	syscall
+
+OME_not_understood:
+	lea rsi, [rel OME_message_not_understood]
+	mov rdx, OME_message_not_understood.size
+	jmp OME_panic
+
+'''
+
+    builtin_data = '''\
+OME_message_mmap_failed
+.str:
+	db "Failed to allocate thread context", 10
+.size equ $-.str
+
+OME_message_collect_nursery:
+.str:
+	db "Garbage collector called", 10
+.size equ $-.str
+
+OME_message_not_understood:
+.str:
+	db "Message not understood", 10
+.size equ $-.str
+'''
+
+    builtin_methods = [
+        BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
+	mov rax, rsi
+	shr rax, OME_NUM_DATA_BITS
+	cmp rax, OME_Tag_String
+	jne .type_error
+	shl rsi, OME_NUM_TAG_BITS
+	shr rsi, OME_NUM_TAG_BITS - 3
+	mov rdx, [rsi]
+	add rsi, 8
+	mov rax, SYS_write
+	mov rdi, 1
+	syscall
+	sub rsp, 8
+	mov [rsp], byte 10
+	mov rsi, rsp
+	mov rdx, 1
+	mov rax, SYS_write
+	mov rdi, 1
+	syscall
+	add rsp, 8
+	ret
+.type_error:
+	mov rax, OME_Constant(OME_Constant_TypeError)
+	ret
+'''),
+    ]
 
 def symbol_to_label(symbol):
     """
@@ -1758,26 +1937,11 @@ def make_call_label_format(symbol):
 def make_call_label(tag, symbol):
     return make_call_label_format(symbol) % tag
 
-# Tags up to 255 are reserved for non-pointer data types
-Tag_False = 0      # False is represented as all zero bits
-Tag_True = 1       # True is represented as 1
-Tag_Constant = 2
-Tag_Small_Integer = 3
-Tag_Small_Decimal = 4
-Tag_String = 256
-Tag_Array = 257
-Tag_Block = 258    # First ID for user-defined blocks
-
-def encode_tagged_value(value, tag):
-    assert (value & MASK_DATA) == value
-    assert (tag & MASK_TAG) == tag
-    return (value << NUM_DATA_BITS) | tag
-
 def get_block_tag(block):
     if hasattr(block, 'tag'):
         return block.tag
     else:
-        return block.constant_tag + MAX_TAG + 1
+        return constant_to_tag(block.constant_tag)
 
 class DataTable(object):
     def __init__(self):
@@ -1794,17 +1958,20 @@ class DataTable(object):
     def allocate_string(self, string):
         if string not in self.string_offsets:
             padding = b'\0' * (8 - (len(string) & 7))  # nul termination padding
-            data = struct.pack('I', len(string)) + string.encode('utf8') + padding
+            data = struct.pack('Q', len(string)) + string.encode('utf8') + padding
             self.string_offsets[string] = self.append_data(data)
         return '(OME_data+%s)' % self.string_offsets[string]
 
     def generate_assembly(self, f):
-        f.write('section .rodata\n\nOME_data:\n\n')
+        f.write('align 8\nOME_data:\n')
         for data in self.data:
              f.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
+        f.write('.end:\n')
 
 class Program(object):
     def __init__(self, ast, target_type):
+        self.toplevel_method = ast
+        self.toplevel_block = ast.expr
         self.target_type = target_type
         self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
@@ -1816,7 +1983,7 @@ class Program(object):
         self.build_code_table()
 
     def allocate_tag_ids(self):
-        tag = Tag_Block
+        tag = Tag_User
         for block in self.block_list:
             if not block.is_constant:
                 block.tag = tag
@@ -1825,20 +1992,38 @@ class Program(object):
             raise Error('Exhausted all tag IDs, your program is too big!')
 
     def allocate_constant_tag_ids(self):
-        constant_tag = 1  # 0 is reserved for the empty block
+        constant_tag = Constant_User
         for block in self.block_list:
             if block.is_constant:
                 block.constant_tag = constant_tag
                 constant_tag += 1
 
+    def _compile_method(self, method, label):
+        emit = ProcedureCodeEmitter(label)
+        code = method.generate_code(self.target_type)
+        generate_assembly_code(emit, code, self.target_type, self.data_table)
+        return emit.get_output()
+
+    def compile_method(self, method, tag):
+        return self._compile_method(method, make_call_label(tag, method.symbol))
+
     def build_code_table(self):
         methods = {}
+        for method in self.target_type.builtin_methods:
+            if method.symbol not in methods:
+                methods[method.symbol] = []
+            label = make_call_label(method.tag, method.symbol)
+            code = '%s:\n%s' % (label, method.code)
+            methods[method.symbol].append((method.tag, code))
+
         for block in self.block_list:
             for method in block.methods:
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 tag = get_block_tag(block)
-                methods[method.symbol].append((tag, method.generate_code(self.target_type)))
+                code = self.compile_method(method, tag)
+                methods[method.symbol].append((tag, code))
+
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
         methods.clear()
@@ -1857,16 +2042,29 @@ class Program(object):
 
     def generate_assembly(self, f):
         f.write('bits 64\n\nsection .text\n\n')
+
+        main_label = make_call_label(get_block_tag(self.toplevel_block), 'main')
+        env = {
+            'MAIN': main_label,
+            'NUM_TAG_BITS': NUM_TAG_BITS,
+            'NUM_DATA_BITS': NUM_DATA_BITS,
+        }      
+        f.write(self.target_type.builtin_code.format(**env))
+        f.write(self._compile_method(self.toplevel_method, 'OME_toplevel'))
+        f.write('\n')
+
         for symbol, methods in self.code_table:
             tags = [tag for tag, code in methods]
             f.write(generate_dispatcher(symbol, tags, self.target_type))
             f.write('\n')
             for tag, code in methods:
-                emit = ProcedureCodeEmitter(make_call_label(tag, symbol))
-                generate_assembly_code(emit, code, self.target_type, self.data_table)
-                f.write(emit.get_output())
+                f.write(code)
                 f.write('\n')
+
+        f.write('section .rodata\n\n')
         self.data_table.generate_assembly(f)
+        f.write('\n')
+        f.write(self.target_type.builtin_data)
 
 def parse_file(filename):
     with open(filename) as f:
@@ -1874,17 +2072,21 @@ def parse_file(filename):
     return Parser(source, filename).toplevel()
 
 def compile_file(filename, target_type=Target_x86_64):
+    toplevel = TopLevelBlock(target_type)
     ast = parse_file(filename)
     ast = Method('', [], ast)
-    ast = ast.resolve_free_vars(TopLevel)
-    ast = ast.resolve_block_refs(TopLevel)
+    ast = ast.resolve_free_vars(toplevel)
+    ast = ast.resolve_block_refs(toplevel)
     program = Program(ast, target_type)
     #program.print_code_table()
     program.generate_assembly(sys.stdout)
 
-if __name__ == '__main__':
+def main():
     for filename in sys.argv[1:]:
         try:
             compile_file(filename)
         except Error as e:
-            print(e)
+            sys.stderr.write('%s\n' % e)
+
+if __name__ == '__main__':
+    main()
