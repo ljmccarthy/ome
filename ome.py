@@ -1972,10 +1972,16 @@ class Program(object):
     def __init__(self, ast, target_type):
         self.toplevel_method = ast
         self.toplevel_block = ast.expr
+        if isinstance(self.toplevel_block, Sequence):
+            self.toplevel_block = self.toplevel_block.statements[-1]
+
         self.target_type = target_type
         self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = DataTable()
+
+        if 'main' not in self.toplevel_block.symbols:
+            raise Error('Error: No main method defined')
 
         ast.collect_blocks(self.block_list)
         self.allocate_tag_ids()
