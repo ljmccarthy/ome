@@ -863,7 +863,7 @@ class SlotSet(object):
     check_error = True
 
 NUM_BITS = 64
-NUM_TAG_BITS = 16
+NUM_TAG_BITS = 20
 NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
@@ -1241,13 +1241,6 @@ def find_usage_distances(instructions, num_args):
 
     return usage_distances
 
-def maximum_call_args(instructions):
-    n = 0
-    for ins in instructions:
-        if isinstance(ins, CALL):
-            n = max(n, len(ins.args))
-    return n
-
 def get_call_registers(call_ins, arg_regs):
     """
     Returns a dict mapping locals to registers for each register used
@@ -1281,9 +1274,9 @@ class LocalStorage(object):
         # | loc1 | 5  0  num_stack_slots = 6
         # | loc0 | 4  1
         # | retn | 3  -
-        # | arg2 | 2  3
+        # | arg0 | 2  3
         # | arg1 | 1  4
-        # | arg0 | 0  5
+        # | arg2 | 0  5
 
         self.local_stack = {i: num_args - i - 1 for i in range(len(self.arg_regs), num_args)}
         self.free_stack_slots = []
@@ -1608,7 +1601,6 @@ class Target_x86_64(object):
     arg_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
     return_register = 'rax'
     temp_registers = ('r10', 'r11')
-    working_register = 'rax'  # Free to use temporarily for any instruction sequences
 
     def __init__(self, emitter):
         self.emit = emitter
@@ -1654,7 +1646,7 @@ class Target_x86_64(object):
         if ins.dest != ins.source:
             self.emit('mov %s, %s', ins.dest, ins.source)
         self.emit('shl %s, %s', ins.dest, NUM_TAG_BITS)
-        self.emit('shr %s, %s', ins.dest, NUM_TAG_BITS)
+        self.emit('shr %s, %s', ins.dest, NUM_TAG_BITS - 3)
 
     def LOAD_VALUE(self, ins):
         value = encode_tagged_value(ins.value, ins.tag)
