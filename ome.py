@@ -1788,6 +1788,8 @@ class Target_x86_64(object):
 %define OME_NUM_DATA_BITS {NUM_DATA_BITS}
 %define OME_Value(value, tag) (((tag) << OME_NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, OME_Tag_Constant)
+%define OME_Error_Tag(tag) ((tag) | (1 << (OME_NUM_TAG_BITS - 1)))
+%define OME_Error_Constant(value) OME_Value(value, OME_Error_Tag(OME_Tag_Constant))
 
 %define OME_Tag_Constant 2
 %define OME_Tag_String 256
@@ -1811,9 +1813,9 @@ class Target_x86_64(object):
 global _start
 _start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+0x2000]  ; stack pointer (grows down)
+	lea rsp, [rax+0x1000]  ; stack pointer (grows down)
 	mov rbx, rsp           ; GC nursery pointer (grows up)
-	lea r12, [rax+0x9000]  ; GC nursery limit
+	lea r12, [rax+0x4000]  ; GC nursery limit
 	call OME_toplevel
 	mov rdi, rax
 	call {MAIN}
@@ -1835,7 +1837,7 @@ OME_allocate_thread_context:
 	dec r8
 	xor r9, r9
 	syscall
-	lea rdi, [rax + 0x1000]  ; save pointer returned by mmap
+	lea rdi, [rax+0x1000]  ; save pointer returned by mmap
 	push rdi
 	shr rax, 47   ; test for MAP_FAILED or address that is too big
 	jnz .panic
@@ -1910,7 +1912,7 @@ OME_message_not_understood:
 	add rsp, 8
 	ret
 .type_error:
-	mov rax, OME_Constant(OME_Constant_TypeError)
+	mov rax, OME_Error_Constant(OME_Constant_TypeError)
 	ret
 '''),
     ]
