@@ -1722,7 +1722,7 @@ def get_block_tag(block):
     if hasattr(block, 'tag'):
         return block.tag
     else:
-        return encode_tagged_value(block.constant_tag, Tag_Constant)
+        return block.constant_tag + MAX_TAG + 1
 
 class DataTable(object):
     def __init__(self):
