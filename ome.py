@@ -1435,7 +1435,7 @@ class LocalStorage(object):
 
         self.local_register = {call_ins.dest: self.return_reg}
         self.register_local = {self.return_reg: call_ins.dest}
-        self.free_registers = list(self.temp_regs + self.arg_regs)
+        self.free_registers = list(self.arg_regs + self.temp_regs)
 
         call_ins.num_stack_args = max(0, len(call_ins.args) - len(self.arg_regs))
 
@@ -1593,6 +1593,31 @@ def generate_assembly_code(emit, code, target_type, data_table):
         ins.emit(target)
     target.emit_leave(code.num_stack_slots)
 
+def split_tag_range(target, label_format, tags, exit_label, min_tag, max_tag):
+    target.emit.comment('[0x%x..0x%x]', min_tag, max_tag)
+    if len(tags) == 1:
+        tag = tags[0]
+        if min_tag == tag and max_tag == tag:
+            target.emit_jump(label_format % tag)
+        else:
+            target.emit_dispatch_compare_eq(tag, label_format % tag, exit_label)
+    else:
+        middle = len(tags) // 2
+        middle_label = '.tag_ge_%X' % tags[middle]
+        target.emit_dispatch_compare_gt(tags[middle], middle_label)
+        split_tag_range(target, label_format, tags[:middle], exit_label, min_tag, tags[middle] - 1)
+        target.emit.label(middle_label)
+        split_tag_range(target, label_format, tags[middle:], exit_label, tags[middle], max_tag)
+
+def generate_dispatcher(symbol, tags, target_type):
+    tags = sorted(tags)
+    any_constant_tags = any(tag > MAX_TAG for tag in tags)
+    emit = ProcedureCodeEmitter(make_send_label(symbol))
+    target = target_type(emit)
+    target.emit_dispatch(any_constant_tags)
+    split_tag_range(target, make_call_label_format(symbol), tags, '.not_understood', 0, 1 << NUM_DATA_BITS)
+    return emit.get_output()
+
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
@@ -1614,6 +1639,33 @@ class Target_x86_64(object):
         if num_stack_slots > 0:
             self.emit('add rsp, %s', num_stack_slots * 8)
         self.emit('ret')
+
+    def emit_dispatch(self, any_constant_tags):
+        self.emit('mov rax, %s', self.arg_registers[0])
+        self.emit('shr rax, %s', NUM_DATA_BITS)
+        if any_constant_tags:
+            self.emit('cmp rax, %s', Tag_Constant)
+            self.emit('je .constant')
+        self.emit.label('.dispatch')
+        if any_constant_tags:
+            const_emit = self.emit.tail_emitter('.constant')
+            const_emit('mov rax, %s', self.arg_registers[0])
+            const_emit('shl rax, %s', NUM_TAG_BITS)
+            const_emit('jmp .dispatch')
+        not_understood_emit = self.emit.tail_emitter('.not_understood')
+        not_understood_emit('jmp OME_not_understood')
+
+    def emit_dispatch_compare_eq(self, tag, tag_label, exit_label):
+        self.emit('cmp rax, 0x%X', tag)
+        self.emit('jne %s', exit_label)
+        self.emit('jmp %s', tag_label)
+
+    def emit_dispatch_compare_gt(self, tag, gt_label):
+        self.emit('cmp rax, 0x%X', tag)
+        self.emit('jae %s', gt_label)
+
+    def emit_jump(self, label):
+        self.emit('jmp %s', label)
 
     def MOVE(self, ins):
         self.emit('mov %s, %s', ins.dest_reg, ins.source_reg)
@@ -1700,8 +1752,11 @@ def symbol_to_label(symbol):
 def make_send_label(symbol):
     return 'OME_message_' + symbol_to_label(symbol)
 
+def make_call_label_format(symbol):
+    return 'OME_method_%X_' + symbol_to_label(symbol)
+
 def make_call_label(tag, symbol):
-    return 'OME_method_%04X_%s' % (tag, symbol_to_label(symbol))
+    return make_call_label_format(symbol) % tag
 
 # Tags up to 255 are reserved for non-pointer data types
 Tag_False = 0      # False is represented as all zero bits
@@ -1792,7 +1847,7 @@ class Program(object):
         for symbol, methods in self.code_table:
             print('MESSAGE %s {' % symbol)
             for tag, code in methods:
-                print('    TAG $%04X {' % tag)
+                print('    TAG $%X {' % tag)
                 for i, instruction in enumerate(code.instructions):
                     if instruction.label:
                         print('    .%s:' % instruction.label)
@@ -1803,9 +1858,11 @@ class Program(object):
     def generate_assembly(self, f):
         f.write('bits 64\n\nsection .text\n\n')
         for symbol, methods in self.code_table:
+            tags = [tag for tag, code in methods]
+            f.write(generate_dispatcher(symbol, tags, self.target_type))
+            f.write('\n')
             for tag, code in methods:
                 emit = ProcedureCodeEmitter(make_call_label(tag, symbol))
-                emit.header_comment('$%04X %s', tag, symbol)
                 generate_assembly_code(emit, code, self.target_type, self.data_table)
                 f.write(emit.get_output())
                 f.write('\n')
