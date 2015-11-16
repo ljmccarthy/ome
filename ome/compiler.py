@@ -1,9 +1,13 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
+import io
+import os
 import re
 import struct
+import subprocess
 import sys
+
 from .ast import Method, Sequence, TopLevelBlock
 from .constants import *
 from .emit import ProcedureCodeEmitter
@@ -180,7 +184,7 @@ def parse_file(filename):
         source = f.read()
     return Parser(source, filename).toplevel()
 
-def compile_file(filename, target_type=Target_x86_64):
+def compile_file_to_assembly(filename, target_type):
     toplevel = TopLevelBlock(target_type)
     ast = parse_file(filename)
     ast = Method('', [], ast)
@@ -188,4 +192,21 @@ def compile_file(filename, target_type=Target_x86_64):
     ast = ast.resolve_block_refs(toplevel)
     program = Program(ast, target_type)
     #program.print_code_table()
-    program.generate_assembly(sys.stdout)
+    out = io.StringIO()
+    program.generate_assembly(out)
+    return out.getvalue().encode('utf8')
+
+def run_assembler(input, outfile):
+    p = subprocess.Popen(['yasm', '-f', 'elf64', '-o', outfile, '-'], stdin=subprocess.PIPE)
+    p.communicate(input)
+
+def run_linker(infile, outfile):
+    p = subprocess.Popen(['ld', '-s', '-o', outfile, infile])
+    p.communicate()
+
+def compile_file(filename, target_type=Target_x86_64):
+    asm = compile_file_to_assembly(filename, target_type)
+    exe_file = os.path.splitext(filename)[0]
+    obj_file = exe_file + '.o'
+    run_assembler(asm, obj_file)
+    run_linker(obj_file, exe_file)
