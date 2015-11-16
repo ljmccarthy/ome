@@ -71,10 +71,9 @@ class Send(object):
             tag = get_block_tag(self.receiver_block)
             call_label = make_call_label(tag, self.symbol)
         else:
-            tag = None
             call_label = make_send_label(self.symbol)
 
-        code.add_instruction(CALL(dest, receiver, args, call_label, symbol=self.symbol, tag=tag))
+        code.add_instruction(CALL(dest, receiver, args, call_label))
         return dest
 
     check_error = True
