@@ -335,9 +335,6 @@ class LocalStorage(object):
 
         call_ins.num_stack_args = max(0, len(call_ins.args) - len(self.arg_regs))
 
-    def prepare_return(self):
-        self.free_registers = list(self.arg_regs + self.temp_regs)
-
     def move_to_return_register(self, local):
         if local not in self.local_register:
             self.unspill(local, self.return_reg)
@@ -393,7 +390,6 @@ def allocate_registers(instructions, num_args, target):
 
     return_ins = instructions[-1]
     preferred_regs = {return_ins.source: target.return_register}
-    locals.prepare_return()
 
     for i in range(tail, len(instructions)-1):
         process_instruction(instructions[i], instructions[i+1], preferred_regs)
