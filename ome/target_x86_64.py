@@ -111,6 +111,8 @@ class Target_x86_64(object):
         self.emit('add %s, %s', self.nursery_bump_pointer, (num_slots + 1) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
         self.emit('jae %s', full_label)
+        self.emit('mov qword [%s], %s', dest, num_slots)  # TODO: GC header
+        self.emit('add %s, 8', dest)
 
         tail_emit = self.emit.tail_emitter(full_label)
         tail_emit('call OME_collect_nursery')
