@@ -8,7 +8,7 @@
     |name: nom age: age| {
         age = age
         ~nom = nom
-        |name| nom
+        |name| ~nom
     }
 }
 
