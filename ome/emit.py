@@ -1,3 +1,6 @@
+# ome - Object Message Expressions
+# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+
 class CodeEmitter(object):
     def __init__(self):
         self.output = []
