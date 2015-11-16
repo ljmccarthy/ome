@@ -6,7 +6,7 @@ from ome.compiler import compile_file, Error
 
 def main():
     if len(sys.argv) != 2:
-        sys.stderr.write('usage: python ome.py <infile.ome>')
+        sys.stderr.write('usage: python ome.py <infile.ome>\n')
     else:
         try:
             compile_file(sys.argv[1])
