@@ -1,6 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
+from .emit import ProcedureCodeEmitter
 from .optimise import *
 
 class Label(object):
@@ -39,3 +40,17 @@ class MethodCodeBuilder(object):
         self.instructions = eliminate_redundant_untags(self.instructions)
         self.num_locals = renumber_locals(self.instructions, self.num_args)
         self.instructions, self.num_stack_slots = allocate_registers(self.instructions, self.num_args, target_type)
+
+    def allocate_data(self, data_table):
+        for ins in self.instructions:
+            if isinstance(ins, LOAD_STRING):
+                ins.data_label = data_table.allocate_string(ins.string)
+
+    def generate_assembly(self, label, target_type):
+        emit = ProcedureCodeEmitter(label)
+        target = target_type(emit)
+        target.emit_enter(self.num_stack_slots)
+        for ins in self.instructions:
+            ins.emit(target)
+        target.emit_leave(self.num_stack_slots)
+        return emit.get_output()

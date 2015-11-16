@@ -10,45 +10,11 @@ import sys
 
 from .ast import Method, Sequence, TopLevelBlock
 from .constants import *
-from .emit import ProcedureCodeEmitter
+from .dispatcher import generate_dispatcher
 from .instructions import LOAD_STRING
 from .labels import *
 from .parser import Parser
 from .target_x86_64 import Target_x86_64
-
-def generate_assembly_code(emit, code, target_type, data_table):
-    target = target_type(emit)
-    target.emit_enter(code.num_stack_slots)
-    for ins in code.instructions:
-        if isinstance(ins, LOAD_STRING):
-            ins.data_label = data_table.allocate_string(ins.string)
-        ins.emit(target)
-    target.emit_leave(code.num_stack_slots)
-
-def split_tag_range(target, label_format, tags, exit_label, min_tag, max_tag):
-    target.emit.comment('[0x%x..0x%x]', min_tag, max_tag)
-    if len(tags) == 1:
-        tag = tags[0]
-        if min_tag == tag and max_tag == tag:
-            target.emit_jump(label_format % tag)
-        else:
-            target.emit_dispatch_compare_eq(tag, label_format % tag, exit_label)
-    else:
-        middle = len(tags) // 2
-        middle_label = '.tag_ge_%X' % tags[middle]
-        target.emit_dispatch_compare_gte(tags[middle], middle_label)
-        split_tag_range(target, label_format, tags[:middle], exit_label, min_tag, tags[middle] - 1)
-        target.emit.label(middle_label)
-        split_tag_range(target, label_format, tags[middle:], exit_label, tags[middle], max_tag)
-
-def generate_dispatcher(symbol, tags, target_type):
-    tags = sorted(tags)
-    any_constant_tags = any(tag > MAX_TAG for tag in tags)
-    emit = ProcedureCodeEmitter(make_send_label(symbol))
-    target = target_type(emit)
-    target.emit_dispatch(any_constant_tags)
-    split_tag_range(target, make_call_label_format(symbol), tags, '.not_understood', 0, 1 << NUM_DATA_BITS)
-    return emit.get_output()
 
 class DataTable(object):
     def __init__(self):
@@ -113,10 +79,9 @@ class Program(object):
                 constant_tag += 1
 
     def _compile_method(self, method, label):
-        emit = ProcedureCodeEmitter(label)
         code = method.generate_code(self.target_type)
-        generate_assembly_code(emit, code, self.target_type, self.data_table)
-        return emit.get_output()
+        code.allocate_data(self.data_table)
+        return code.generate_assembly(label, self.target_type)
 
     def compile_method(self, method, tag):
         return self._compile_method(method, make_call_label(tag, method.symbol))
@@ -144,15 +109,8 @@ class Program(object):
 
     def print_code_table(self):
         for symbol, methods in self.code_table:
-            print('MESSAGE %s {' % symbol)
             for tag, code in methods:
-                print('    TAG $%X {' % tag)
-                for i, instruction in enumerate(code.instructions):
-                    if instruction.label:
-                        print('    .%s:' % instruction.label)
-                    print('        %s' % instruction)
-                print('    }')
-            print('}')
+                print(code)
 
     def generate_assembly(self, f):
         f.write('bits 64\n\nsection .text\n\n')
