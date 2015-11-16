@@ -16,6 +16,13 @@ from .labels import *
 from .parser import Parser
 from .target_x86_64 import Target_x86_64
 
+def encode_string_data(string):
+    """Add 32-bit length header and nul termination/alignment padding."""
+    string = string.encode('utf8')
+    string = struct.pack('I', len(string)) + string
+    padding = b'\0' * (8 - (len(string) & 7))
+    return string + padding
+
 class DataTable(object):
     def __init__(self):
         self.size = 0
@@ -29,18 +36,16 @@ class DataTable(object):
         return offset
 
     def allocate_string(self, string):
-        string = string.encode('utf8')
         if string not in self.string_offsets:
-            padding = b'\0' * (8 - ((len(string) + 4) & 7))  # nul termination padding
-            data = struct.pack('I', len(string)) + string + padding
+            data = encode_string_data(string)
             self.string_offsets[string] = self.append_data(data)
         return '(OME_data+%s)' % self.string_offsets[string]
 
-    def generate_assembly(self, f):
-        f.write('align 8\nOME_data:\n')
+    def generate_assembly(self, out):
+        out.write('align 8\nOME_data:\n')
         for data in self.data:
-             f.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
-        f.write('.end:\n')
+             out.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
+        out.write('.end:\n')
 
 class Program(object):
     def __init__(self, ast, target_type):
@@ -112,8 +117,8 @@ class Program(object):
             for tag, code in methods:
                 print(code)
 
-    def generate_assembly(self, f):
-        f.write('bits 64\n\nsection .text\n\n')
+    def generate_assembly(self, out):
+        out.write('bits 64\n\nsection .text\n\n')
 
         main_label = make_call_label(get_block_tag(self.toplevel_block), 'main')
         env = {
@@ -121,22 +126,22 @@ class Program(object):
             'NUM_TAG_BITS': NUM_TAG_BITS,
             'NUM_DATA_BITS': NUM_DATA_BITS,
         }
-        f.write(self.target_type.builtin_code.format(**env))
-        f.write(self._compile_method(self.toplevel_method, 'OME_toplevel'))
-        f.write('\n')
+        out.write(self.target_type.builtin_code.format(**env))
+        out.write(self._compile_method(self.toplevel_method, 'OME_toplevel'))
+        out.write('\n')
 
         for symbol, methods in self.code_table:
             tags = [tag for tag, code in methods]
-            f.write(generate_dispatcher(symbol, tags, self.target_type))
-            f.write('\n')
+            out.write(generate_dispatcher(symbol, tags, self.target_type))
+            out.write('\n')
             for tag, code in methods:
-                f.write(code)
-                f.write('\n')
+                out.write(code)
+                out.write('\n')
 
-        f.write('section .rodata\n\n')
-        self.data_table.generate_assembly(f)
-        f.write('\n')
-        f.write(self.target_type.builtin_data)
+        out.write('section .rodata\n\n')
+        self.data_table.generate_assembly(out)
+        out.write('\n')
+        out.write(self.target_type.builtin_data)
 
 def parse_file(filename):
     with open(filename) as f:
