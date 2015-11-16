@@ -2,7 +2,7 @@
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import re
-from .ast import *
+from . import ast
 from .constants import *
 
 re_newline = re.compile(r'\r\n|\r|\n')
@@ -150,7 +150,7 @@ class Parser(ParserState):
             yield m
 
     def check_name(self, name, parse_state):
-        if name in reserved_names:
+        if name in ast.reserved_names:
             self.error('%s is a reserved name' % name)
         return name
 
@@ -217,8 +217,8 @@ class Parser(ParserState):
             if name in defined_symbols:
                 parse_state.error("Variable '%s' is already defined" % name)
             mutable = self.expect_token(re_assign, "Expected '=' or ':='").group() == ':='
-            statements.append(LocalVariable(name, self.expr()))
-            slots.append(BlockVariable(name, mutable, len(slots)))
+            statements.append(ast.LocalVariable(name, self.expr()))
+            slots.append(ast.BlockVariable(name, mutable, len(slots)))
             defined_symbols.add(name)
             if mutable:
                 defined_symbols.add(name + ':')
@@ -229,18 +229,18 @@ class Parser(ParserState):
             if symbol in defined_symbols:
                 self.error("Method '%s' conflicts with variable definition" % symbol)
             self.expect_token('|', "Expected '|'")
-            methods.append(Method(symbol, args, self.statements()))
+            methods.append(ast.Method(symbol, args, self.statements()))
             defined_methods.add(symbol)
         self.pop_indent()
         self.scan()
         if self.pos < len(self.stream) and not self.peek('}'):
             self.error('Expected declaration or end of block')
         if not slots and not methods:
-            return EmptyBlock
-        block = Block(slots, methods)
+            return ast.EmptyBlock
+        block = ast.Block(slots, methods)
         if statements:
             statements.append(block)
-            return Sequence(statements)
+            return ast.Sequence(statements)
         return block
 
     def toplevel(self):
@@ -257,12 +257,12 @@ class Parser(ParserState):
         if m:
             if m.group() == ':=':
                 self.error('Mutable variables are only allowed in blocks')
-            if not isinstance(statement, Send) or statement.receiver or not maybe_assign:
+            if not isinstance(statement, ast.Send) or statement.receiver or not maybe_assign:
                 parse_state.error('Left hand side of assignment must be a name')
             if statement.symbol[0] == '~':
                 parse_state.error('Local variables cannot be private')
             name = self.check_name(statement.symbol, parse_state)
-            statement = LocalVariable(name, self.expr())
+            statement = ast.LocalVariable(name, self.expr())
         return statement
 
     def statements(self):
@@ -271,9 +271,9 @@ class Parser(ParserState):
         for _ in self.statement_lines():
             statements.append(self.statement())
         self.pop_indent()
-        if not statements or isinstance(statements[-1], LocalVariable):
+        if not statements or isinstance(statements[-1], ast.LocalVariable):
             self.error('Expected statement or expression')
-        return statements[0] if len(statements) == 1 else Sequence(statements)
+        return statements[0] if len(statements) == 1 else ast.Sequence(statements)
 
     def array(self):
         elems = []
@@ -283,7 +283,7 @@ class Parser(ParserState):
         self.pop_indent()
         if len(elems) > MAX_ARRAY_SIZE:
             self.error('Array size too big.')
-        return Array(elems)
+        return ast.Array(elems)
 
     def expr(self):
         expr = None
@@ -309,7 +309,7 @@ class Parser(ParserState):
             kw_parse_state = self.copy_state()
         if args:
             self.check_num_params(len(args), parse_state)
-            expr = Send(expr, symbol, args, parse_state)
+            expr = ast.Send(expr, symbol, args, parse_state)
         return expr
 
     def unaryexpr(self):
@@ -325,7 +325,7 @@ class Parser(ParserState):
             name = m.group()
             if name[0] == '~':
                 parse_state.error('Private message sent to an explicit receiver')
-            expr = Send(expr, name, [])
+            expr = ast.Send(expr, name, [])
         return expr
 
     def atom(self):
@@ -345,9 +345,9 @@ class Parser(ParserState):
         m = self.expr_token(re_name)
         if m:
             name = m.group()
-            if name in reserved_names:
-                return reserved_names[name]
-            return Send(None, name, [], parse_state)
+            if name in ast.reserved_names:
+                return ast.reserved_names[name]
+            return ast.Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
@@ -359,8 +359,8 @@ class Parser(ParserState):
             if decimal:
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
-            return Number(significand, exponent, parse_state)
+            return ast.Number(significand, exponent, parse_state)
         m = self.expr_token(re_string)
         if m:
-            return String(m.group(1))
+            return ast.String(m.group(1))
         self.error('Expected expression')
