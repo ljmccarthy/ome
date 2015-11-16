@@ -1,0 +1,57 @@
+-- Simple example of dynamic message dispatch, objects and closures
+
+|Person| {
+    |new: name| {name = name}
+}
+
+|Person2| {
+    |name: nom age: age| {
+        age = age
+        ~nom = nom
+        |name| nom
+    }
+}
+
+|Nested-Person| {
+    |new: person| {
+        |name| person name
+    }
+}
+
+|Nested-Person2| {
+    |new: person| {
+        ~person = person
+        |name| ~person name
+    }
+}
+
+|The-King| {|name| 'George'}
+
+|Someone| {
+    |named: n|
+        obj = {name := ''}
+        obj name: n
+        obj
+}
+
+|greet: person|
+    print: 'Hello, '
+    print: person name
+
+|main|
+    p1 = Person new: 'Alice'
+    p2 = Person new: 'Bob'
+    p3 = Person2 name: 'Charles' age: 35
+    p4 = Nested-Person new: (Person new: 'Dave')
+    p5 = Nested-Person2 new: (Person new: 'Ewan')
+    p6 = Nested-Person2 new: (Nested-Person new: (Nested-Person new: (Person2 name: 'Fiona' age: 17)))
+    p7 = The-King
+    p8 = Someone named: 'Henry'
+    greet: p1
+    greet: p2
+    greet: p3
+    greet: p4
+    greet: p5
+    greet: p6
+    greet: p7
+    greet: p8
