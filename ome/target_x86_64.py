@@ -237,8 +237,9 @@ OME_message_not_understood:
 	jne .type_error
 	shl rsi, OME_NUM_TAG_BITS
 	shr rsi, OME_NUM_TAG_BITS - 3
-	mov rdx, [rsi]
-	add rsi, 8
+	xor rdx, rdx
+	mov edx, dword [rsi]
+	add rsi, 4
 	mov rax, SYS_write
 	mov rdi, 1
 	syscall

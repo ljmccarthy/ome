@@ -63,9 +63,10 @@ class DataTable(object):
         return offset
 
     def allocate_string(self, string):
+        string = string.encode('utf8')
         if string not in self.string_offsets:
-            padding = b'\0' * (8 - (len(string) & 7))  # nul termination padding
-            data = struct.pack('Q', len(string)) + string.encode('utf8') + padding
+            padding = b'\0' * (8 - ((len(string) + 4) & 7))  # nul termination padding
+            data = struct.pack('I', len(string)) + string + padding
             self.string_offsets[string] = self.append_data(data)
         return '(OME_data+%s)' % self.string_offsets[string]
 
@@ -199,10 +200,14 @@ def compile_file_to_assembly(filename, target_type):
 def run_assembler(input, outfile):
     p = subprocess.Popen(['yasm', '-f', 'elf64', '-o', outfile, '-'], stdin=subprocess.PIPE)
     p.communicate(input)
+    if p.returncode != 0:
+        sys.exit(p.returncode)
 
 def run_linker(infile, outfile):
     p = subprocess.Popen(['ld', '-s', '-o', outfile, infile])
     p.communicate()
+    if p.returncode != 0:
+        sys.exit(p.returncode)
 
 def compile_file(filename, target_type=Target_x86_64):
     asm = compile_file_to_assembly(filename, target_type)
