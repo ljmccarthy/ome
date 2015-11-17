@@ -488,7 +488,7 @@ BuiltInMethod('less-than:', Tag_Small_Integer, '''\
 	untag_integer rsi
 	xor rax, rax
 	cmp rdi, rsi
-	setle al
+	setl al
 	shl rax, OME_NUM_DATA_BITS
 	ret
 '''),
