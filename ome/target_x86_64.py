@@ -281,14 +281,6 @@ BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
 	mov rax, SYS_write
 	mov rdi, 1
 	syscall
-	sub rsp, 8
-	mov [rsp], byte 10
-	mov rsi, rsp
-	mov rdx, 1
-	mov rax, SYS_write
-	mov rdi, 1
-	syscall
-	add rsp, 8
 	ret
 .type_error:
 	mov rax, OME_Error_Constant(OME_Constant_TypeError)

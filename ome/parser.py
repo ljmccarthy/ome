@@ -12,9 +12,41 @@ re_name = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_arg_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
-re_string = re.compile(r"'((?:\\'|[^\r\n'])*)'")
+re_string = re.compile(r"'((?:\\.|[^\r\n'])*)'?")
+re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)')
 re_assign = re.compile(r'=|:=')
 re_end_token = re.compile(r'[|)}\]]')
+
+string_escapes = {
+    'a': chr(7),
+    'b': chr(8),
+    't': chr(9),
+    'n': chr(10),
+    'v': chr(11),
+    'f': chr(12),
+    'r': chr(13),
+    'e': chr(27),
+    "'": "'",
+    '"': '"',
+    '\\': '\\',
+}
+
+def parse_string_escapes(string, parse_state):
+    i = 0
+    parts = []
+    for m in re_string_escape.finditer(string):
+        parts.append(string[i:m.start()])
+        esc = m.group(1)
+        if esc[0] in 'xu' and len(esc) > 1:
+            parts.append(chr(int(esc[1:], 16)))
+        elif esc in string_escapes:
+            parts.append(string_escapes[esc])
+        else:
+            parse_state.pos += m.start() + 2
+            parse_state.error("Invalid escape sequence '%s'" % esc)
+        i = m.end()
+    parts.append(string[i:])
+    return ''.join(parts)
 
 class ParserState(object):
     def __init__(self, stream='', stream_name='<string>'):
@@ -358,7 +390,12 @@ class Parser(ParserState):
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
             return ast.Number(significand, exponent, parse_state)
+        parse_state = self.copy_state()
         m = self.expr_token(re_string)
         if m:
-            return ast.String(m.group(1))
+            s = m.group()
+            if s[-1] != "'" or len(s) == 1:
+                self.error('Reached end of line while parsing string')
+            string = parse_string_escapes(m.group(1), parse_state)
+            return ast.String(string)
         self.error('Expected expression')

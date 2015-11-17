@@ -37,6 +37,7 @@
 |greet: person|
     print: 'Hello, '
     print: person name
+    print: '\n'
 
 |main|
     p1 = Person new: 'Alice'
