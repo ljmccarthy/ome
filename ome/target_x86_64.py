@@ -47,9 +47,9 @@ class Target_x86_64(object):
         self.emit('jne %s', exit_label)
         self.emit('jmp %s', tag_label)
 
-    def emit_dispatch_compare_gte(self, tag, gt_label):
+    def emit_dispatch_compare_gte(self, tag, gte_label):
         self.emit('cmp rax, 0x%X', tag)
-        self.emit('jae %s', gt_label)
+        self.emit('jae %s', gte_label)
 
     def emit_jump(self, label):
         self.emit('jmp %s', label)
@@ -111,7 +111,7 @@ class Target_x86_64(object):
         self.emit('add %s, %s', self.nursery_bump_pointer, (num_slots + 1) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
         self.emit('jae %s', full_label)
-        self.emit('mov qword [%s], %s', dest, num_slots)  # TODO: GC header
+        self.emit('mov dword [%s], %s', dest, num_slots)  # TODO: GC header
         self.emit('add %s, 8', dest)
 
         tail_emit = self.emit.tail_emitter(full_label)
@@ -151,6 +151,42 @@ class Target_x86_64(object):
 %define PROT_READ 0x1
 %define PROT_WRITE 0x2
 %define PROT_EXEC 0x4
+
+%macro gc_alloc 3
+	mov %1, rbx
+	add rbx, %2
+	cmp rbx, r12
+	jae %3
+	mov dword [%1], %2
+	add %1, 8
+%endmacro
+
+%macro gc_return 1
+	call OME_collect_nursery
+	jmp %1
+%endmacro
+
+%macro untag_pointer 1
+	shl %1, OME_NUM_TAG_BITS
+	shr %1, OME_NUM_TAG_BITS - 3
+%endmacro
+
+%macro tag_pointer 2
+	shl %1, OME_NUM_TAG_BITS - 3
+	or %1, %2
+	ror %1, OME_NUM_TAG_BITS
+%endmacro
+
+%macro untag_integer 1
+	shl %1, OME_NUM_TAG_BITS
+	sar %1, OME_NUM_TAG_BITS
+%endmacro
+
+%macro tag_value 2
+	shl %1, OME_NUM_TAG_BITS
+	or %1, %2
+	ror %1, OME_NUM_TAG_BITS
+%endmacro
 
 global _start
 _start:
@@ -232,13 +268,13 @@ OME_message_not_understood:
 '''
 
     builtin_methods = [
-        BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
+
+BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
 	mov rax, rsi
 	shr rax, OME_NUM_DATA_BITS
 	cmp rax, OME_Tag_String
 	jne .type_error
-	shl rsi, OME_NUM_TAG_BITS
-	shr rsi, OME_NUM_TAG_BITS - 3
+	untag_pointer rsi
 	xor rdx, rdx
 	mov edx, dword [rsi]
 	add rsi, 4
@@ -258,4 +294,58 @@ OME_message_not_understood:
 	mov rax, OME_Error_Constant(OME_Constant_TypeError)
 	ret
 '''),
+
+BuiltInMethod('string', Tag_String, '''\
+	mov rax, rdi
+	ret
+'''),
+
+BuiltInMethod('string', Tag_Small_Integer, '''\
+.gc_return_0:
+	untag_integer rdi               ; untag integer
+	gc_alloc rsi, 24, .gc_full_0    ; pre-allocate string on heap
+	mov r11, rsi
+	tag_pointer r11, OME_Tag_String ; tagged and ready for returning
+	mov rcx, rsp                    ; rcx = string output cursor
+	sub rsp, 16                     ; allocate temp stack space for string
+	mov r10, 10                     ; divisor
+	dec rcx
+	mov byte [rcx], 0       ; nul terminator
+	mov rax, rdi            ; number for division
+	test rax, rax
+	jns .divloop
+	neg rax
+.divloop:
+	xor rdx, rdx            ; clear for division
+	dec rcx                 ; next character
+	idiv r10                ; divide by 10
+	add dl, '0'             ; digit in remainder
+	mov byte [rcx], dl      ; store digit
+	test rax, rax           ; loop if not zero
+	jnz .divloop
+	test rdi, rdi
+	jns .positive
+	dec rcx
+	mov byte [rcx], '-'     ; add sign
+.positive:
+	lea rdi, [rsp+16]       ; original stack pointer
+	mov rdx, rdi
+	sub rdx, rcx            ; compute length
+	mov dword [rsi], edx    ; store length
+	add rsi, 4
+	; copy from stack to allocated string
+.copyloop:
+	mov al, byte [rcx]
+	mov byte [rsi], al
+	inc rsi
+	inc rcx
+	cmp rcx, rdi
+	jb .copyloop
+	mov rsp, rdi    ; restore stack pointer
+	mov rax, r11    ; tagged return value
+	ret
+.gc_full_0:
+	gc_return .gc_return_0
+'''),
+
     ]
