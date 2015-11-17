@@ -408,20 +408,22 @@ class BuiltInMethod(object):
         self.tag = tag
         self.code = code
 
-class TopLevelBlock(object):
+class BuiltInBlock(object):
     is_constant = True
-    constant_ref = BuiltInConstantBlock(Constant_TopLevel)
-    constant_tag = Constant_TopLevel
+    constant_ref = BuiltInConstantBlock(Constant_BuiltIn)
+    constant_tag = Constant_BuiltIn
 
     def __init__(self, target_type):
-        tag = constant_to_tag(Constant_TopLevel)
-        self.methods = {method.symbol for method in target_type.builtin_methods if method.tag == tag}
+        builtin_tag = constant_to_tag(Constant_BuiltIn)
+        self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == builtin_tag}
+        self.called = set()
 
     def lookup_var(self, symbol):
         pass
 
     def lookup_receiver(self, symbol):
-        if symbol in self.methods:
+        if symbol in self.symbols:
+            self.called.add(symbol)
             return self
 
     def get_block_ref(self, block):

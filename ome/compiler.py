@@ -8,7 +8,7 @@ import struct
 import subprocess
 import sys
 
-from .ast import Method, Sequence, TopLevelBlock
+from .ast import Method, Sequence, BuiltInBlock
 from .constants import *
 from .dispatcher import generate_dispatcher
 from .instructions import LOAD_STRING
@@ -48,19 +48,21 @@ class DataTable(object):
         out.write('.end:\n')
 
 class Program(object):
-    def __init__(self, ast, target_type):
+    def __init__(self, ast, builtin, target_type):
+        self.builtin = builtin
         self.toplevel_method = ast
         self.toplevel_block = ast.expr
+
         if isinstance(self.toplevel_block, Sequence):
             self.toplevel_block = self.toplevel_block.statements[-1]
+
+        if 'main' not in self.toplevel_block.symbols:
+            raise Error('Error: No main method defined')
 
         self.target_type = target_type
         self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = DataTable()
-
-        if 'main' not in self.toplevel_block.symbols:
-            raise Error('Error: No main method defined')
 
         ast.collect_blocks(self.block_list)
         self.allocate_tag_ids()
@@ -93,12 +95,15 @@ class Program(object):
 
     def build_code_table(self):
         methods = {}
+
+        builtin_tag = constant_to_tag(Constant_BuiltIn)
         for method in self.target_type.builtin_methods:
-            if method.symbol not in methods:
-                methods[method.symbol] = []
-            label = make_call_label(method.tag, method.symbol)
-            code = '%s:\n%s' % (label, method.code)
-            methods[method.symbol].append((method.tag, code))
+            if method.tag != builtin_tag or method.symbol in self.builtin.called:
+                if method.symbol not in methods:
+                    methods[method.symbol] = []
+                label = make_call_label(method.tag, method.symbol)
+                code = '%s:\n%s' % (label, method.code)
+                methods[method.symbol].append((method.tag, code))
 
         for block in self.block_list:
             for method in block.methods:
@@ -149,12 +154,12 @@ def parse_file(filename):
     return Parser(source, filename).toplevel()
 
 def compile_file_to_assembly(filename, target_type):
-    toplevel = TopLevelBlock(target_type)
+    builtin = BuiltInBlock(target_type)
     ast = parse_file(filename)
     ast = Method('', [], ast)
-    ast = ast.resolve_free_vars(toplevel)
-    ast = ast.resolve_block_refs(toplevel)
-    program = Program(ast, target_type)
+    ast = ast.resolve_free_vars(builtin)
+    ast = ast.resolve_block_refs(builtin)
+    program = Program(ast, builtin, target_type)
     #program.print_code_table()
     out = io.StringIO()
     program.generate_assembly(out)

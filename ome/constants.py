@@ -33,7 +33,7 @@ Tag_String = 256
 Tag_Array = 257
 Tag_User = 258          # First ID for user-defined blocks
 Constant_Empty = 0      # The empty block
-Constant_TopLevel = 1   # Top-level block for built-ins
+Constant_BuiltIn = 1    # Block for built-in methods
 Constant_User = 2       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
