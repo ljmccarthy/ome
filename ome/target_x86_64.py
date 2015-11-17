@@ -154,7 +154,7 @@ class Target_x86_64(object):
 
 %macro gc_alloc 3
 	mov %1, rbx
-	add rbx, %2
+	add rbx, (%2) + 8
 	cmp rbx, r12
 	jae %3
 	mov dword [%1], %2
