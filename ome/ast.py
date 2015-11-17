@@ -414,7 +414,8 @@ class TopLevelBlock(object):
     constant_tag = Constant_TopLevel
 
     def __init__(self, target_type):
-        self.methods = {method.symbol: method for method in target_type.builtin_methods}
+        tag = constant_to_tag(Constant_TopLevel)
+        self.methods = {method.symbol for method in target_type.builtin_methods if method.tag == tag}
 
     def lookup_var(self, symbol):
         pass
