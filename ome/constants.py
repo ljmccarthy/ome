@@ -24,11 +24,10 @@ MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
 # Tags up to 255 are reserved for non-pointer data types
-Tag_False = 0           # False is represented as all zero bits
-Tag_True = 1            # True is represented as 1
-Tag_Constant = 2
-Tag_Small_Integer = 3
-Tag_Small_Decimal = 4
+Tag_Boolean = 0
+Tag_Constant = 1
+Tag_Small_Integer = 2
+Tag_Small_Decimal = 3
 Tag_String = 256
 Tag_Array = 257
 Tag_User = 258          # First ID for user-defined blocks

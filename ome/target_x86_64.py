@@ -26,6 +26,9 @@ class Target_x86_64(object):
             self.emit('add rsp, %s', num_stack_slots * 8)
         self.emit('ret')
 
+    def emit_empty_dispatch(self):
+        self.emit('jmp OME_not_understood')
+
     def emit_dispatch(self, any_constant_tags):
         self.emit('mov rax, %s', self.arg_registers[0])
         self.emit('shr rax, %s', NUM_DATA_BITS)
@@ -133,16 +136,15 @@ class Target_x86_64(object):
 %define OME_Error_Tag(tag) ((tag) | (1 << (OME_NUM_TAG_BITS - 1)))
 %define OME_Error_Constant(value) OME_Value(value, OME_Error_Tag(OME_Tag_Constant))
 
-%define OME_Tag_False 0
-%define OME_Tag_True 1
-%define OME_Tag_Constant 2
-%define OME_Tag_Small_Integer 3
+%define OME_Tag_Boolean 0
+%define OME_Tag_Constant 1
+%define OME_Tag_Small_Integer 2
 %define OME_Tag_String 256
 %define OME_Constant_BuiltIn 1
 %define OME_Constant_TypeError 2
 
-%define OME_False OME_Value(0, OME_Tag_False)
-%define OME_True OME_Value(0, OME_Tag_True)
+%define OME_False OME_Value(0, OME_Tag_Boolean)
+%define OME_True OME_Value(1, OME_Tag_Boolean)
 
 %define SYS_write 1
 %define SYS_mmap 9
@@ -326,8 +328,7 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
 	test rax, rax
 	jz .exit                ; exit if |while| returned False
 	js .exit                ; exit if |while| returned an error
-	get_tag rax
-	cmp rax, OME_Tag_True   ; compare with True
+	cmp rax, OME_True       ; compare with True
 	jne .type_error         ; if not True then we have a type error
 	call OME_message_do__0
 	mov rdi, [rsp]
@@ -347,14 +348,12 @@ BuiltInMethod('string', Tag_String, '''\
 	ret
 '''),
 
-BuiltInMethod('string', Tag_False, '''\
+BuiltInMethod('string', Tag_Boolean, '''\
 	lea rax, [rel OME_string_false]
-	tag_pointer rax, OME_Tag_String
-	ret
-'''),
-
-BuiltInMethod('string', Tag_True, '''\
+	test rdi, rdi
+	jz .exit
 	lea rax, [rel OME_string_true]
+.exit:
 	tag_pointer rax, OME_Tag_String
 	ret
 '''),
@@ -489,7 +488,62 @@ BuiltInMethod('less-than:', Tag_Small_Integer, '''\
 	xor rax, rax
 	cmp rdi, rsi
 	setl al
-	shl rax, OME_NUM_DATA_BITS
+	ret
+'''),
+
+BuiltInMethod('less-or-equal:', Tag_Small_Integer, '''\
+	mov rax, rsi
+	get_tag rax
+	cmp rax, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rdi
+	untag_integer rsi
+	xor rax, rax
+	cmp rdi, rsi
+	setle al
+	ret
+'''),
+
+BuiltInMethod('equals:', Tag_Small_Integer, '''\
+	mov rax, rsi
+	get_tag rax
+	cmp rax, OME_Tag_Small_Integer
+	jne OME_type_error
+	xor rax, rax
+	cmp rdi, rsi
+	sete al
+	ret
+'''),
+
+BuiltInMethod('not', Tag_Boolean, '''\
+	mov rax, rdi
+	xor rax, 1
+	ret
+'''),
+
+BuiltInMethod('and:', Tag_Boolean, '''\
+	mov rax, rdi
+	test rax, rax
+	jz .exit
+	mov rax, rsi
+.exit:
+	ret
+'''),
+
+BuiltInMethod('or:', Tag_Boolean, '''\
+	mov rax, rdi
+	test rax, rax
+	jnz .exit
+	mov rax, rsi
+.exit:
+	ret
+'''),
+
+BuiltInMethod('then:', Tag_Boolean, '''\
+	mov rax, rdi
+	mov rdi, rsi
+	test rax, rax
+	jnz OME_message_do__0
 	ret
 '''),
 

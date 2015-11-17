@@ -31,6 +31,9 @@ def generate_dispatcher(symbol, tags, target_type):
     any_constant_tags = any(tag > MAX_TAG for tag in tags)
     emit = ProcedureCodeEmitter(make_send_label(symbol))
     target = target_type(emit)
-    target.emit_dispatch(any_constant_tags)
-    split_tag_range(target, make_call_label_format(symbol), tags, '.not_understood', 0, 1 << NUM_DATA_BITS)
+    if tags:
+        target.emit_dispatch(any_constant_tags)
+        split_tag_range(target, make_call_label_format(symbol), tags, '.not_understood', 0, 1 << NUM_DATA_BITS)
+    else:
+        target.emit_empty_dispatch()
     return emit.get_output()

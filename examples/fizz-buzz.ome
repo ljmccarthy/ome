@@ -1,0 +1,12 @@
+|fizz-buzz|
+    for: {n := 1 |while| n less-or-equal: 100 |do|
+        d3 = (n mod: 3) equals: 0
+        d5 = (n mod: 5) equals: 0
+        d3 then: {|do| print: 'Fizz'}
+        d5 then: {|do| print: 'Buzz'}
+        (d3 or: d5) not then: {|do| print: n}
+        print: '\n'
+        n: (n plus: 1)
+    }
+
+|main| fizz-buzz
