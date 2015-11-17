@@ -11,7 +11,7 @@ re_comment = re.compile(r'(?:#|--)([^\r\n]*)')
 re_name = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_arg_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
-re_number = re.compile(r'([+-]?[0-9]+)(?:\.([0-9]+))?(?:e([+-]?[0-9]+))?')
+re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\'|[^\r\n'])*)'")
 re_assign = re.compile(r'=|:=')
 re_end_token = re.compile(r'[|)}\]]')
@@ -350,13 +350,9 @@ class Parser(ParserState):
             return ast.Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:
-            whole, decimal, exponent = m.groups()
-            whole_stripped = whole.rstrip('0')
-            if not whole_stripped or whole_stripped == '-':
-                whole_stripped += '0'
-            significand = int(whole_stripped, 10)
-            trailing = len(whole) - len(whole_stripped)
-            exponent = (int(exponent, 10) if exponent else 0) + trailing
+            sign, significand, trailing, decimal, exponent = m.groups()
+            significand = int(sign + significand, 10)
+            exponent = (int(exponent, 10) if exponent else 0) + len(trailing)
             decimal = decimal.rstrip('0') if decimal else ''
             if decimal:
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
