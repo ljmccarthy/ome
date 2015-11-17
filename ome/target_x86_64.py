@@ -301,8 +301,8 @@ BuiltInMethod('string', Tag_String, '''\
 '''),
 
 BuiltInMethod('string', Tag_Small_Integer, '''\
-.gc_return_0:
 	untag_integer rdi               ; untag integer
+.gc_return_0:
 	gc_alloc rsi, 24, .gc_full_0    ; pre-allocate string on heap
 	mov r11, rsi
 	tag_pointer r11, OME_Tag_String ; tagged and ready for returning
