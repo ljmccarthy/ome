@@ -351,7 +351,9 @@ class Parser(ParserState):
         m = self.expr_token(re_number)
         if m:
             whole, decimal, exponent = m.groups()
-            whole_stripped = whole.rstrip('0') or '0'
+            whole_stripped = whole.rstrip('0')
+            if not whole_stripped or whole_stripped == '-':
+                whole_stripped += '0'
             significand = int(whole_stripped, 10)
             trailing = len(whole) - len(whole_stripped)
             exponent = (int(exponent, 10) if exponent else 0) + trailing
