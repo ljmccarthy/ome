@@ -133,10 +133,16 @@ class Target_x86_64(object):
 %define OME_Error_Tag(tag) ((tag) | (1 << (OME_NUM_TAG_BITS - 1)))
 %define OME_Error_Constant(value) OME_Value(value, OME_Error_Tag(OME_Tag_Constant))
 
+%define OME_Tag_False 0
+%define OME_Tag_True 1
 %define OME_Tag_Constant 2
+%define OME_Tag_Small_Integer 3
 %define OME_Tag_String 256
-%define OME_Constant_TopLevel 1
+%define OME_Constant_BuiltIn 1
 %define OME_Constant_TypeError 2
+
+%define OME_False OME_Value(0, OME_Tag_False)
+%define OME_True OME_Value(0, OME_Tag_True)
 
 %define SYS_write 1
 %define SYS_mmap 9
@@ -166,6 +172,10 @@ class Target_x86_64(object):
 	jmp %1
 %endmacro
 
+%macro get_tag 1
+	shr %1, OME_NUM_DATA_BITS
+%endmacro
+
 %macro untag_pointer 1
 	shl %1, OME_NUM_TAG_BITS
 	shr %1, OME_NUM_TAG_BITS - 3
@@ -186,6 +196,10 @@ class Target_x86_64(object):
 	shl %1, OME_NUM_TAG_BITS
 	or %1, %2
 	ror %1, OME_NUM_TAG_BITS
+%endmacro
+
+%macro tag_integer 1
+	tag_value %1, OME_Tag_Small_Integer
 %endmacro
 
 global _start
@@ -248,9 +262,25 @@ OME_not_understood:
 	mov rdx, OME_message_not_understood.size
 	jmp OME_panic
 
+OME_type_error:
+	mov rax, OME_Error_Constant(OME_Constant_TypeError)
+	ret
+
 '''
 
     builtin_data = '''\
+align 8
+
+OME_string_false:
+	dd 5
+	db "False", 0
+	align 8
+
+OME_string_true:
+	dd 4
+	db "True", 0
+	align 8
+
 OME_message_mmap_failed
 .str:
 	db "Failed to allocate thread context", 10
@@ -269,11 +299,13 @@ OME_message_not_understood:
 
     builtin_methods = [
 
-BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
-	mov rax, rsi
-	shr rax, OME_NUM_DATA_BITS
+BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
+	mov rdi, rsi
+	call OME_message_string__0
+	mov rsi, rax
+	get_tag rax
 	cmp rax, OME_Tag_String
-	jne .type_error
+	jne OME_type_error
 	untag_pointer rsi
 	xor rdx, rdx
 	mov edx, dword [rsi]
@@ -282,13 +314,48 @@ BuiltInMethod('print:', constant_to_tag(Constant_TopLevel), '''\
 	mov rdi, 1
 	syscall
 	ret
+'''),
+
+BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
+	sub rsp, 8
+	mov [rsp], rsi
+	mov rdi, rsi
+.loop:
+	call OME_message_while__0
+	mov rdi, [rsp]
+	test rax, rax
+	jz .exit                ; exit if |while| returned False
+	js .exit                ; exit if |while| returned an error
+	get_tag rax
+	cmp rax, OME_Tag_True   ; compare with True
+	jne .type_error         ; if not True then we have a type error
+	call OME_message_do__0
+	mov rdi, [rsp]
+	test rax, rax
+	jns .loop               ; repeat if |do| did not return an error
+.exit:
+	add rsp, 8
+	ret
 .type_error:
+	add rsp, 8
 	mov rax, OME_Error_Constant(OME_Constant_TypeError)
 	ret
 '''),
 
 BuiltInMethod('string', Tag_String, '''\
 	mov rax, rdi
+	ret
+'''),
+
+BuiltInMethod('string', Tag_False, '''\
+	lea rax, [rel OME_string_false]
+	tag_pointer rax, OME_Tag_String
+	ret
+'''),
+
+BuiltInMethod('string', Tag_True, '''\
+	lea rax, [rel OME_string_true]
+	tag_pointer rax, OME_Tag_String
 	ret
 '''),
 
@@ -338,6 +405,92 @@ BuiltInMethod('string', Tag_Small_Integer, '''\
 	ret
 .gc_full_0:
 	gc_return .gc_return_0
+'''),
+
+BuiltInMethod('plus:', Tag_Small_Integer, '''\
+	mov rax, rsi
+	get_tag rsi
+	cmp rsi, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rdi
+	untag_integer rax
+	add rax, rdi
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('minus:', Tag_Small_Integer, '''\
+	mov rax, rdi
+	mov rdx, rsi
+	get_tag rsi
+	cmp rsi, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rax
+	untag_integer rdx
+	sub rax, rdx
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('times:', Tag_Small_Integer, '''\
+	mov rax, rsi
+	get_tag rsi
+	cmp rsi, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rdi
+	untag_integer rax
+	imul rdi
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('div:', Tag_Small_Integer, '''\
+	mov rax, rdi
+	mov rcx, rsi
+	get_tag rsi
+	cmp rsi, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rax
+	untag_integer rcx
+	mov rdx, rax
+	sar rdx, 32
+	idiv ecx
+	shl rax, 32
+	sar rax, 32
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('mod:', Tag_Small_Integer, '''\
+	mov rax, rdi
+	mov rcx, rsi
+	get_tag rsi
+	cmp rsi, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rax
+	untag_integer rcx
+	mov rdx, rax
+	sar rdx, 32
+	idiv ecx
+        mov rax, rdx
+	shl rax, 32
+	sar rax, 32
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('less-than:', Tag_Small_Integer, '''\
+	mov rax, rsi
+	get_tag rax
+	cmp rax, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rdi
+	untag_integer rsi
+	xor rax, rax
+	cmp rdi, rsi
+	setle al
+	shl rax, OME_NUM_DATA_BITS
+	ret
 '''),
 
     ]
