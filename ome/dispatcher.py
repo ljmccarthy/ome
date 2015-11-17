@@ -22,6 +22,11 @@ def split_tag_range(target, label_format, tags, exit_label, min_tag, max_tag):
         split_tag_range(target, label_format, tags[middle:], exit_label, tags[middle], max_tag)
 
 def generate_dispatcher(symbol, tags, target_type):
+    """
+    Generate assembly code for dispatching messages. This is implemented as
+    a binary search with compare and conditional jump instructions until the
+    method for the tag is found.
+    """
     tags = sorted(tags)
     any_constant_tags = any(tag > MAX_TAG for tag in tags)
     emit = ProcedureCodeEmitter(make_send_label(symbol))
