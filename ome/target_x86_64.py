@@ -38,7 +38,6 @@ class Target_x86_64(object):
         self.emit.label('.dispatch')
         if any_constant_tags:
             const_emit = self.emit.tail_emitter('.constant')
-            const_emit('xor rax, rax')
             const_emit('mov eax, edi')
             const_emit('add rax, 0x%x', 1 << NUM_TAG_BITS)
             const_emit('jmp .dispatch')
@@ -329,7 +328,6 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
 	cmp rax, Tag_String
 	jne OME_type_error
 	untag_pointer rsi
-	xor rdx, rdx
 	mov edx, dword [rsi]
 	add rsi, 4
 	mov rax, SYS_write
@@ -608,7 +606,6 @@ BuiltInMethod('if:', Tag_Boolean, '''\
 
 
 BuiltInMethod('size', Tag_Array, '''\
-	xor rax, rax
 	untag_pointer rdi
 	mov eax, dword [rdi-4]
 	tag_integer rax
@@ -624,7 +621,6 @@ BuiltInMethod('at:', Tag_Array, '''\
 	untag_integer rsi
 	test rsi, rsi
 	js OME_index_error
-	xor rcx, rcx
 	mov ecx, dword [rdi-4]          ; load array size
 	cmp rsi, rcx                    ; check index
 	jae OME_index_error
@@ -633,7 +629,6 @@ BuiltInMethod('at:', Tag_Array, '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, '''\
-	xor rcx, rcx
 	untag_value rdi
 	mov ecx, dword [rdi*8-4]  ; load array size
 	test ecx, ecx             ; check if zero
