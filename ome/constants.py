@@ -9,6 +9,7 @@ NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
 NUM_HEADER_USER_BITS = 32
 
 MAX_TAG = 2**(NUM_TAG_BITS-1) - 1  # Highest bit of tag is error bit
+MIN_CONSTANT_TAG = 2**NUM_TAG_BITS
 MIN_INT = -2**(NUM_DATA_BITS-1)
 MAX_INT = 2**(NUM_DATA_BITS-1) - 1
 MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
@@ -36,18 +37,12 @@ Constant_BuiltIn = 1    # Block for built-in methods
 Constant_User = 2       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
-    return constant + MAX_TAG + 1
+    return constant + MIN_CONSTANT_TAG
 
 def encode_tagged_value(value, tag):
     assert (value & MASK_DATA) == value
     assert (tag & MASK_TAG) == tag
     return (tag << NUM_DATA_BITS) | value
-
-def get_block_tag(block):
-    if hasattr(block, 'tag'):
-        return block.tag
-    else:
-        return constant_to_tag(block.constant_tag)
 
 class Error(Exception):
     pass

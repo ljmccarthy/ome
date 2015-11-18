@@ -28,7 +28,7 @@ def generate_dispatcher(symbol, tags, target_type):
     method for the tag is found.
     """
     tags = sorted(tags)
-    any_constant_tags = any(tag > MAX_TAG for tag in tags)
+    any_constant_tags = any(tag > MIN_CONSTANT_TAG for tag in tags)
     emit = ProcedureCodeEmitter(make_send_label(symbol))
     target = target_type(emit)
     if tags:

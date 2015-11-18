@@ -88,7 +88,8 @@ class Program(object):
         constant_tag = Constant_User
         for block in self.block_list:
             if block.is_constant:
-                block.constant_tag = constant_tag
+                block.tag = constant_to_tag(constant_tag)
+                block.tag_constant = constant_tag
                 constant_tag += 1
 
     def _compile_method(self, method, label):
@@ -116,9 +117,8 @@ class Program(object):
             for method in block.methods:
                 if method.symbol not in methods:
                     methods[method.symbol] = []
-                tag = get_block_tag(block)
-                code = self.compile_method(method, tag)
-                methods[method.symbol].append((tag, code))
+                code = self.compile_method(method, block.tag)
+                methods[method.symbol].append((block.tag, code))
                 self.all_method_symbols.add(method.symbol)
 
         for symbol in sorted(methods.keys()):
@@ -133,7 +133,7 @@ class Program(object):
     def generate_assembly(self, out):
         out.write('bits 64\n\nsection .text\n\n')
 
-        main_label = make_call_label(get_block_tag(self.toplevel_block), 'main')
+        main_label = make_call_label(self.toplevel_block.tag, 'main')
         env = {
             'MAIN': main_label,
             'NUM_TAG_BITS': NUM_TAG_BITS,

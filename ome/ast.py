@@ -68,8 +68,7 @@ class Send(object):
         dest = code.add_temp()
 
         if self.receiver_block:
-            tag = get_block_tag(self.receiver_block)
-            call_label = make_call_label(tag, self.symbol)
+            call_label = make_call_label(self.receiver_block.tag, self.symbol)
         else:
             call_label = make_send_label(self.symbol)
 
@@ -174,15 +173,15 @@ class Block(object):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        if hasattr(self, 'tag'):
+        if self.is_constant:
+            code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
+        else:
             object = code.add_temp()
             code.add_instruction(CREATE(object, self.tag, len(self.slots)))
             for slot_index, var in enumerate(self.slots):
                 arg = var.generate_code(code)
                 code.add_instruction(SET_SLOT(object, slot_index, arg))
             code.add_instruction(TAG(dest, object, self.tag))
-        else:
-            code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.constant_tag))
         return dest
 
     check_error = False
@@ -373,15 +372,15 @@ class TerminalNode(object):
     check_error = False
 
 class BuiltInConstantBlock(TerminalNode):
-    def __init__(self, constant_tag):
-        self.constant_tag = constant_tag
+    def __init__(self, tag_constant):
+        self.tag_constant = tag_constant
 
     def __str__(self):
         return '<builtin %s>' % self.constant_tag
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.constant_tag))
+        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
         return dest
 
 class EmptyBlock(BuiltInConstantBlock):
@@ -399,7 +398,7 @@ class ConstantBlock(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.constant_tag))
+        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.tag_constant))
         return dest
 
 class BuiltInMethod(object):
@@ -410,12 +409,12 @@ class BuiltInMethod(object):
 
 class BuiltInBlock(object):
     is_constant = True
+    tag = constant_to_tag(Constant_BuiltIn)
+    tag_constant = Constant_BuiltIn
     constant_ref = BuiltInConstantBlock(Constant_BuiltIn)
-    constant_tag = Constant_BuiltIn
 
     def __init__(self, target_type):
-        builtin_tag = constant_to_tag(Constant_BuiltIn)
-        self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == builtin_tag}
+        self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == self.tag}
         self.called = set()
 
     def lookup_var(self, symbol):
