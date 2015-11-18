@@ -4,6 +4,14 @@
 from .ast import BuiltInMethod
 from .constants import *
 
+def get_sp_adjustment(num_stack_slots):
+    """
+    Return number of bytes to adjust stack pointer.
+    Enforced 16 byte alignment.
+    """
+    n = num_stack_slots * 8
+    return n + (n % 16)
+
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
@@ -19,11 +27,11 @@ class Target_x86_64(object):
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
-            self.emit('sub rsp, %s', num_stack_slots * 8)
+            self.emit('sub rsp, %s', get_sp_adjustment(num_stack_slots))
 
     def emit_leave(self, num_stack_slots):
         if num_stack_slots > 0:
-            self.emit('add rsp, %s', num_stack_slots * 8)
+            self.emit('add rsp, %s', get_sp_adjustment(num_stack_slots))
         self.emit('ret')
 
     def emit_empty_dispatch(self):
@@ -366,7 +374,7 @@ BuiltInMethod('unwrap-error:', constant_to_tag(Constant_BuiltIn), '''\
 '''),
 
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
-	sub rsp, 8
+	sub rsp, 16
 	mov [rsp], rsi
 	mov rdi, rsi
 .loop:
@@ -382,10 +390,10 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
 	test rax, rax
 	jns .loop               ; repeat if |do| did not return an error
 .exit:
-	add rsp, 8
+	add rsp, 16
 	ret
 .type_error:
-	add rsp, 8
+	add rsp, 16
 	mov rax, OME_Error_Constant(Constant_TypeError)
 	ret
 '''),
@@ -653,7 +661,7 @@ BuiltInMethod('each:', Tag_Array, '''\
 	mov ecx, dword [rdi*8-4]  ; load array size
 	test ecx, ecx             ; check if zero
 	jz .exit
-	sub rsp, 24
+	sub rsp, 32
 	lea rcx, [rdi+rcx]      ; end of array
 	mov [rsp], rdi          ; save array pointer
 	mov [rsp+8], rcx        ; save end pointer
@@ -674,7 +682,7 @@ BuiltInMethod('each:', Tag_Array, '''\
 	jb .loop
 	xor rax, rax            ; return False
 .exit:
-	add rsp, 24
+	add rsp, 32
 	ret
 ''')
 
