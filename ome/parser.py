@@ -379,6 +379,8 @@ class Parser(ParserState):
             name = m.group()
             if name in ast.reserved_names:
                 return ast.reserved_names[name]
+            if name in ast.default_names:
+                return ast.default_names[name]
             return ast.Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:

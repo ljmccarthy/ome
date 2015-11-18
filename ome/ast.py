@@ -371,23 +371,24 @@ class TerminalNode(object):
 
     check_error = False
 
-class BuiltInConstantBlock(TerminalNode):
-    def __init__(self, tag_constant):
-        self.tag_constant = tag_constant
+class Value(TerminalNode):
+    def __init__(self, tag, value):
+        self.tag = tag
+        self.value = value
 
     def __str__(self):
-        return '<builtin %s>' % self.constant_tag
+        return '<value %X:%X>' % (self.tag, self.value)
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
+        code.add_instruction(LOAD_VALUE(dest, self.tag, self.value))
         return dest
 
-class EmptyBlock(BuiltInConstantBlock):
+class EmptyBlock(Value):
     def __str__(self):
         return '(block)'
 
-EmptyBlock = EmptyBlock(Constant_Empty)
+EmptyBlock = EmptyBlock(Tag_Constant, Constant_Empty)
 
 class ConstantBlock(TerminalNode):
     def __init__(self, block):
@@ -411,7 +412,7 @@ class BuiltInBlock(object):
     is_constant = True
     tag = constant_to_tag(Constant_BuiltIn)
     tag_constant = Constant_BuiltIn
-    constant_ref = BuiltInConstantBlock(Constant_BuiltIn)
+    constant_ref = Value(Tag_Constant, Constant_BuiltIn)
 
     def __init__(self, target_type):
         self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == self.tag}
@@ -439,6 +440,11 @@ Self = Self()
 
 reserved_names = {
     'self': Self,
+}
+
+default_names = {
+    'False': Value(Tag_Boolean, 0),
+    'True': Value(Tag_Boolean, 1),
 }
 
 class LocalGet(TerminalNode):
