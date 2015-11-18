@@ -285,13 +285,14 @@ class Parser(ParserState):
         parse_state = self.copy_state()
         m = self.token(re_name)
         if m:
-            name = self.check_name(m.group(), parse_state)
+            name = m.group()
             m = self.token(re_assign)
             if m:
                 if m.group() == ':=':
                     self.error('Mutable variables are only allowed in blocks')
                 if name[0] == '~':
                     parse_state.error('Local variables cannot be private')
+                self.check_name(name, parse_state)
                 return ast.LocalVariable(name, self.expr())
         self.set_state(parse_state)
         return self.expr()
