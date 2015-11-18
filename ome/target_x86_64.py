@@ -142,6 +142,7 @@ class Target_x86_64(object):
 %define OME_Tag_String 256
 %define OME_Constant_BuiltIn 1
 %define OME_Constant_TypeError 2
+%define OME_Constant_IndexError 3
 
 %define OME_False OME_Value(0, OME_Tag_Boolean)
 %define OME_True OME_Value(1, OME_Tag_Boolean)
@@ -268,6 +269,10 @@ OME_type_error:
 	mov rax, OME_Error_Constant(OME_Constant_TypeError)
 	ret
 
+OME_index_error:
+	mov rax, OME_Error_Constant(OME_Constant_IndexError)
+	ret
+
 '''
 
     builtin_data = '''\
@@ -281,6 +286,16 @@ OME_string_false:
 OME_string_true:
 	dd 4
 	db "True", 0
+	align 8
+
+OME_string_type_error
+	dd 10
+	db 'Type-Error', 0
+	align 8
+
+OME_string_index_error
+	dd 11
+	db 'Index-Error', 0
 	align 8
 
 OME_message_mmap_failed
@@ -315,6 +330,14 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
 	mov rax, SYS_write
 	mov rdi, 1
 	syscall
+	ret
+'''),
+
+BuiltInMethod('unwrap-error:', constant_to_tag(Constant_BuiltIn), '''\
+	xor rax, rax
+	not rax
+	shr rax, 1
+	and rax, rsi
 	ret
 '''),
 
@@ -354,6 +377,18 @@ BuiltInMethod('string', Tag_Boolean, '''\
 	jz .exit
 	lea rax, [rel OME_string_true]
 .exit:
+	tag_pointer rax, OME_Tag_String
+	ret
+'''),
+
+BuiltInMethod('string', constant_to_tag(Constant_TypeError), '''\
+	lea rax, [rel OME_string_type_error]
+	tag_pointer rax, OME_Tag_String
+	ret
+'''),
+
+BuiltInMethod('string', constant_to_tag(Constant_IndexError), '''\
+	lea rax, [rel OME_string_index_error]
 	tag_pointer rax, OME_Tag_String
 	ret
 '''),
@@ -565,5 +600,62 @@ BuiltInMethod('if:', Tag_Boolean, '''\
 	jnz OME_message_then__0
 	jmp OME_message_else__0
 '''),
+
+
+BuiltInMethod('size', Tag_Array, '''\
+	xor rax, rax
+	untag_pointer rdi
+	mov eax, dword [rdi-4]
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('at:', Tag_Array, '''\
+	untag_pointer rdi
+	mov rax, rsi
+	get_tag rax
+	cmp rax, OME_Tag_Small_Integer
+	jne OME_type_error
+	untag_integer rsi
+	test rsi, rsi
+	js OME_index_error
+	xor rcx, rcx
+	mov ecx, dword [rdi-4]          ; load array size
+	cmp rsi, rcx                    ; check index
+	jae OME_index_error
+	mov rax, qword [rdi+rsi*8]
+	ret
+'''),
+
+BuiltInMethod('each:', Tag_Array, '''\
+	xor rcx, rcx
+	untag_pointer rdi
+	mov ecx, dword [rdi-4]  ; load array size
+	test ecx, ecx           ; check if zero
+	jz .exit
+	sub rsp, 24
+	lea rcx, [rdi+rcx*8]    ; end of array
+	mov [rsp], rdi          ; save array pointer
+	mov [rsp+8], rcx        ; save end pointer
+	mov [rsp+16], rsi       ; save block
+	mov rdx, rdi
+	mov rdi, rsi
+.loop:
+	mov rsi, qword [rdx]
+	call OME_message_item__1
+	test rax, rax           ; check for error
+	js .exit
+	mov rdx, [rsp]          ; load array pointer
+	mov rcx, [rsp+8]        ; load end pointer
+	mov rdi, [rsp+16]       ; load block
+	add rdx, 8
+	mov [rsp], rdx
+	cmp rdx, rcx
+	jb .loop
+	xor rax, rax            ; return False
+.exit:
+	add rsp, 24
+	ret
+''')
 
 ]

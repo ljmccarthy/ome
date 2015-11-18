@@ -34,7 +34,9 @@ Tag_Array = 257
 Tag_User = 258          # First ID for user-defined blocks
 Constant_Empty = 0      # The empty block
 Constant_BuiltIn = 1    # Block for built-in methods
-Constant_User = 2       # First ID for user-defined constant blocks
+Constant_TypeError = 2
+Constant_IndexError = 3
+Constant_User = 4       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG

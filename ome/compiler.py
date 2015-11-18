@@ -52,6 +52,7 @@ builtin_required_messages = [
     'while',
     'then',
     'else',
+    'item:',
 ]
 
 class Program(object):
@@ -105,9 +106,8 @@ class Program(object):
     def build_code_table(self):
         methods = {}
 
-        builtin_tag = constant_to_tag(Constant_BuiltIn)
         for method in self.target_type.builtin_methods:
-            if method.tag != builtin_tag or method.symbol in self.builtin.called:
+            if method.tag != self.builtin.tag or method.symbol in self.builtin.called:
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 label = make_call_label(method.tag, method.symbol)
@@ -125,6 +125,7 @@ class Program(object):
 
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
+
         methods.clear()
 
     def print_code_table(self):
