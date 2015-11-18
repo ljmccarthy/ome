@@ -511,7 +511,7 @@ BuiltInMethod('times:', Tag_Small_Integer, '''\
 	untag_integer rax
 	imul rdi
 	mov rcx, rdx
-	sar rcx, 63    ; get all 0 or 1 bits
+	sar rcx, 64    ; get all 0 or 1 bits
 	cmp rcx, rdx
 	jne OME_overflow
 	jmp OME_check_overflow
