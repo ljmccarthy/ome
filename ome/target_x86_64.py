@@ -543,10 +543,6 @@ BuiltInMethod('less-or-equal:', Tag_Small_Integer, '''\
 '''),
 
 BuiltInMethod('equals:', Tag_Small_Integer, '''\
-	mov rax, rsi
-	get_tag rax
-	cmp rax, Tag_Small_Integer
-	jne OME_type_error
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
@@ -578,10 +574,6 @@ BuiltInMethod('or:', Tag_Boolean, '''\
 '''),
 
 BuiltInMethod('equals:', Tag_Boolean, '''\
-	mov rax, rsi
-	get_tag rax
-	test rax, rax
-	jnz OME_type_error
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
