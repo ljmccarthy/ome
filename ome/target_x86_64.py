@@ -539,6 +539,17 @@ BuiltInMethod('or:', Tag_Boolean, '''\
 	ret
 '''),
 
+BuiltInMethod('equals:', Tag_Boolean, '''\
+	mov rax, rsi
+	get_tag rax
+	test rax, rax
+	jnz OME_type_error
+	xor rax, rax
+	cmp rdi, rsi
+	sete al
+	ret
+'''),
+
 BuiltInMethod('then:', Tag_Boolean, '''\
 	mov rax, rdi
 	mov rdi, rsi
@@ -547,4 +558,12 @@ BuiltInMethod('then:', Tag_Boolean, '''\
 	ret
 '''),
 
-    ]
+BuiltInMethod('if:', Tag_Boolean, '''\
+	mov rax, rdi
+	mov rdi, rsi
+	test rax, rax
+	jnz OME_message_then__0
+	jmp OME_message_else__0
+'''),
+
+]

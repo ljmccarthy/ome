@@ -50,6 +50,8 @@ class DataTable(object):
 builtin_required_messages = [
     'do',
     'while',
+    'then',
+    'else',
 ]
 
 class Program(object):
