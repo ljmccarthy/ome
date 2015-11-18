@@ -154,7 +154,8 @@ class Target_x86_64(object):
 %define Constant_BuiltIn 1
 %define Constant_TypeError 2
 %define Constant_IndexError 3
-%define Constant_Overflow 4
+%define Constant_OverflowError 4
+%define Constant_NotUnderstoodError 5
 
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
@@ -295,17 +296,16 @@ OME_panic:
 	mov rdi, 1
 	syscall
 
-OME_not_understood:
-	lea rsi, [rel OME_message_not_understood]
-	mov rdx, OME_message_not_understood.size
-	jmp OME_panic
-
 OME_type_error:
 	mov rax, OME_Error_Constant(Constant_TypeError)
 	ret
 
 OME_index_error:
 	mov rax, OME_Error_Constant(Constant_IndexError)
+	ret
+
+OME_not_understood:
+	mov rax, OME_Error_Constant(Constant_NotUnderstoodError)
 	ret
 
 OME_check_overflow:
@@ -318,7 +318,7 @@ OME_check_overflow:
 	ret
 
 OME_overflow:
-	mov rax, OME_Error_Constant(Constant_Overflow)
+	mov rax, OME_Error_Constant(Constant_OverflowError)
 	ret
 '''
 
@@ -345,9 +345,14 @@ OME_string_index_error:
 	db 'Index-Error', 0
 	align 8
 
-OME_string_overflow:
+OME_string_overflow_error:
 	dd 8
-	db 'Overflow', 0
+	db 'Overflow-Error', 0
+	align 8
+
+OME_string_not_understood_error:
+	dd 20
+	db 'Not-Understood-Error', 0
 	align 8
 
 OME_message_newline:
@@ -360,17 +365,12 @@ OME_message_aborted:
 
 OME_message_mmap_failed:
 .str:
-	db "Failed to allocate thread context", 10
+	db "Aborted: Failed to allocate thread context", 10
 .size equ $-.str
 
 OME_message_collect_nursery:
 .str:
 	db "Garbage collector called", 10
-.size equ $-.str
-
-OME_message_not_understood:
-.str:
-	db "Message not understood", 10
 .size equ $-.str
 '''
 
@@ -477,8 +477,14 @@ BuiltInMethod('string', constant_to_tag(Constant_IndexError), '''\
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_Overflow), '''\
-	lea rax, [rel OME_string_overflow]
+BuiltInMethod('string', constant_to_tag(Constant_OverflowError), '''\
+	lea rax, [rel OME_string_overflow_error]
+	tag_pointer rax, Tag_String
+	ret
+'''),
+
+BuiltInMethod('string', constant_to_tag(Constant_NotUnderstoodError), '''\
+	lea rax, [rel OME_string_not_understood_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),

@@ -37,8 +37,9 @@ Constant_Empty = 0      # The empty block
 Constant_BuiltIn = 1    # Block for built-in methods
 Constant_TypeError = 2
 Constant_IndexError = 3
-Constant_Overflow = 4
-Constant_User = 5       # First ID for user-defined constant blocks
+Constant_OverflowError = 4
+Constant_NotUnderstoodError = 5
+Constant_User = 6       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
@@ -47,6 +48,15 @@ def encode_tagged_value(value, tag):
     assert (value & MASK_DATA) == value
     assert (tag & MASK_TAG) == tag
     return (tag << NUM_DATA_BITS) | value
+
+def error_tag(tag):
+    return tag | (1 << (NUM_TAG_BITS - 1))
+
+def encode_constant(constant):
+    return encode_tagged_value(constant, Tag_Constant)
+
+def encode_error_constant(constant):
+    return encode_tagged_value(constant, error_tag(Tag_Constant))
 
 class Error(Exception):
     pass
