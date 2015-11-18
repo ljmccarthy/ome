@@ -130,6 +130,7 @@ class Target_x86_64(object):
     builtin_code = '''\
 %define OME_NUM_TAG_BITS {NUM_TAG_BITS}
 %define OME_NUM_DATA_BITS {NUM_DATA_BITS}
+
 %define OME_Value(value, tag) (((tag) << OME_NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
 %define OME_Error_Tag(tag) ((tag) | (1 << (OME_NUM_TAG_BITS - 1)))
@@ -142,6 +143,7 @@ class Target_x86_64(object):
 %define Constant_BuiltIn 1
 %define Constant_TypeError 2
 %define Constant_IndexError 3
+%define Constant_Overflow 4
 
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
@@ -208,6 +210,8 @@ class Target_x86_64(object):
 	shl %1, OME_NUM_TAG_BITS
 	sar %1, OME_NUM_TAG_BITS
 %endmacro
+
+default rel
 
 global _start
 _start:
@@ -277,6 +281,18 @@ OME_index_error:
 	mov rax, OME_Error_Constant(Constant_IndexError)
 	ret
 
+OME_check_overflow:
+	mov rdx, rax
+	shl rdx, OME_NUM_TAG_BITS
+	sar rdx, OME_NUM_TAG_BITS
+	cmp rdx, rax
+	jne OME_overflow
+	tag_integer rax
+	ret
+
+OME_overflow:
+	mov rax, OME_Error_Constant(Constant_Overflow)
+	ret
 '''
 
     builtin_data = '''\
@@ -297,9 +313,14 @@ OME_string_type_error
 	db 'Type-Error', 0
 	align 8
 
-OME_string_index_error
+OME_string_index_error:
 	dd 11
 	db 'Index-Error', 0
+	align 8
+
+OME_string_overflow:
+	dd 8
+	db 'Overflow', 0
 	align 8
 
 OME_message_mmap_failed
@@ -396,6 +417,12 @@ BuiltInMethod('string', constant_to_tag(Constant_IndexError), '''\
 	ret
 '''),
 
+BuiltInMethod('string', constant_to_tag(Constant_Overflow), '''\
+	lea rax, [rel OME_string_overflow]
+	tag_pointer rax, Tag_String
+	ret
+'''),
+
 BuiltInMethod('string', Tag_Small_Integer, '''\
 	untag_integer rdi               ; untag integer
 .gc_return_0:
@@ -452,8 +479,7 @@ BuiltInMethod('plus:', Tag_Small_Integer, '''\
 	untag_integer rdi
 	untag_integer rax
 	add rax, rdi
-	tag_integer rax
-	ret
+	jmp OME_check_overflow
 '''),
 
 BuiltInMethod('minus:', Tag_Small_Integer, '''\
@@ -465,8 +491,7 @@ BuiltInMethod('minus:', Tag_Small_Integer, '''\
 	untag_integer rax
 	untag_integer rdx
 	sub rax, rdx
-	tag_integer rax
-	ret
+	jmp OME_check_overflow
 '''),
 
 BuiltInMethod('times:', Tag_Small_Integer, '''\
@@ -477,8 +502,11 @@ BuiltInMethod('times:', Tag_Small_Integer, '''\
 	untag_integer rdi
 	untag_integer rax
 	imul rdi
-	tag_integer rax
-	ret
+	mov rcx, rdx
+	sar rcx, 63    ; get all 0 or 1 bits
+	cmp rcx, rdx
+	jne OME_overflow
+	jmp OME_check_overflow
 '''),
 
 BuiltInMethod('div:', Tag_Small_Integer, '''\

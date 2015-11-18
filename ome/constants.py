@@ -37,7 +37,8 @@ Constant_Empty = 0      # The empty block
 Constant_BuiltIn = 1    # Block for built-in methods
 Constant_TypeError = 2
 Constant_IndexError = 3
-Constant_User = 4       # First ID for user-defined constant blocks
+Constant_Overflow = 4
+Constant_User = 5       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
