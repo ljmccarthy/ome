@@ -179,20 +179,10 @@ class Target_x86_64(object):
 	shr %1, OME_NUM_DATA_BITS
 %endmacro
 
-%macro untag_pointer 1
-	shl %1, OME_NUM_TAG_BITS
-	shr %1, OME_NUM_TAG_BITS - 3
-%endmacro
-
 %macro tag_pointer 2
 	shl %1, OME_NUM_TAG_BITS - 3
 	or %1, %2
 	ror %1, OME_NUM_TAG_BITS
-%endmacro
-
-%macro untag_integer 1
-	shl %1, OME_NUM_TAG_BITS
-	sar %1, OME_NUM_TAG_BITS
 %endmacro
 
 %macro tag_value 2
@@ -203,6 +193,21 @@ class Target_x86_64(object):
 
 %macro tag_integer 1
 	tag_value %1, Tag_Small_Integer
+%endmacro
+
+%macro untag_pointer 1
+	shl %1, OME_NUM_TAG_BITS
+	shr %1, OME_NUM_TAG_BITS - 3
+%endmacro
+
+%macro untag_value 1
+	shl %1, OME_NUM_TAG_BITS
+	shr %1, OME_NUM_TAG_BITS
+%endmacro
+
+%macro untag_integer 1
+	shl %1, OME_NUM_TAG_BITS
+	sar %1, OME_NUM_TAG_BITS
 %endmacro
 
 global _start
@@ -629,26 +634,26 @@ BuiltInMethod('at:', Tag_Array, '''\
 
 BuiltInMethod('each:', Tag_Array, '''\
 	xor rcx, rcx
-	untag_pointer rdi
-	mov ecx, dword [rdi-4]  ; load array size
-	test ecx, ecx           ; check if zero
+	untag_value rdi
+	mov ecx, dword [rdi*8-4]  ; load array size
+	test ecx, ecx             ; check if zero
 	jz .exit
 	sub rsp, 24
-	lea rcx, [rdi+rcx*8]    ; end of array
+	lea rcx, [rdi+rcx]      ; end of array
 	mov [rsp], rdi          ; save array pointer
 	mov [rsp+8], rcx        ; save end pointer
 	mov [rsp+16], rsi       ; save block
 	mov rdx, rdi
 	mov rdi, rsi
 .loop:
-	mov rsi, qword [rdx]
+	mov rsi, qword [rdx*8]
 	call OME_message_item__1
 	test rax, rax           ; check for error
 	js .exit
 	mov rdx, [rsp]          ; load array pointer
 	mov rcx, [rsp+8]        ; load end pointer
 	mov rdi, [rsp+16]       ; load block
-	add rdx, 8
+	inc rdx
 	mov [rsp], rdx
 	cmp rdx, rcx
 	jb .loop
