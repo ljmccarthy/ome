@@ -440,9 +440,6 @@ Self = Self()
 
 reserved_names = {
     'self': Self,
-}
-
-default_names = {
     'False': Value(Tag_Boolean, 0),
     'True': Value(Tag_Boolean, 1),
 }

@@ -183,7 +183,7 @@ class Parser(ParserState):
 
     def check_name(self, name, parse_state):
         if name in ast.reserved_names:
-            self.error('%s is a reserved name' % name)
+            parse_state.error('%s is a reserved name' % name)
         return name
 
     def argument_name(self, message='Expected argument name'):
@@ -282,20 +282,19 @@ class Parser(ParserState):
         return block
 
     def statement(self):
-        maybe_assign = self.peek(re_name)
         parse_state = self.copy_state()
-        statement = self.expr()
-        m = self.token(re_assign)
+        m = self.token(re_name)
         if m:
-            if m.group() == ':=':
-                self.error('Mutable variables are only allowed in blocks')
-            if not isinstance(statement, ast.Send) or statement.receiver or not maybe_assign:
-                parse_state.error('Left hand side of assignment must be a name')
-            if statement.symbol[0] == '~':
-                parse_state.error('Local variables cannot be private')
-            name = self.check_name(statement.symbol, parse_state)
-            statement = ast.LocalVariable(name, self.expr())
-        return statement
+            name = self.check_name(m.group(), parse_state)
+            m = self.token(re_assign)
+            if m:
+                if m.group() == ':=':
+                    self.error('Mutable variables are only allowed in blocks')
+                if name[0] == '~':
+                    parse_state.error('Local variables cannot be private')
+                return ast.LocalVariable(name, self.expr())
+        self.set_state(parse_state)
+        return self.expr()
 
     def statements(self):
         statements = []
@@ -379,8 +378,6 @@ class Parser(ParserState):
             name = m.group()
             if name in ast.reserved_names:
                 return ast.reserved_names[name]
-            if name in ast.default_names:
-                return ast.default_names[name]
             return ast.Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:
