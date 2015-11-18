@@ -121,13 +121,6 @@ class SET_SLOT(Instruction):
     def __str__(self):
         return '%%%s[%d] := %%%s' % (self.object, self.slot_index, self.value)
 
-class ON_ERROR(Instruction):
-    def __init__(self, label):
-        self.label = label
-
-    def __str__(self):
-        return 'ON ERROR GOTO %s' % (self.label.name)
-
 class RETURN(Instruction):
     def __init__(self, source):
         self.args = [source]

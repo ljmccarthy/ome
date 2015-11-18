@@ -317,7 +317,6 @@ class Sequence(object):
             statement.collect_blocks(block_list)
 
     def generate_code(self, code):
-        """Simple version with no error branching logic."""
         for statement in self.statements[:-1]:
             statement.generate_code(code)
         return self.statements[-1].generate_code(code)

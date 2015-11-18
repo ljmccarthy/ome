@@ -30,6 +30,7 @@ class Target_x86_64(object):
             self.emit('sub rsp, %s', get_sp_adjustment(num_stack_slots))
 
     def emit_leave(self, num_stack_slots):
+        self.emit.label('.exit')
         if num_stack_slots > 0:
             self.emit('add rsp, %s', get_sp_adjustment(num_stack_slots))
         self.emit('ret')
@@ -80,6 +81,8 @@ class Target_x86_64(object):
         self.emit('call %s', ins.call_label)
         if ins.num_stack_args > 0:
             self.emit('add rsp, %s', ins.num_stack_args * 8)
+        self.emit('test rax, rax')
+        self.emit('js .exit')
 
     def emit_tag(self, reg, tag):
         self.emit('shl %s, %s', reg, NUM_TAG_BITS - 3)
@@ -224,16 +227,32 @@ default rel
 global _start
 _start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+0x1000]  ; stack pointer (grows down)
-	mov rbx, rsp           ; GC nursery pointer (grows up)
-	lea r12, [rax+0x4000]  ; GC nursery limit
-	call OME_toplevel
+	lea rsp, [rax+0x1000]   ; stack pointer (grows down)
+	mov rbx, rsp            ; GC nursery pointer (grows up)
+	lea r12, [rax+0x4000]   ; GC nursery limit
+	call OME_toplevel       ; create top-level block
 	mov rdi, rax
-	call {MAIN}
+	call {MAIN}             ; call main method on top-level block
 	xor rdi, rdi
 	test rax, rax
 	jns .success
-	inc rdi
+.abort:
+	shl rax, 1
+	shr rax, 1
+	mov r13, rax
+	lea rsi, [rel OME_message_aborted]
+	mov rdx, OME_message_aborted.size
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	mov rsi, r13
+	call {PRINT}
+	lea rsi, [rel OME_message_newline]
+	mov rdx, 1
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	mov rdi, 1
 .success:
 	mov rax, SYS_exit
 	syscall
@@ -316,7 +335,7 @@ OME_string_true:
 	db "True", 0
 	align 8
 
-OME_string_type_error
+OME_string_type_error:
 	dd 10
 	db 'Type-Error', 0
 	align 8
@@ -331,7 +350,15 @@ OME_string_overflow:
 	db 'Overflow', 0
 	align 8
 
-OME_message_mmap_failed
+OME_message_newline:
+	db 10
+
+OME_message_aborted:
+.str:
+	db "Aborted due to unhandled error: "
+.size equ $-.str
+
+OME_message_mmap_failed:
 .str:
 	db "Failed to allocate thread context", 10
 .size equ $-.str
@@ -365,11 +392,28 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('unwrap-error:', constant_to_tag(Constant_BuiltIn), '''\
-	xor rax, rax
-	not rax
+BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), '''\
+	mov rdi, rsi
+	call OME_message_do__0
+	shl rax, 1              ; clear error bit if present
 	shr rax, 1
-	and rax, rsi
+	ret
+'''),
+
+BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), '''\
+	sub rsp, 16
+	mov [rsp], rsi
+	mov rdi, rsi
+	call OME_message_do__0
+	test rax, rax
+	jns .exit
+	shl rax, 1      ; clear error bit if present
+	shr rax, 1
+	mov rdi, [rsp]
+	mov rsi, rax
+	call OME_message_catch__1
+.exit:
+	add rsp, 16
 	ret
 '''),
 

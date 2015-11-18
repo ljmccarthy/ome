@@ -52,6 +52,7 @@ builtin_required_messages = [
     'while',
     'then',
     'else',
+    'catch:',
     'item:',
 ]
 
@@ -130,17 +131,12 @@ class Program(object):
 
         methods.clear()
 
-    def print_code_table(self):
-        for symbol, methods in self.code_table:
-            for tag, code in methods:
-                print(code)
-
     def generate_assembly(self, out):
         out.write('bits 64\n\nsection .text\n\n')
 
-        main_label = make_call_label(self.toplevel_block.tag, 'main')
         env = {
-            'MAIN': main_label,
+            'MAIN': make_call_label(self.toplevel_block.tag, 'main'),
+            'PRINT': make_call_label(self.builtin.tag, 'print:'),
             'NUM_TAG_BITS': NUM_TAG_BITS,
             'NUM_DATA_BITS': NUM_DATA_BITS,
         }
@@ -180,10 +176,11 @@ def compile_file_to_assembly(filename, target_type):
     ast = ast.resolve_free_vars(builtin)
     ast = ast.resolve_block_refs(builtin)
     program = Program(ast, builtin, target_type)
-    #program.print_code_table()
     out = io.StringIO()
     program.generate_assembly(out)
-    return out.getvalue().encode('utf8')
+    asm = out.getvalue()
+    #print(asm)
+    return asm.encode('utf8')
 
 def run_assembler(input, outfile):
     p = subprocess.Popen(['yasm', '-f', 'elf64', '-o', outfile, '-'], stdin=subprocess.PIPE)
