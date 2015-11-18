@@ -94,6 +94,8 @@ class Program(object):
                 block.tag = constant_to_tag(constant_tag)
                 block.tag_constant = constant_tag
                 constant_tag += 1
+        if constant_tag > MAX_CONSTANT_TAG:
+            raise Error('Exhausted all constant tag IDs, your program is too big!')
 
     def _compile_method(self, method, label):
         code = method.generate_code(self.target_type)
