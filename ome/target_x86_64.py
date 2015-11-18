@@ -417,6 +417,14 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
+BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), '''\
+	mov rax, rsi
+	shl rax, 1
+	or al, 1        ; set error bit
+	ror rax, 1      ; rotate error bit in to position
+	ret
+'''),
+
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
 	sub rsp, 16
 	mov [rsp], rsi
