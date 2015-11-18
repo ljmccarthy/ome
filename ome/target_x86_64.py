@@ -349,7 +349,7 @@ OME_string_index_error:
 	align 8
 
 OME_string_overflow_error:
-	dd 8
+	dd 14
 	db 'Overflow-Error', 0
 	align 8
 
