@@ -102,7 +102,10 @@ class Target_x86_64(object):
 
     def LOAD_VALUE(self, ins):
         value = encode_tagged_value(ins.value, ins.tag)
-        self.emit('mov %s, 0x%x', ins.dest, value)
+        if value == 0:
+            self.emit('xor %s, %s', ins.dest, ins.dest)
+        else:
+            self.emit('mov %s, 0x%x', ins.dest, value)
 
     def LOAD_STRING(self, ins):
         self.emit('lea %s, [rel %s]', ins.dest, ins.data_label)
