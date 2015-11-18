@@ -1,0 +1,15 @@
+|factorial: n|
+    (n equals: 0) if: {
+        |then| 1
+        |else| n times: (factorial: (n minus: 1))
+    }
+
+|main|
+    for: {n := 0 |while| n less-than: 16 |do|
+        print: 'factorial('
+        print: n
+        print: ') = '
+        print: (factorial: n)
+        print: '\n'
+        n: (n plus: 1)
+    }
