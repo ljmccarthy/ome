@@ -39,7 +39,7 @@ class Target_x86_64(object):
         if any_constant_tags:
             const_emit = self.emit.tail_emitter('.constant')
             const_emit('mov eax, edi')
-            const_emit('add rax, 0x%x', 1 << NUM_TAG_BITS)
+            const_emit('add rax, 0x%x', MIN_CONSTANT_TAG)
             const_emit('jmp .dispatch')
         not_understood_emit = self.emit.tail_emitter('.not_understood')
         not_understood_emit('jmp OME_not_understood')
