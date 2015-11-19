@@ -357,7 +357,7 @@ class Parser(ParserState):
             name = m.group()
             if name[0] == '~':
                 parse_state.error('Private message sent to an explicit receiver')
-            expr = ast.Send(expr, name, [])
+            expr = ast.Send(expr, name, [], parse_state)
         return expr
 
     def atom(self):

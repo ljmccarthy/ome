@@ -16,6 +16,11 @@ from .labels import *
 from .parser import Parser
 from .target_x86_64 import Target_x86_64
 
+class TraceBackInfo(object):
+    def __init__(self, file_info, source_line):
+        self.file_info = file_info
+        self.source_line = source_line
+
 def encode_string_data(string):
     """Add 32-bit length header and nul termination/alignment padding."""
     string = string.encode('utf8')
@@ -76,22 +81,9 @@ class Program(object):
         self.allocate_tag_ids()
         self.allocate_constant_tag_ids()
 
-        send_list = collect_nodes_of_type(ast, Send)
-
-        self.sent_messages = set(
-            send.symbol for send in send_list if not send.receiver_block)
-
-        self.called_methods = set([
-            (self.toplevel_block.tag, 'main'),
-            (self.builtin.tag, 'print:'),
-        ])
-        self.called_methods.update(
-            (send.receiver_block.tag, send.symbol) for send in send_list
-            if send.receiver_block and send.symbol not in self.sent_messages)
-
-        for method in self.target_type.builtin_methods:
-            if method.sent_messages and self.should_include_method(method, self.builtin.tag):
-                self.sent_messages.update(method.sent_messages)
+        self.send_list = collect_nodes_of_type(ast, Send)
+        self.find_used_methods()
+        self.compile_traceback_info()
 
         self.build_code_table()
 
@@ -114,13 +106,39 @@ class Program(object):
         if constant_tag > MAX_CONSTANT_TAG:
             raise Error('Exhausted all constant tag IDs, your program is too big!')
 
-    def _compile_method(self, method, label):
+    def find_used_methods(self):
+        self.sent_messages = set(
+            send.symbol for send in self.send_list if not send.receiver_block)
+
+        self.called_methods = set([
+            (self.toplevel_block.tag, 'main'),
+            (self.builtin.tag, 'print:'),
+        ])
+        self.called_methods.update(
+            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            if send.receiver_block and send.symbol not in self.sent_messages)
+
+        for method in self.target_type.builtin_methods:
+            if method.sent_messages and self.should_include_method(method, self.builtin.tag):
+                self.sent_messages.update(method.sent_messages)
+
+    def compile_traceback_info(self):
+        for send in self.send_list:
+            if send.parse_state:
+                ps = send.parse_state
+                file_info = '\n  File "%s", line %s, in |%s|\n    ' % (
+                    ps.stream_name, ps.line_number, send.method.symbol)
+                send.traceback_info = TraceBackInfo(
+                    file_info = self.data_table.allocate_string(file_info),
+                    source_line = self.data_table.allocate_string(ps.current_line.strip()))
+
+    def compile_method_with_label(self, method, label):
         code = method.generate_code(self.target_type)
         code.allocate_data(self.data_table)
         return code.generate_assembly(label, self.target_type)
 
     def compile_method(self, method, tag):
-        return self._compile_method(method, make_call_label(tag, method.symbol))
+        return self.compile_method_with_label(method, make_call_label(tag, method.symbol))
 
     def should_include_method(self, method, tag):
         return method.symbol in self.sent_messages or (tag, method.symbol) in self.called_methods
@@ -159,7 +177,7 @@ class Program(object):
             'NUM_DATA_BITS': NUM_DATA_BITS,
         }
         out.write(self.target_type.builtin_code.format(**env))
-        out.write(self._compile_method(self.toplevel_method, 'OME_toplevel'))
+        out.write(self.compile_method_with_label(self.toplevel_method, 'OME_toplevel'))
         out.write('\n')
 
         dispatchers = set()

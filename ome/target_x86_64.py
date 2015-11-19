@@ -24,6 +24,7 @@ class Target_x86_64(object):
     def __init__(self, emitter):
         self.emit = emitter
         self.num_jumpback_labels = 0
+        self.num_traceback_labels = 0
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
@@ -78,11 +79,30 @@ class Target_x86_64(object):
         self.emit('push %s', ins.source_reg)
 
     def CALL(self, ins):
+        if ins.traceback_info:
+            traceback_label = '.traceback_%d' % self.num_traceback_labels
+            self.num_traceback_labels += 1
+        else:
+            traceback_label = '.exit'
+
         self.emit('call %s', ins.call_label)
         if ins.num_stack_args > 0:
             self.emit('add rsp, %s', ins.num_stack_args * 8)
         self.emit('test rax, rax')
-        self.emit('js .exit')
+        self.emit('js %s', traceback_label)
+
+        if ins.traceback_info:
+            tb_emit = self.emit.tail_emitter(traceback_label)
+            tb_emit('mov rdi, [rbp+TC_traceback_pointer]')
+            tb_emit('lea rsi, [rdi+TB_SIZE]')
+            tb_emit('cmp rsi, rsp')  # Check to make sure we don't overwrite stack
+            tb_emit('ja .exit')
+            tb_emit('mov [rbp+TC_traceback_pointer], rsi')
+            tb_emit('lea rsi, [rel %s]', ins.traceback_info.file_info)
+            tb_emit('mov [rdi+TB_file_info], rsi')
+            tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
+            tb_emit('mov [rdi+TB_source_line], rsi')
+            tb_emit('jmp .exit')
 
     def emit_tag(self, reg, tag):
         self.emit('shl %s, %s', reg, NUM_TAG_BITS - 3)
@@ -164,6 +184,14 @@ class Target_x86_64(object):
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
 
+%define TC_stack_limit 0
+%define TC_traceback_pointer 8
+%define TC_SIZE 16
+
+%define TB_file_info 0
+%define TB_source_line 8
+%define TB_SIZE 16
+
 %define SYS_write 1
 %define SYS_mmap 9
 %define SYS_mprotect 10
@@ -240,35 +268,67 @@ default rel
 global _start
 _start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+0x1000]   ; stack pointer (grows down)
-	mov rbx, rsp            ; GC nursery pointer (grows up)
-	lea r12, [rax+0x4000]   ; GC nursery limit
-	call OME_toplevel       ; create top-level block
+	lea rsp, [rax+0x1000-TC_SIZE]   ; stack pointer (grows down)
+	mov rbp, rsp                    ; thread context pointer
+	lea rbx, [rsp+TC_SIZE]          ; GC nursery pointer (grows up)
+	lea r12, [rax+0x4000]           ; GC nursery limit
+	mov [rbp+TC_stack_limit], rax
+	mov [rbp+TC_traceback_pointer], rax
+	call OME_toplevel               ; create top-level block
 	mov rdi, rax
 	call {MAIN}             ; call main method on top-level block
 	xor rdi, rdi
 	test rax, rax
 	jns .success
 .abort:
+	; save error value
 	shl rax, 1
 	shr rax, 1
-	mov r13, rax
-	lea rsi, [rel OME_message_aborted]
-	mov rdx, OME_message_aborted.size
+	push rax
+	; print traceback
+	mov r13, [rbp+TC_stack_limit]
+	mov r14, [rbp+TC_traceback_pointer]
+	sub r14, TC_SIZE
+	cmp r14, r13
+	jb .failure
+	lea rsi, [rel OME_message_traceback]
+	mov rdx, OME_message_traceback.size
 	mov rax, SYS_write
 	mov rdi, 2
 	syscall
-	mov rsi, r13
+.tbloop:
+	mov rsi, [r14+TB_file_info]
+	mov edx, dword [rsi]
+	add rsi, 4
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	mov rsi, [r14+TB_source_line]
+	mov edx, dword [rsi]
+	add rsi, 4
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	sub r14, TC_SIZE
+	cmp r14, r13
+	jae .tbloop
+.failure:
+	; print error value
+	call .newline
+	pop rsi
 	call {PRINT}
-	lea rsi, [rel OME_message_newline]
-	mov rdx, 1
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	call .newline
 	mov rdi, 1
 .success:
 	mov rax, SYS_exit
 	syscall
+.newline:
+	lea rsi, [rel OME_message_traceback]
+	mov rdx, 1
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	ret
 
 OME_allocate_thread_context:
 	mov rax, SYS_mmap
@@ -348,22 +408,16 @@ constant_string OME_string_index_error, "Index-Error"
 constant_string OME_string_overflow_error, "Overflow-Error"
 constant_string OME_string_divide_by_zero_error, "Divide-By-Zero-Error"
 
-OME_message_newline:
-	db 10
-
-OME_message_aborted:
-.str:
-	db "Aborted due to unhandled error: "
+OME_message_traceback:
+.str:	db 10, "Traceback (most recent call last):"
 .size equ $-.str
 
 OME_message_mmap_failed:
-.str:
-	db "Aborted: Failed to allocate thread context", 10
+.str:	db "Aborted: Failed to allocate thread context", 10
 .size equ $-.str
 
 OME_message_collect_nursery:
-.str:
-	db "Garbage collector called", 10
+.str:	db "Garbage collector called", 10
 .size equ $-.str
 '''
 

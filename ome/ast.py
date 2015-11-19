@@ -16,12 +16,14 @@ class Send(object):
         self.args = args
         self.parse_state = parse_state
         self.receiver_block = None
+        self.traceback_info = None
 
     def __str__(self):
         args = format_list(self.args)
         return '(send %s %s%s)' % (self.symbol, self.receiver or '<free>', args)
 
     def resolve_free_vars(self, parent):
+        self.method = parent.find_method()
         for i, arg in enumerate(self.args):
             self.args[i] = arg.resolve_free_vars(parent)
         if self.receiver:
@@ -73,7 +75,7 @@ class Send(object):
         else:
             call_label = make_send_label(self.symbol)
 
-        code.add_instruction(CALL(dest, receiver, args, call_label))
+        code.add_instruction(CALL(dest, receiver, args, call_label, self.traceback_info))
         return dest
 
     check_error = True
