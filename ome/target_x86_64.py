@@ -36,7 +36,7 @@ class Target_x86_64(object):
         self.emit('ret')
 
     def emit_empty_dispatch(self):
-        self.emit('jmp OME_not_understood')
+        self.emit('jmp OME_not_understood_error')
 
     def emit_dispatch(self, any_constant_tags):
         self.emit('mov rax, %s', self.arg_registers[0])
@@ -51,7 +51,7 @@ class Target_x86_64(object):
             const_emit('add rax, 0x%x', MIN_CONSTANT_TAG)
             const_emit('jmp .dispatch')
         not_understood_emit = self.emit.tail_emitter('.not_understood')
-        not_understood_emit('jmp OME_not_understood')
+        not_understood_emit('jmp OME_not_understood_error')
 
     def emit_dispatch_compare_eq(self, tag, tag_label, exit_label):
         self.emit('cmp rax, 0x%X', tag)
@@ -155,10 +155,11 @@ class Target_x86_64(object):
 %define Tag_Small_Integer 2
 %define Tag_String 256
 %define Constant_BuiltIn 1
-%define Constant_TypeError 2
-%define Constant_IndexError 3
-%define Constant_OverflowError 4
-%define Constant_NotUnderstoodError 5
+%define Constant_NotUnderstoodError 2
+%define Constant_TypeError 3
+%define Constant_IndexError 4
+%define Constant_OverflowError 5
+%define Constant_DivideByZeroError 6
 
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
@@ -315,7 +316,7 @@ OME_index_error:
 	mov rax, OME_Error_Constant(Constant_IndexError)
 	ret
 
-OME_not_understood:
+OME_not_understood_error:
 	mov rax, OME_Error_Constant(Constant_NotUnderstoodError)
 	ret
 
@@ -324,12 +325,16 @@ OME_check_overflow:
 	shl rdx, OME_NUM_TAG_BITS
 	sar rdx, OME_NUM_TAG_BITS
 	cmp rdx, rax
-	jne OME_overflow
+	jne OME_overflow_error
 	tag_integer rax
 	ret
 
-OME_overflow:
+OME_overflow_error:
 	mov rax, OME_Error_Constant(Constant_OverflowError)
+	ret
+
+OME_divide_by_zero_error:
+	mov rax, OME_Error_Constant(Constant_DivideByZeroError)
 	ret
 '''
 
@@ -337,10 +342,11 @@ OME_overflow:
 align 8
 constant_string OME_string_false, "False"
 constant_string OME_string_true, "True"
+constant_string OME_string_not_understood_error, "Not-Understood-Error"
 constant_string OME_string_type_error, "Type-Error"
 constant_string OME_string_index_error, "Index-Error"
 constant_string OME_string_overflow_error, "Overflow-Error"
-constant_string OME_string_not_understood_error, "Not-Understood-Error"
+constant_string OME_string_divide_by_zero_error, "Divide-By-Zero-Error"
 
 OME_message_newline:
 	db 10
@@ -452,6 +458,12 @@ BuiltInMethod('string', Tag_Boolean, [], '''\
 	ret
 '''),
 
+BuiltInMethod('string', constant_to_tag(Constant_NotUnderstoodError), [], '''\
+	lea rax, [rel OME_string_not_understood_error]
+	tag_pointer rax, Tag_String
+	ret
+'''),
+
 BuiltInMethod('string', constant_to_tag(Constant_TypeError), [], '''\
 	lea rax, [rel OME_string_type_error]
 	tag_pointer rax, Tag_String
@@ -470,8 +482,8 @@ BuiltInMethod('string', constant_to_tag(Constant_OverflowError), [], '''\
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_NotUnderstoodError), [], '''\
-	lea rax, [rel OME_string_not_understood_error]
+BuiltInMethod('string', constant_to_tag(Constant_DivideByZeroError), [], '''\
+	lea rax, [rel OME_string_divide_by_zero_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),
@@ -558,7 +570,7 @@ BuiltInMethod('times:', Tag_Small_Integer, [], '''\
 	mov rcx, rdx
 	sar rcx, 64    ; get all 0 or 1 bits
 	cmp rcx, rdx
-	jne OME_overflow
+	jne OME_overflow_error
 	jmp OME_check_overflow
 '''),
 
@@ -570,6 +582,8 @@ BuiltInMethod('div:', Tag_Small_Integer, [], '''\
 	jne OME_type_error
 	untag_integer rax
 	untag_integer rcx
+	test rcx, rcx
+	jz OME_divide_by_zero_error
 	mov rdx, rax
 	sar rdx, 32
 	idiv ecx
@@ -587,10 +601,12 @@ BuiltInMethod('mod:', Tag_Small_Integer, [], '''\
 	jne OME_type_error
 	untag_integer rax
 	untag_integer rcx
+	test rcx, rcx
+	jz OME_divide_by_zero_error
 	mov rdx, rax
 	sar rdx, 32
 	idiv ecx
-        mov rax, rdx
+	mov rax, rdx
 	shl rax, 32
 	sar rax, 32
 	tag_integer rax
