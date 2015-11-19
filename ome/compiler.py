@@ -47,16 +47,6 @@ class DataTable(object):
              out.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
         out.write('.end:\n')
 
-builtin_required_messages = [
-    'do',
-    'while',
-    'then',
-    'else',
-    'catch:',
-    'item:',
-    'string',
-]
-
 def collect_nodes_of_type(ast, node_type):
     nodes = []
     def append_block(node):
@@ -81,7 +71,6 @@ class Program(object):
         self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = DataTable()
-        self.all_method_symbols = set()
 
         self.block_list = collect_nodes_of_type(ast, Block)
         self.allocate_tag_ids()
@@ -89,8 +78,7 @@ class Program(object):
 
         send_list = collect_nodes_of_type(ast, Send)
 
-        self.sent_messages = set(builtin_required_messages)
-        self.sent_messages.update(
+        self.sent_messages = set(
             send.symbol for send in send_list if not send.receiver_block)
 
         self.called_methods = set([
@@ -100,6 +88,10 @@ class Program(object):
         self.called_methods.update(
             (send.receiver_block.tag, send.symbol) for send in send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
+
+        for method in self.target_type.builtin_methods:
+            if method.sent_messages and self.should_include_method(method, self.builtin.tag):
+                self.sent_messages.update(method.sent_messages)
 
         self.build_code_table()
 
@@ -143,7 +135,6 @@ class Program(object):
                 label = make_call_label(method.tag, method.symbol)
                 code = '%s:\n%s' % (label, method.code)
                 methods[method.symbol].append((method.tag, code))
-                self.all_method_symbols.add(method.symbol)
 
         for block in self.block_list:
             for method in block.methods:
@@ -152,7 +143,6 @@ class Program(object):
                         methods[method.symbol] = []
                     code = self.compile_method(method, block.tag)
                     methods[method.symbol].append((block.tag, code))
-                    self.all_method_symbols.add(method.symbol)
 
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
@@ -172,19 +162,20 @@ class Program(object):
         out.write(self._compile_method(self.toplevel_method, 'OME_toplevel'))
         out.write('\n')
 
+        dispatchers = set()
         for symbol, methods in self.code_table:
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
                 out.write(generate_dispatcher(symbol, tags, self.target_type))
                 out.write('\n')
+                dispatchers.add(symbol)
             for tag, code in methods:
                 out.write(code)
                 out.write('\n')
 
-        # Generate empty message dispatchers required for built-ins if there
-        # have been no methods defined for them.
-        for symbol in builtin_required_messages:
-            if symbol not in self.all_method_symbols:
+        for symbol in self.sent_messages:
+            if symbol not in dispatchers:
+                sys.stderr.write("Warning: No methods defined for message '%s'\n" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target_type))
                 out.write('\n')
 

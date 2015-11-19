@@ -407,9 +407,10 @@ class ConstantBlock(TerminalNode):
         return dest
 
 class BuiltInMethod(object):
-    def __init__(self, symbol, tag, code):
+    def __init__(self, symbol, tag, sent_messages, code):
         self.symbol = symbol
         self.tag = tag
+        self.sent_messages = sent_messages
         self.code = code
 
 class BuiltInBlock(object):

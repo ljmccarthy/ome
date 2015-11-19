@@ -363,7 +363,7 @@ OME_message_collect_nursery:
 
     builtin_methods = [
 
-BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
+BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
 	mov rdi, rsi
 	call OME_message_string__0
 	mov rsi, rax
@@ -379,7 +379,7 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), '''\
+BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 	mov rdi, rsi
 	call OME_message_do__0
 	shl rax, 1              ; clear error bit if present
@@ -387,7 +387,7 @@ BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), '''\
+BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	sub rsp, 16
 	mov [rsp], rsi
 	mov rdi, rsi
@@ -404,7 +404,7 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), '''\
+BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), [], '''\
 	mov rax, rsi
 	shl rax, 1
 	or al, 1        ; set error bit
@@ -412,7 +412,7 @@ BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
+BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
 	sub rsp, 16
 	mov [rsp], rsi
 	mov rdi, rsi
@@ -437,12 +437,12 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), '''\
 	ret
 '''),
 
-BuiltInMethod('string', Tag_String, '''\
+BuiltInMethod('string', Tag_String, [], '''\
 	mov rax, rdi
 	ret
 '''),
 
-BuiltInMethod('string', Tag_Boolean, '''\
+BuiltInMethod('string', Tag_Boolean, [], '''\
 	lea rax, [rel OME_string_false]
 	test rdi, rdi
 	jz .exit
@@ -452,31 +452,31 @@ BuiltInMethod('string', Tag_Boolean, '''\
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_TypeError), '''\
+BuiltInMethod('string', constant_to_tag(Constant_TypeError), [], '''\
 	lea rax, [rel OME_string_type_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_IndexError), '''\
+BuiltInMethod('string', constant_to_tag(Constant_IndexError), [], '''\
 	lea rax, [rel OME_string_index_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_OverflowError), '''\
+BuiltInMethod('string', constant_to_tag(Constant_OverflowError), [], '''\
 	lea rax, [rel OME_string_overflow_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_NotUnderstoodError), '''\
+BuiltInMethod('string', constant_to_tag(Constant_NotUnderstoodError), [], '''\
 	lea rax, [rel OME_string_not_understood_error]
 	tag_pointer rax, Tag_String
 	ret
 '''),
 
-BuiltInMethod('string', Tag_Small_Integer, '''\
+BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	untag_integer rdi               ; untag integer
 .gc_return_0:
 	gc_alloc rsi, 24, .gc_full_0    ; pre-allocate string on heap
@@ -524,7 +524,7 @@ BuiltInMethod('string', Tag_Small_Integer, '''\
 	gc_return .gc_return_0
 '''),
 
-BuiltInMethod('plus:', Tag_Small_Integer, '''\
+BuiltInMethod('plus:', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rsi
 	cmp rsi, Tag_Small_Integer
@@ -535,7 +535,7 @@ BuiltInMethod('plus:', Tag_Small_Integer, '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('minus:', Tag_Small_Integer, '''\
+BuiltInMethod('minus:', Tag_Small_Integer, [], '''\
 	mov rax, rdi
 	mov rdx, rsi
 	get_tag rsi
@@ -547,7 +547,7 @@ BuiltInMethod('minus:', Tag_Small_Integer, '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('times:', Tag_Small_Integer, '''\
+BuiltInMethod('times:', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rsi
 	cmp rsi, Tag_Small_Integer
@@ -562,7 +562,7 @@ BuiltInMethod('times:', Tag_Small_Integer, '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('div:', Tag_Small_Integer, '''\
+BuiltInMethod('div:', Tag_Small_Integer, [], '''\
 	mov rax, rdi
 	mov rcx, rsi
 	get_tag rsi
@@ -579,7 +579,7 @@ BuiltInMethod('div:', Tag_Small_Integer, '''\
 	ret
 '''),
 
-BuiltInMethod('mod:', Tag_Small_Integer, '''\
+BuiltInMethod('mod:', Tag_Small_Integer, [], '''\
 	mov rax, rdi
 	mov rcx, rsi
 	get_tag rsi
@@ -597,7 +597,7 @@ BuiltInMethod('mod:', Tag_Small_Integer, '''\
 	ret
 '''),
 
-BuiltInMethod('less-than:', Tag_Small_Integer, '''\
+BuiltInMethod('less-than:', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
 	cmp rax, Tag_Small_Integer
@@ -610,7 +610,7 @@ BuiltInMethod('less-than:', Tag_Small_Integer, '''\
 	ret
 '''),
 
-BuiltInMethod('less-or-equal:', Tag_Small_Integer, '''\
+BuiltInMethod('less-or-equal:', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
 	cmp rax, Tag_Small_Integer
@@ -623,20 +623,20 @@ BuiltInMethod('less-or-equal:', Tag_Small_Integer, '''\
 	ret
 '''),
 
-BuiltInMethod('equals:', Tag_Small_Integer, '''\
+BuiltInMethod('equals:', Tag_Small_Integer, [], '''\
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
 	ret
 '''),
 
-BuiltInMethod('not', Tag_Boolean, '''\
+BuiltInMethod('not', Tag_Boolean, [], '''\
 	mov rax, rdi
 	xor rax, 1
 	ret
 '''),
 
-BuiltInMethod('and:', Tag_Boolean, '''\
+BuiltInMethod('and:', Tag_Boolean, [], '''\
 	mov rax, rdi
 	test rax, rax
 	jz .exit
@@ -645,7 +645,7 @@ BuiltInMethod('and:', Tag_Boolean, '''\
 	ret
 '''),
 
-BuiltInMethod('or:', Tag_Boolean, '''\
+BuiltInMethod('or:', Tag_Boolean, [], '''\
 	mov rax, rdi
 	test rax, rax
 	jnz .exit
@@ -654,14 +654,14 @@ BuiltInMethod('or:', Tag_Boolean, '''\
 	ret
 '''),
 
-BuiltInMethod('equals:', Tag_Boolean, '''\
+BuiltInMethod('equals:', Tag_Boolean, [], '''\
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
 	ret
 '''),
 
-BuiltInMethod('then:', Tag_Boolean, '''\
+BuiltInMethod('then:', Tag_Boolean, ['do'], '''\
 	mov rax, rdi
 	mov rdi, rsi
 	test rax, rax
@@ -669,7 +669,7 @@ BuiltInMethod('then:', Tag_Boolean, '''\
 	ret
 '''),
 
-BuiltInMethod('if:', Tag_Boolean, '''\
+BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''\
 	mov rax, rdi
 	mov rdi, rsi
 	test rax, rax
@@ -678,14 +678,14 @@ BuiltInMethod('if:', Tag_Boolean, '''\
 '''),
 
 
-BuiltInMethod('size', Tag_Array, '''\
+BuiltInMethod('size', Tag_Array, [], '''\
 	untag_pointer rdi
 	mov eax, dword [rdi-4]
 	tag_integer rax
 	ret
 '''),
 
-BuiltInMethod('at:', Tag_Array, '''\
+BuiltInMethod('at:', Tag_Array, [], '''\
 	untag_pointer rdi
 	mov rax, rsi
 	get_tag rax
@@ -701,7 +701,7 @@ BuiltInMethod('at:', Tag_Array, '''\
 	ret
 '''),
 
-BuiltInMethod('each:', Tag_Array, '''\
+BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	sub rsp, 32
 	untag_value rdi
 	mov ecx, dword [rdi*8-4]  ; load array size
