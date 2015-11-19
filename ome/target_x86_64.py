@@ -375,6 +375,7 @@ OME_print_value:
 	push rdi
 	mov rdi, rsi
 	call OME_message_string__0
+	pop rdi
 	mov rsi, rax
 	get_tag rax
 	cmp rax, Tag_String
@@ -383,7 +384,6 @@ OME_print_value:
 	mov edx, dword [rsi]
 	add rsi, 4
 	mov rax, SYS_write
-	pop rdi
 	syscall
 	ret
 
