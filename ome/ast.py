@@ -57,10 +57,11 @@ class Send(object):
                     return SlotSet(self.receiver, var.slot_index, self.args[0])
         return self
 
-    def collect_blocks(self, block_list):
-        self.receiver.collect_blocks(block_list)
+    def walk(self, visitor):
+        visitor(self)
+        self.receiver.walk(visitor)
         for arg in self.args:
-            arg.collect_blocks(block_list)
+            arg.walk(visitor)
 
     def generate_code(self, code):
         receiver = self.receiver.generate_code(code)
@@ -166,10 +167,10 @@ class Block(object):
         self.slots.append(var)
         return var.self_ref
 
-    def collect_blocks(self, block_list):
-        block_list.append(self)
+    def walk(self, visitor):
+        visitor(self)
         for method in self.methods:
-            method.collect_blocks(block_list)
+            method.walk(visitor)
 
     def generate_code(self, code):
         dest = code.add_temp()
@@ -203,8 +204,9 @@ class LocalVariable(object):
         self.expr = self.expr.resolve_block_refs(parent)
         return self
 
-    def collect_blocks(self, block_list):
-        self.expr.collect_blocks(block_list)
+    def walk(self, visitor):
+        visitor(self)
+        self.expr.walk(visitor)
 
     def generate_code(self, code):
         local = self.local_ref.generate_code(code)
@@ -260,8 +262,9 @@ class Method(object):
     def get_block_ref(self, block):
         return self.parent.get_block_ref(block)
 
-    def collect_blocks(self, block_list):
-        self.expr.collect_blocks(block_list)
+    def walk(self, visitor):
+        visitor(self)
+        self.expr.walk(visitor)
 
     def generate_code(self, target_type):
         code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args))
@@ -312,9 +315,10 @@ class Sequence(object):
     def get_block_ref(self, block):
         return self.parent.get_block_ref(block)
 
-    def collect_blocks(self, block_list):
+    def walk(self, visitor):
+        visitor(self)
         for statement in self.statements:
-            statement.collect_blocks(block_list)
+            statement.walk(visitor)
 
     def generate_code(self, code):
         for statement in self.statements[:-1]:
@@ -342,9 +346,10 @@ class Array(object):
             self.elems[i] = elem.resolve_block_refs(parent)
         return self
 
-    def collect_blocks(self, block_list):
+    def walk(self, visitor):
+        visitor(self)
         for elem in self.elems:
-            elem.collect_blocks(block_list)
+            elem.walk(visitor)
 
     def generate_code(self, code):
         array = code.add_temp()
@@ -365,8 +370,8 @@ class TerminalNode(object):
     def resolve_block_refs(self, parent):
         return self
 
-    def collect_blocks(self, block_list):
-        pass
+    def walk(self, visitor):
+        visitor(self)
 
     check_error = False
 
@@ -415,14 +420,12 @@ class BuiltInBlock(object):
 
     def __init__(self, target_type):
         self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == self.tag}
-        self.called = set()
 
     def lookup_var(self, symbol):
         pass
 
     def lookup_receiver(self, symbol):
         if symbol in self.symbols:
-            self.called.add(symbol)
             return self
 
     def get_block_ref(self, block):
@@ -473,8 +476,9 @@ class SlotGet(object):
         self.obj_expr = self.obj_expr.resolve_block_refs(parent)
         return self
 
-    def collect_blocks(self, block_list):
-        self.obj_expr.collect_blocks(block_list)
+    def walk(self, visitor):
+        visitor(self)
+        self.obj_expr.walk(visitor)
 
     def generate_code(self, code):
         object = self.obj_expr.generate_code(code)
@@ -505,9 +509,10 @@ class SlotSet(object):
         self.set_expr = self.set_expr.resolve_block_refs(parent)
         return self
 
-    def collect_blocks(self, block_list):
-        self.obj_expr.collect_blocks(block_list)
-        self.set_expr.collect_blocks(block_list)
+    def walk(self, visitor):
+        visitor(self)
+        self.obj_expr.walk(visitor)
+        self.set_expr.walk(visitor)
 
     def generate_code(self, code):
         object = self.obj_expr.generate_code(code)

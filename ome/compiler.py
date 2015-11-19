@@ -8,7 +8,7 @@ import struct
 import subprocess
 import sys
 
-from .ast import Method, Sequence, BuiltInBlock
+from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .constants import *
 from .dispatcher import generate_dispatcher
 from .instructions import LOAD_STRING
@@ -54,7 +54,16 @@ builtin_required_messages = [
     'else',
     'catch:',
     'item:',
+    'string',
 ]
+
+def collect_nodes_of_type(ast, node_type):
+    nodes = []
+    def append_block(node):
+        if isinstance(node, node_type):
+            nodes.append(node)
+    ast.walk(append_block)
+    return nodes
 
 class Program(object):
     def __init__(self, ast, builtin, target_type):
@@ -74,9 +83,21 @@ class Program(object):
         self.data_table = DataTable()
         self.all_method_symbols = set()
 
-        ast.collect_blocks(self.block_list)
+        self.block_list = collect_nodes_of_type(ast, Block)
         self.allocate_tag_ids()
         self.allocate_constant_tag_ids()
+
+        send_list = collect_nodes_of_type(ast, Send)
+
+        self.sent_messages = set(builtin_required_messages)
+        self.sent_messages.update(
+            send.symbol for send in send_list if not send.receiver_block)
+
+        self.called_methods = set([(self.toplevel_block.tag, 'main')])
+        self.called_methods.update(
+            (send.receiver_block.tag, send.symbol) for send in send_list
+            if send.receiver_block and send.symbol not in self.sent_messages)
+
         self.build_code_table()
 
     def allocate_tag_ids(self):
@@ -106,11 +127,14 @@ class Program(object):
     def compile_method(self, method, tag):
         return self._compile_method(method, make_call_label(tag, method.symbol))
 
+    def should_include_method(self, method, tag):
+        return method.symbol in self.sent_messages or (tag, method.symbol) in self.called_methods
+
     def build_code_table(self):
         methods = {}
 
         for method in self.target_type.builtin_methods:
-            if method.tag != self.builtin.tag or method.symbol in self.builtin.called:
+            if self.should_include_method(method, self.builtin.tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 label = make_call_label(method.tag, method.symbol)
@@ -120,11 +144,12 @@ class Program(object):
 
         for block in self.block_list:
             for method in block.methods:
-                if method.symbol not in methods:
-                    methods[method.symbol] = []
-                code = self.compile_method(method, block.tag)
-                methods[method.symbol].append((block.tag, code))
-                self.all_method_symbols.add(method.symbol)
+                if self.should_include_method(method, block.tag):
+                    if method.symbol not in methods:
+                        methods[method.symbol] = []
+                    code = self.compile_method(method, block.tag)
+                    methods[method.symbol].append((block.tag, code))
+                    self.all_method_symbols.add(method.symbol)
 
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
@@ -145,9 +170,10 @@ class Program(object):
         out.write('\n')
 
         for symbol, methods in self.code_table:
-            tags = [tag for tag, code in methods]
-            out.write(generate_dispatcher(symbol, tags, self.target_type))
-            out.write('\n')
+            if symbol in self.sent_messages:
+                tags = [tag for tag, code in methods]
+                out.write(generate_dispatcher(symbol, tags, self.target_type))
+                out.write('\n')
             for tag, code in methods:
                 out.write(code)
                 out.write('\n')
