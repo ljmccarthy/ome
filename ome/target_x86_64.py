@@ -702,11 +702,11 @@ BuiltInMethod('at:', Tag_Array, '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, '''\
+	sub rsp, 32
 	untag_value rdi
 	mov ecx, dword [rdi*8-4]  ; load array size
 	test ecx, ecx             ; check if zero
 	jz .exit
-	sub rsp, 32
 	lea rcx, [rdi+rcx]      ; end of array
 	mov [rsp], rdi          ; save array pointer
 	mov [rsp+8], rcx        ; save end pointer
