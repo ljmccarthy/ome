@@ -450,7 +450,9 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
 BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 	mov rdi, rsi
 	call OME_message_do__0
-	shl rax, 1              ; clear error bit if present
+	mov rdi, [rbp+TC_stack_limit]
+	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
+	shl rax, 1                              ; clear error bit if present
 	shr rax, 1
 	ret
 '''),
@@ -462,7 +464,9 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	call OME_message_do__0
 	test rax, rax
 	jns .exit
-	shl rax, 1      ; clear error bit if present
+	mov rdi, [rbp+TC_stack_limit]
+	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
+	shl rax, 1                              ; clear error bit if present
 	shr rax, 1
 	mov rdi, [rsp]
 	mov rsi, rax
