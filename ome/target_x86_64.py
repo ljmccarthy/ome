@@ -226,6 +226,14 @@ class Target_x86_64(object):
 	sar %1, OME_NUM_TAG_BITS
 %endmacro
 
+%macro constant_string 2
+%1:
+	dd .end-$-5
+	db %2, 0
+.end:
+	align 8
+%endmacro
+
 default rel
 
 global _start
@@ -327,36 +335,12 @@ OME_overflow:
 
     builtin_data = '''\
 align 8
-
-OME_string_false:
-	dd 5
-	db "False", 0
-	align 8
-
-OME_string_true:
-	dd 4
-	db "True", 0
-	align 8
-
-OME_string_type_error:
-	dd 10
-	db 'Type-Error', 0
-	align 8
-
-OME_string_index_error:
-	dd 11
-	db 'Index-Error', 0
-	align 8
-
-OME_string_overflow_error:
-	dd 14
-	db 'Overflow-Error', 0
-	align 8
-
-OME_string_not_understood_error:
-	dd 20
-	db 'Not-Understood-Error', 0
-	align 8
+constant_string OME_string_false, "False"
+constant_string OME_string_true, "True"
+constant_string OME_string_type_error, "Type-Error"
+constant_string OME_string_index_error, "Index-Error"
+constant_string OME_string_overflow_error, "Overflow-Error"
+constant_string OME_string_not_understood_error, "Not-Understood-Error"
 
 OME_message_newline:
 	db 10
