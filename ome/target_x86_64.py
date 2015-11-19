@@ -566,9 +566,10 @@ BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	dec rcx
 	mov byte [rcx], 0       ; nul terminator
 	mov rax, rdi            ; number for division
-	test rax, rax
-	jns .divloop
-	neg rax
+	mov rdx, rax
+	sar rdx, 63             ; compute absolute value
+	xor rax, rdx
+	sub rax, rdx
 .divloop:
 	xor rdx, rdx            ; clear for division
 	dec rcx                 ; next character
