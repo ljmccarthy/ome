@@ -316,7 +316,8 @@ _start:
 	; print error value
 	call .newline
 	pop rsi
-	call {PRINT}
+	mov rdi, 2
+	call OME_print_value
 	call .newline
 	mov rdi, 1
 .success:
@@ -367,6 +368,24 @@ OME_panic:
 	mov rax, SYS_exit
 	mov rdi, 1
 	syscall
+
+; rdi = file descriptor
+; rsi = value
+OME_print_value:
+	push rdi
+	mov rdi, rsi
+	call OME_message_string__0
+	mov rsi, rax
+	get_tag rax
+	cmp rax, Tag_String
+	jne OME_type_error
+	untag_pointer rsi
+	mov edx, dword [rsi]
+	add rsi, 4
+	mov rax, SYS_write
+	pop rdi
+	syscall
+	ret
 
 OME_type_error:
 	mov rax, OME_Error_Constant(Constant_TypeError)
@@ -424,19 +443,8 @@ OME_message_collect_nursery:
     builtin_methods = [
 
 BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
-	mov rdi, rsi
-	call OME_message_string__0
-	mov rsi, rax
-	get_tag rax
-	cmp rax, Tag_String
-	jne OME_type_error
-	untag_pointer rsi
-	mov edx, dword [rsi]
-	add rsi, 4
-	mov rax, SYS_write
 	mov rdi, 1
-	syscall
-	ret
+	jmp OME_print_value
 '''),
 
 BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\

@@ -107,12 +107,12 @@ class Program(object):
             raise Error('Exhausted all constant tag IDs, your program is too big!')
 
     def find_used_methods(self):
-        self.sent_messages = set(
+        self.sent_messages = set(['string'])
+        self.sent_messages.update(
             send.symbol for send in self.send_list if not send.receiver_block)
 
         self.called_methods = set([
             (self.toplevel_block.tag, 'main'),
-            (self.builtin.tag, 'print:'),
         ])
         self.called_methods.update(
             (send.receiver_block.tag, send.symbol) for send in self.send_list
@@ -172,7 +172,6 @@ class Program(object):
 
         env = {
             'MAIN': make_call_label(self.toplevel_block.tag, 'main'),
-            'PRINT': make_call_label(self.builtin.tag, 'print:'),
             'NUM_TAG_BITS': NUM_TAG_BITS,
             'NUM_DATA_BITS': NUM_DATA_BITS,
         }
