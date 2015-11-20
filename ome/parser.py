@@ -12,8 +12,8 @@ re_name = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_arg_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
 re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
-re_string = re.compile(r"'((?:\\.|[^\r\n'])*)'?")
-re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)')
+re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
+re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
 re_assign = re.compile(r'=|:=')
 re_end_token = re.compile(r'[|)}\]]')
 
@@ -29,6 +29,9 @@ string_escapes = {
     "'": "'",
     '"': '"',
     '\\': '\\',
+    '\r\n': '',
+    '\r': '',
+    '\n': '',
 }
 
 def parse_string_escapes(string, parse_state):
