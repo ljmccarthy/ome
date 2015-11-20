@@ -680,6 +680,43 @@ BuiltInMethod('mod:', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
+BuiltInMethod('abs', Tag_Small_Integer, [], '''\
+	mov rax, rdi
+	untag_integer rax
+	mov rdi, rax
+	sar rdi, 63
+	xor rax, rdi
+	sub rax, rdi
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('min:', Tag_Small_Integer, [], '''\
+	mov rax, rsi
+	get_tag rsi
+	untag_integer rdi
+	untag_integer rax
+	cmp rsi, Tag_Small_Integer
+	jne OME_type_error
+	cmp rax, rdi
+	cmovg rax, rdi
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('max:', Tag_Small_Integer, [], '''\
+	mov rax, rsi
+	get_tag rsi
+	untag_integer rdi
+	untag_integer rax
+	cmp rsi, Tag_Small_Integer
+	jne OME_type_error
+	cmp rax, rdi
+	cmovl rax, rdi
+	tag_integer rax
+	ret
+'''),
+
 BuiltInMethod('less-than:', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
