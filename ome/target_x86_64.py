@@ -632,6 +632,38 @@ BuiltInMethod('times:', Tag_Small_Integer, [], '''\
 	jmp OME_check_overflow
 '''),
 
+BuiltInMethod('power:', Tag_Small_Integer, [], '''\
+	untag_integer rdi
+	mov rax, rdi
+	mov rcx, rsi
+	untag_integer rcx
+	get_tag rsi
+	cmp rsi, Tag_Small_Integer
+	jne OME_type_error
+	test rcx, rcx
+	jz .one
+	js .zero
+.loop:
+	imul rdi
+	mov r8, rax
+	shl r8, OME_NUM_TAG_BITS
+	sar r8, OME_NUM_TAG_BITS
+	cmp r8, rax
+	jne OME_overflow_error
+	sub rcx, 1
+	jnz .loop
+	tag_integer rax
+	ret
+.zero:
+	test rdi, rdi
+	jz OME_divide_by_zero_error
+	mov rax, OME_Value(0, Tag_Small_Integer)
+	ret
+.one:
+	mov rax, OME_Value(1, Tag_Small_Integer)
+	ret
+'''),
+
 BuiltInMethod('div:', Tag_Small_Integer, [], '''\
 	mov rax, rdi
 	mov rcx, rsi
@@ -703,6 +735,14 @@ BuiltInMethod('max:', Tag_Small_Integer, [], '''\
 	jne OME_type_error
 	cmp rax, rdi
 	cmovl rax, rdi
+	tag_integer rax
+	ret
+'''),
+
+BuiltInMethod('negate', Tag_Small_Integer, [], '''\
+	mov rax, rdi
+	untag_integer rax
+	neg rax
 	tag_integer rax
 	ret
 '''),
