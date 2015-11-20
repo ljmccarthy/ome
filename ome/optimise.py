@@ -189,7 +189,8 @@ class LocalStorage(object):
             reg = self.local_register[local]
             del self.local_register[local]
             del self.register_local[reg]
-            self.free_registers.append(reg)
+            if reg not in self.free_registers:
+                self.free_registers.append(reg)
             return reg
 
     def remove_local_from_stack(self, local):
@@ -247,6 +248,9 @@ class LocalStorage(object):
 
     def unspill(self, local, reg):
         assert local not in self.local_register
+        if reg in self.register_local:
+            old_local = self.register_local[reg]
+            del self.local_register[old_local]
         self.local_register[local] = reg
         self.register_local[reg] = local
         if reg in self.free_registers:
@@ -267,13 +271,13 @@ class LocalStorage(object):
 
     def find_lowest_priority_register(self, reg_priority):
         """
-        Find the register containing the lowest priority local (i.e. largest
-        distance to next use.
+        Find the register containing the lowest priority local,
+        i.e. largest distance to next use.
         """
         max_priority = -1
         lowest_priority_reg = None
         for local, reg in self.local_register.items():
-            if reg_priority[local] > max_priority:
+            if local not in reg_priority or reg_priority[local] > max_priority:
                 max_priority = reg_priority[local]
                 lowest_priority_reg = reg
         return lowest_priority_reg
@@ -285,7 +289,7 @@ class LocalStorage(object):
             reg = self.free_registers.pop()
         else:
             reg = self.find_lowest_priority_register(reg_priority)
-            self.spill(self.local_register[reg])
+            self.spill(self.register_local[reg])
         self.unspill(local, reg)
         return reg
 
@@ -311,7 +315,13 @@ class LocalStorage(object):
                 if local not in call_ins.args:
                     self.remove_local_from_register(local)
 
-        # Shuffle argument to correct registers
+        # Push stack arguments
+        for arg in reversed(call_ins.args[len(self.arg_regs):]):
+            reg = self.get_local_to_any_register(arg, call_ins.usage_distance)
+            self.spills.append(PUSH(reg))
+            self.remove_local_from_register(arg)
+
+        # Shuffle register arguments to correct registers
         for i, arg in enumerate(call_ins.args[:len(self.arg_regs)]):
             if self.arg_regs[i] in self.register_local:
                 local_in_arg_reg = self.register_local[self.arg_regs[i]]
@@ -322,12 +332,6 @@ class LocalStorage(object):
                     self.move_local_to_register(arg, self.arg_regs[i])
             else:
                 self.unspill(arg, self.arg_regs[i])
-
-        # Push stack arguments
-        for arg in call_ins.args[len(self.arg_regs):]:
-            reg = self.get_local_to_any_register(arg, {})
-            self.spills.append(PUSH(reg))
-            self.remove_local_from_register(arg)
 
         self.local_register = {call_ins.dest: self.return_reg}
         self.register_local = {self.return_reg: call_ins.dest}

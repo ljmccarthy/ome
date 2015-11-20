@@ -4,14 +4,6 @@
 from .ast import BuiltInMethod
 from .constants import *
 
-def get_sp_adjustment(num_stack_slots):
-    """
-    Return number of bytes to adjust stack pointer.
-    Enforced 16 byte alignment.
-    """
-    n = num_stack_slots * 8
-    return n + (n % 16)
-
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
@@ -28,12 +20,12 @@ class Target_x86_64(object):
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
-            self.emit('sub rsp, %s', get_sp_adjustment(num_stack_slots))
+            self.emit('sub rsp, %s', num_stack_slots * 8)
 
     def emit_leave(self, num_stack_slots):
         self.emit.label('.exit')
         if num_stack_slots > 0:
-            self.emit('add rsp, %s', get_sp_adjustment(num_stack_slots))
+            self.emit('add rsp, %s', num_stack_slots * 8)
         self.emit('ret')
 
     def emit_empty_dispatch(self):
@@ -458,7 +450,7 @@ BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 '''),
 
 BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
-	sub rsp, 16
+	sub rsp, 8
 	mov [rsp], rsi
 	mov rdi, rsi
 	call OME_message_do__0
@@ -472,7 +464,7 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	mov rsi, rax
 	call OME_message_catch__1
 .exit:
-	add rsp, 16
+	add rsp, 8
 	ret
 '''),
 
@@ -485,7 +477,7 @@ BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), [], '''\
 '''),
 
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
-	sub rsp, 16
+	sub rsp, 8
 	mov [rsp], rsi
 	mov rdi, rsi
 .loop:
@@ -501,12 +493,11 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
 	test rax, rax
 	jns .loop               ; repeat if |do| did not return an error
 .exit:
-	add rsp, 16
+	add rsp, 8
 	ret
 .type_error:
-	add rsp, 16
-	mov rax, OME_Error_Constant(Constant_TypeError)
-	ret
+	add rsp, 8
+	jmp OME_type_error
 '''),
 
 BuiltInMethod('string', Tag_String, [], '''\
@@ -821,7 +812,7 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, ['item:'], '''\
-	sub rsp, 32
+	sub rsp, 24
 	untag_value rdi
 	mov ecx, dword [rdi*8-4]  ; load array size
 	test ecx, ecx             ; check if zero
@@ -846,7 +837,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	jb .loop
 	xor rax, rax            ; return False
 .exit:
-	add rsp, 32
+	add rsp, 24
 	ret
 ''')
 
