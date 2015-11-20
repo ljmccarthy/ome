@@ -204,10 +204,18 @@ class Parser(ParserState):
             if part[0] == '~' and symbol:
                 self.error('Expected keyword')
             symbol += part
-            argnames.append(self.argument_name())
+            parse_state = self.copy_state()
+            name = self.argument_name()
+            if name in argnames:
+                parse_state.error("Duplicate parameter name '%s'" % name)
+            argnames.append(name)
             for m in self.repeat_token(','):
                 symbol += ','
-                argnames.append(self.argument_name())
+                parse_state = self.copy_state()
+                name = self.argument_name()
+                if name in argnames:
+                    parse_state.error("Duplicate parameter name '%s'" % name)
+                argnames.append(name)
         if not symbol:
             parse_state = self.copy_state()
             m = self.expect_token(re_name, 'Expected name or keyword')
