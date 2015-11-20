@@ -681,9 +681,8 @@ BuiltInMethod('mod:', Tag_Small_Integer, [], '''\
 '''),
 
 BuiltInMethod('abs', Tag_Small_Integer, [], '''\
+	untag_integer rdi
 	mov rax, rdi
-	untag_integer rax
-	mov rdi, rax
 	sar rdi, 63
 	xor rax, rdi
 	sub rax, rdi
