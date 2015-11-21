@@ -85,15 +85,9 @@ class Target_x86_64(object):
 
         if ins.traceback_info:
             tb_emit = self.emit.tail_emitter(traceback_label)
-            tb_emit('mov rdi, [rbp+TC_traceback_pointer]')
-            tb_emit('lea rsi, [rdi+TB_SIZE]')
-            tb_emit('cmp rsi, rsp')  # Check to make sure we don't overwrite stack
-            tb_emit('ja .exit')
-            tb_emit('mov [rbp+TC_traceback_pointer], rsi')
-            tb_emit('lea rsi, [rel %s]', ins.traceback_info.file_info)
-            tb_emit('mov [rdi+TB_file_info], rsi')
+            tb_emit('lea rdi, [rel %s]', ins.traceback_info.file_info)
             tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
-            tb_emit('mov [rdi+TB_source_line], rsi')
+            tb_emit('call OME_append_traceback')
             tb_emit('jmp .exit')
 
     def emit_tag(self, reg, tag):
@@ -377,6 +371,19 @@ OME_print_value:
 	add rsi, 4
 	mov rax, SYS_write
 	syscall
+	ret
+
+; rdi = traceback file_info
+; rsi = traceback source_line
+OME_append_traceback:
+	mov rdx, [rbp+TC_traceback_pointer]
+	lea rcx, [rdx+TB_SIZE]
+	cmp rcx, rsp            ; check to make sure we don't overwrite stack
+	ja .exit
+	mov [rbp+TC_traceback_pointer], rcx
+	mov [rdx+TB_file_info], rdi
+	mov [rdx+TB_source_line], rsi
+.exit:
 	ret
 
 OME_type_error:
