@@ -4,6 +4,14 @@
 from .ast import BuiltInMethod
 from .constants import *
 
+GC_SIZE_BITS = 10  # Maximum object size 2^10 = 1024 slots (8 KB)
+GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
+
+def encode_gc_header(num_slots, num_scan_slots):
+    assert (num_slots & GC_SIZE_MASK) == num_slots
+    assert (num_scan_slots & GC_SIZE_MASK) == num_slots
+    return (num_scan_slots << (GC_SIZE_BITS + 1)) | (num_slots << 1) | 1
+
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
@@ -133,7 +141,7 @@ class Target_x86_64(object):
         self.emit('add %s, %s', self.nursery_bump_pointer, (num_slots + 1) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
         self.emit('jae %s', full_label)
-        self.emit('mov dword [%s], %s', dest, num_slots)  # TODO: GC header
+        self.emit('mov qword [%s], %s', dest, encode_gc_header(num_slots, num_slots))
         self.emit('add %s, 8', dest)
 
         tail_emit = self.emit.tail_emitter(full_label)
@@ -150,6 +158,9 @@ class Target_x86_64(object):
     builtin_code = '''\
 %define OME_NUM_TAG_BITS {NUM_TAG_BITS}
 %define OME_NUM_DATA_BITS {NUM_DATA_BITS}
+
+%define GC_SIZE_BITS 10
+%define GC_SIZE_MASK ((1 << GC_SIZE_BITS) - 1)
 
 %define OME_Value(value, tag) (((tag) << OME_NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
@@ -172,7 +183,8 @@ class Target_x86_64(object):
 
 %define TC_stack_limit 0
 %define TC_traceback_pointer 8
-%define TC_SIZE 16
+%define TC_nursery_base_pointer 16
+%define TC_SIZE 24
 
 %define TB_file_info 0
 %define TB_source_line 8
@@ -192,12 +204,12 @@ class Target_x86_64(object):
 %define PROT_WRITE 0x2
 %define PROT_EXEC 0x4
 
-%macro gc_alloc 3
+%macro gc_alloc_data 3
 	mov %1, rbx
 	add rbx, (%2) + 8
 	cmp rbx, r12
 	jae %3
-	mov dword [%1], %2
+	mov qword [%1], (%2 << 1) | 1
 	add %1, 8
 %endmacro
 
@@ -208,6 +220,11 @@ class Target_x86_64(object):
 
 %macro get_tag 1
 	shr %1, OME_NUM_DATA_BITS
+%endmacro
+
+%macro get_tag_noerror 1
+	shl %1, 1
+	shr %1, OME_NUM_DATA_BITS + 1
 %endmacro
 
 %macro tag_pointer 2
@@ -251,15 +268,19 @@ class Target_x86_64(object):
 
 default rel
 
+%define STACK_SIZE    0x1000
+%define NURSERY_SIZE  0x3800
+
 global _start
 _start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+0x1000-TC_SIZE]   ; stack pointer (grows down)
-	mov rbp, rsp                    ; thread context pointer
-	lea rbx, [rsp+TC_SIZE]          ; GC nursery pointer (grows up)
-	lea r12, [rax+0x4000]           ; GC nursery limit
+	lea rsp, [rax+STACK_SIZE-TC_SIZE]       ; stack pointer (grows down)
+	mov rbp, rsp                            ; thread context pointer
+	lea rbx, [rsp+TC_SIZE]                  ; GC nursery pointer (grows up)
+	lea r12, [rbx+NURSERY_SIZE]             ; GC nursery limit
 	mov [rbp+TC_stack_limit], rax
 	mov [rbp+TC_traceback_pointer], rax
+	mov [rbp+TC_nursery_base_pointer], rbx
 	call OME_toplevel               ; create top-level block
 	mov rdi, rax
 	call {MAIN}             ; call main method on top-level block
@@ -274,7 +295,7 @@ _start:
 	; print traceback
 	mov r13, [rbp+TC_stack_limit]
 	mov r14, [rbp+TC_traceback_pointer]
-	sub r14, TC_SIZE
+	sub r14, TB_SIZE
 	cmp r14, r13
 	jb .failure
 	lea rsi, [rel OME_message_traceback]
@@ -295,7 +316,7 @@ _start:
 	mov rax, SYS_write
 	mov rdi, 2
 	syscall
-	sub r14, TC_SIZE
+	sub r14, TB_SIZE
 	cmp r14, r13
 	jae .tbloop
 .failure:
@@ -342,11 +363,6 @@ OME_allocate_thread_context:
 .panic:
 	mov rsi, OME_message_mmap_failed
 	mov rdx, OME_message_mmap_failed.size
-	jmp OME_panic
-
-OME_collect_nursery:
-	lea rsi, [rel OME_message_collect_nursery]
-	mov rdx, OME_message_collect_nursery.size
 OME_panic:
 	mov rax, SYS_write
 	mov rdi, 2
@@ -354,6 +370,130 @@ OME_panic:
 	mov rax, SYS_exit
 	mov rdi, 1
 	syscall
+
+OME_collect_nursery:
+	; push all registers to stack so that we can scan them
+	; the mutator could be using any of them at this time
+	push rax
+	push rdi
+	push rsi
+	push rdx
+	push rcx
+	push r8
+	push r9
+	push r10
+	push r11
+	; print debug message
+	lea rsi, [rel OME_message_collect_nursery]
+	mov rdx, OME_message_collect_nursery.size
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	mov r10, [rbp+TC_nursery_base_pointer]
+	lea rdi, [rbp+TC_SIZE]          ; space 1 is just after the TC data
+	cmp rdi, r10
+	jne .space1
+	add rdi, NURSERY_SIZE           ; space 2 is after space 1
+.space1:
+	mov [rbp+TC_nursery_base_pointer], rdi
+	mov r8, rsp
+.stackloop:
+	mov rsi, [r8]           ; get tagged pointer from stack
+	mov rax, rsi
+	untag_pointer rsi
+	get_tag rax
+	cmp rax, 255            ; check tag is pointer type
+	jbe .stacknext
+	cmp rsi, r10            ; check pointer in from-space
+	jb .stacknext
+	cmp rsi, rbx
+	jae .stacknext
+	mov rcx, [rsi-8]        ; get header or forwarding pointer
+	test rcx, 1
+	jz .stackforward
+	mov [rdi], rcx          ; store header in to-space
+	add rdi, 8
+	mov [rsi-8], rdi        ; store forwarding pointer
+	mov r11, rdi
+	tag_pointer r11, rax
+	mov [r8], r11           ; store new pointer to stack
+	shr rcx, 1              ; get object size
+	and rcx, GC_SIZE_MASK
+	rep movsq               ; copy object
+	jmp .stacknext
+.stackforward:
+	tag_pointer rcx, rax    ; store forwarded pointer to stack
+	mov [r8], rcx
+.stacknext:
+	add r8, 8
+	cmp r8, rbp
+	jb .stackloop
+	; now scan objects in to space
+	mov r8, [rbp+TC_nursery_base_pointer]
+	jmp .tospacenext
+.tospaceloop:
+	mov rdx, [r8]
+	add r8, 8
+	mov rcx, rdx
+	shr rcx, GC_SIZE_BITS + 1       ; get number of fields to scan
+	and rcx, GC_SIZE_MASK
+	lea r9, [r8+rcx*8]              ; compute address of last field to scan
+.fieldloop:
+	mov rsi, [r8]           ; get tagged pointer from field
+	mov rax, rsi
+	untag_pointer rsi
+	get_tag rax
+	cmp rax, 255            ; check tag is pointer type
+	jbe .fieldnext
+	cmp rsi, r10            ; check pointer in from-space
+	jb .fieldnext
+	cmp rsi, rbx
+	jae .fieldnext
+	mov rcx, [rsi-8]        ; get header or forwarding pointer
+	test rcx, 1
+	jz .fieldforward
+	mov [rdi], rcx          ; store header in to-space
+	add rdi, 8
+	mov [rsi-8], rdi        ; store forwarding pointer
+	mov r11, rdi
+	tag_pointer r11, rax
+	mov [r8], r11           ; store new pointer to field
+	shr rcx, 1              ; get object size
+	and rcx, GC_SIZE_MASK
+	rep movsq               ; copy object
+	jmp .fieldnext
+.fieldforward:
+	tag_pointer rcx, rax    ; store forwarded pointer to field
+	mov [r8], rcx
+.fieldnext:
+	add r8, 8
+	cmp r8, r9
+	jb .fieldloop
+	mov rcx, rdx
+	shr rcx, 1                      ; get object size
+	and rcx, GC_SIZE_MASK
+	shr rdx, GC_SIZE_BITS + 1       ; get number of fields to scan
+	and rdx, GC_SIZE_MASK
+	sub rcx, rdx
+	lea r8, [r8+rcx*8]              ; add to end pointer
+.tospacenext:
+	cmp r8, rdi
+	jb .tospaceloop
+	mov r12, [rbp+TC_nursery_base_pointer]
+	add r12, NURSERY_SIZE
+	mov rbx, rdi
+.exit:
+	; restore caller registers
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rcx
+	pop rdx
+	pop rsi
+	pop rdi
+	pop rax
+	ret
 
 ; rdi = file descriptor
 ; rsi = value
@@ -555,7 +695,7 @@ BuiltInMethod('string', constant_to_tag(Constant_DivideByZeroError), [], '''\
 BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	untag_integer rdi               ; untag integer
 .gc_return_0:
-	gc_alloc rsi, 24, .gc_full_0    ; pre-allocate string on heap
+	gc_alloc_data rsi, 24, .gc_full_0   ; pre-allocate string on heap
 	mov r11, rsi
 	tag_pointer r11, Tag_String     ; tagged and ready for returning
 	mov rcx, rsp                    ; rcx = string output cursor
@@ -837,7 +977,9 @@ BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''\
 
 BuiltInMethod('size', Tag_Array, [], '''\
 	untag_pointer rdi
-	mov eax, dword [rdi-4]
+	mov rax, [rdi-8]                ; load gc header
+	shr rax, 1                      ; get array size
+	and rax, GC_SIZE_MASK
 	tag_integer rax
 	ret
 '''),
@@ -851,7 +993,9 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 	untag_integer rsi
 	test rsi, rsi
 	js OME_index_error
-	mov ecx, dword [rdi-4]          ; load array size
+	mov rcx, [rdi-8]                ; load gc header
+	shr rcx, 1                      ; get array size
+	and rcx, GC_SIZE_MASK
 	cmp rsi, rcx                    ; check index
 	jae OME_index_error
 	mov rax, qword [rdi+rsi*8]
@@ -860,25 +1004,27 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 
 BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	sub rsp, 24
-	untag_value rdi
-	mov ecx, dword [rdi*8-4]  ; load array size
-	test ecx, ecx             ; check if zero
+	untag_pointer rdi
+	mov rcx, [rdi-8]        ; load gc header
+	shr rcx, 1              ; get array size
+	and rcx, GC_SIZE_MASK
+	test rcx, rcx           ; check if zero
 	jz .exit
-	lea rcx, [rdi+rcx]      ; end of array
+	lea rcx, [rdi+rcx*8]    ; end of array
 	mov [rsp], rdi          ; save array pointer
 	mov [rsp+8], rcx        ; save end pointer
 	mov [rsp+16], rsi       ; save block
 	mov rdx, rdi
 	mov rdi, rsi
 .loop:
-	mov rsi, qword [rdx*8]
+	mov rsi, qword [rdx]
 	call OME_message_item__1
 	test rax, rax           ; check for error
 	js .exit
 	mov rdx, [rsp]          ; load array pointer
 	mov rcx, [rsp+8]        ; load end pointer
 	mov rdi, [rsp+16]       ; load block
-	inc rdx
+	add rdx, 8
 	mov [rsp], rdx
 	cmp rdx, rcx
 	jb .loop
