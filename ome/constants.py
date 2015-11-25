@@ -6,7 +6,9 @@ NUM_TAG_BITS = 17
 NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
-NUM_HEADER_USER_BITS = 32
+
+GC_SIZE_BITS = 10  # Maximum object size 2^10 = 1024 slots (8 KB)
+GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
 
 MAX_TAG = 2**(NUM_TAG_BITS-1) - 1  # Highest bit of tag is error bit
 MIN_CONSTANT_TAG = 2**NUM_TAG_BITS
@@ -17,7 +19,7 @@ MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
 MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
 MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
 MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
-MAX_ARRAY_SIZE = 2**NUM_HEADER_USER_BITS - 1
+MAX_ARRAY_SIZE = 2**GC_SIZE_BITS - 1
 
 MASK_TAG = (1 << NUM_TAG_BITS) - 1
 MASK_DATA = (1 << NUM_DATA_BITS) - 1
@@ -58,6 +60,11 @@ def encode_constant(constant):
 
 def encode_error_constant(constant):
     return encode_tagged_value(constant, error_tag(Tag_Constant))
+
+def encode_gc_header(num_slots, num_scan_slots):
+    assert (num_slots & GC_SIZE_MASK) == num_slots
+    assert (num_scan_slots & GC_SIZE_MASK) == num_slots
+    return (num_scan_slots << (GC_SIZE_BITS + 1)) | (num_slots << 1) | 1
 
 class Error(Exception):
     pass

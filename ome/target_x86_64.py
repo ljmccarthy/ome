@@ -4,14 +4,6 @@
 from .ast import BuiltInMethod
 from .constants import *
 
-GC_SIZE_BITS = 10  # Maximum object size 2^10 = 1024 slots (8 KB)
-GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
-
-def encode_gc_header(num_slots, num_scan_slots):
-    assert (num_slots & GC_SIZE_MASK) == num_slots
-    assert (num_scan_slots & GC_SIZE_MASK) == num_slots
-    return (num_scan_slots << (GC_SIZE_BITS + 1)) | (num_slots << 1) | 1
-
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
