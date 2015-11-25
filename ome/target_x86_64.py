@@ -25,6 +25,7 @@ class Target_x86_64(object):
         self.emit = emitter
         self.num_jumpback_labels = 0
         self.num_traceback_labels = 0
+        self.tracebacks = {}
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
@@ -80,8 +81,17 @@ class Target_x86_64(object):
 
     def CALL(self, ins):
         if ins.traceback_info:
-            traceback_label = '.traceback_%d' % self.num_traceback_labels
-            self.num_traceback_labels += 1
+            if ins.traceback_info.file_info in self.tracebacks:
+                traceback_label = self.tracebacks[ins.traceback_info.file_info]
+            else:
+                traceback_label = '.traceback_%d' % self.num_traceback_labels
+                self.num_traceback_labels += 1
+                self.tracebacks[ins.traceback_info.file_info] = traceback_label
+                tb_emit = self.emit.tail_emitter(traceback_label)
+                tb_emit('lea rdi, [rel %s]', ins.traceback_info.file_info)
+                tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
+                tb_emit('call OME_append_traceback')
+                tb_emit('jmp .exit')
         else:
             traceback_label = '.exit'
 
@@ -90,13 +100,6 @@ class Target_x86_64(object):
             self.emit('add rsp, %s', ins.num_stack_args * 8)
         self.emit('test rax, rax')
         self.emit('js %s', traceback_label)
-
-        if ins.traceback_info:
-            tb_emit = self.emit.tail_emitter(traceback_label)
-            tb_emit('lea rdi, [rel %s]', ins.traceback_info.file_info)
-            tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
-            tb_emit('call OME_append_traceback')
-            tb_emit('jmp .exit')
 
     def emit_tag(self, reg, tag):
         self.emit('shl %s, %s', reg, NUM_TAG_BITS)
