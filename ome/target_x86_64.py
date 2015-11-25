@@ -249,6 +249,7 @@ class Target_x86_64(object):
 
 default rel
 
+%define GC_DEBUG      0
 %define STACK_SIZE    0x1000
 %define NURSERY_SIZE  0x3800
 
@@ -364,12 +365,14 @@ OME_collect_nursery:
 	push r9
 	push r10
 	push r11
+%if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
 	mov rdx, OME_message_collect_nursery.size
 	mov rax, SYS_write
 	mov rdi, 2
 	syscall
+%endif
 	mov r10, [rbp+TC_nursery_base_pointer]
 	lea rdi, [rbp+TC_SIZE]          ; space 1 is just after the TC data
 	cmp rdi, r10
@@ -383,8 +386,11 @@ OME_collect_nursery:
 	mov rax, rsi
 	untag_pointer rsi
 	get_tag rax
+	test rax, rax
+	jz .stackuntagged
 	cmp rax, 255            ; check tag is pointer type
 	jbe .stacknext
+.stackuntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .stacknext
 	cmp rsi, rbx
@@ -424,8 +430,11 @@ OME_collect_nursery:
 	mov rax, rsi
 	untag_pointer rsi
 	get_tag rax
+	test rax, rax
+	jz .fielduntagged
 	cmp rax, 255            ; check tag is pointer type
 	jbe .fieldnext
+.fielduntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .fieldnext
 	cmp rsi, rbx
@@ -469,6 +478,19 @@ OME_collect_nursery:
 	sub rcx, rdi
 	shr rcx, 3
 	rep stosq
+%if GC_DEBUG
+	; clear from-space
+	mov rdi, r10
+	mov rcx, NURSERY_SIZE/8
+	xor rax, rax
+	rep stosq
+	; print debug message
+	lea rsi, [rel OME_message_done]
+	mov rdx, OME_message_done.size
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+%endif
 	; restore caller registers
 	pop r11
 	pop r10
@@ -561,7 +583,11 @@ OME_message_mmap_failed:
 .size equ $-.str
 
 OME_message_collect_nursery:
-.str:	db "Garbage collector called", 10
+.str:	db "Running garbage collector..."
+.size equ $-.str
+
+OME_message_done:
+.str:	db " done", 10
 .size equ $-.str
 '''
 
