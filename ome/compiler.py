@@ -8,6 +8,7 @@ import struct
 import subprocess
 import sys
 
+from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .constants import *
 from .dispatcher import generate_dispatcher
@@ -168,12 +169,13 @@ class Program(object):
     def generate_assembly(self, out):
         out.write('bits 64\n\nsection .text\n\n')
 
-        env = {
-            'MAIN': make_call_label(self.toplevel_block.tag, 'main'),
-            'NUM_TAG_BITS': NUM_TAG_BITS,
-            'NUM_DATA_BITS': NUM_DATA_BITS,
-        }
-        out.write(self.target_type.builtin_code.format(**env))
+        define_format = self.target_type.define_constant_format
+        for name, value in sorted(constants.__dict__.items()):
+            if isinstance(value, int):
+                out.write(define_format.format(name, value))
+
+        out.write(define_format.format('OME_main', make_call_label(self.toplevel_block.tag, 'main')))
+        out.write(self.target_type.builtin_code)
         out.write(self.compile_method_with_label(self.toplevel_method, 'OME_toplevel'))
         out.write('\n')
 

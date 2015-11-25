@@ -13,6 +13,8 @@ class Target_x86_64(object):
     return_register = 'rax'
     temp_registers = ('r10', 'r11')
 
+    define_constant_format = '%define {0} {1}\n'
+
     def __init__(self, emitter):
         self.emit = emitter
         self.num_jumpback_labels = 0
@@ -144,36 +146,21 @@ class Target_x86_64(object):
         tail_emit('jmp %s', return_label)
 
     builtin_code = '''\
-%define OME_NUM_TAG_BITS {NUM_TAG_BITS}
-%define OME_NUM_DATA_BITS {NUM_DATA_BITS}
-
-%define GC_SIZE_BITS 10
-%define GC_SIZE_MASK ((1 << GC_SIZE_BITS) - 1)
-
-%define OME_Value(value, tag) (((tag) << OME_NUM_DATA_BITS) | (value))
+%define OME_Value(value, tag) (((tag) << NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
-%define OME_Error_Tag(tag) ((tag) | (1 << (OME_NUM_TAG_BITS - 1)))
+%define OME_Error_Tag(tag) ((tag) | (1 << (NUM_TAG_BITS - 1)))
 %define OME_Error_Constant(value) OME_Value(value, OME_Error_Tag(Tag_Constant))
-
-%define Tag_Boolean 0
-%define Tag_Constant 1
-%define Tag_Small_Integer 2
-%define Tag_String 256
-%define Constant_BuiltIn 1
-%define Constant_NotUnderstoodError 2
-%define Constant_TypeError 3
-%define Constant_IndexError 4
-%define Constant_OverflowError 5
-%define Constant_DivideByZeroError 6
 
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
 
+; Thread context structure
 %define TC_stack_limit 0
 %define TC_traceback_pointer 8
 %define TC_nursery_base_pointer 16
 %define TC_SIZE 24
 
+; Traceback entry structure
 %define TB_file_info 0
 %define TB_source_line 8
 %define TB_SIZE 16
@@ -213,24 +200,24 @@ class Target_x86_64(object):
 %endmacro
 
 %macro get_tag 1
-	shr %1, OME_NUM_DATA_BITS
+	shr %1, NUM_DATA_BITS
 %endmacro
 
 %macro get_tag_noerror 1
 	shl %1, 1
-	shr %1, OME_NUM_DATA_BITS + 1
+	shr %1, NUM_DATA_BITS + 1
 %endmacro
 
 %macro tag_pointer 2
-	shl %1, OME_NUM_TAG_BITS
+	shl %1, NUM_TAG_BITS
 	or %1, %2
-	ror %1, OME_NUM_TAG_BITS
+	ror %1, NUM_TAG_BITS
 %endmacro
 
 %macro tag_value 2
-	shl %1, OME_NUM_TAG_BITS
+	shl %1, NUM_TAG_BITS
 	or %1, %2
-	ror %1, OME_NUM_TAG_BITS
+	ror %1, NUM_TAG_BITS
 %endmacro
 
 %macro tag_integer 1
@@ -238,18 +225,18 @@ class Target_x86_64(object):
 %endmacro
 
 %macro untag_pointer 1
-	shl %1, OME_NUM_TAG_BITS
-	shr %1, OME_NUM_TAG_BITS
+	shl %1, NUM_TAG_BITS
+	shr %1, NUM_TAG_BITS
 %endmacro
 
 %macro untag_value 1
-	shl %1, OME_NUM_TAG_BITS
-	shr %1, OME_NUM_TAG_BITS
+	shl %1, NUM_TAG_BITS
+	shr %1, NUM_TAG_BITS
 %endmacro
 
 %macro untag_integer 1
-	shl %1, OME_NUM_TAG_BITS
-	sar %1, OME_NUM_TAG_BITS
+	shl %1, NUM_TAG_BITS
+	sar %1, NUM_TAG_BITS
 %endmacro
 
 %macro constant_string 2
@@ -275,9 +262,9 @@ _start:
 	mov [rbp+TC_stack_limit], rax
 	mov [rbp+TC_traceback_pointer], rax
 	mov [rbp+TC_nursery_base_pointer], rbx
-	call OME_toplevel               ; create top-level block
+	call OME_toplevel       ; create top-level block
 	mov rdi, rax
-	call {MAIN}             ; call main method on top-level block
+	call OME_main           ; call main method on top-level block
 	xor rdi, rdi
 	test rax, rax
 	jns .success
@@ -539,8 +526,8 @@ OME_not_understood_error:
 
 OME_check_overflow:
 	mov rdx, rax
-	shl rdx, OME_NUM_TAG_BITS
-	sar rdx, OME_NUM_TAG_BITS
+	shl rdx, NUM_TAG_BITS
+	sar rdx, NUM_TAG_BITS
 	cmp rdx, rax
 	jne OME_overflow_error
 	tag_integer rax
@@ -792,8 +779,8 @@ BuiltInMethod('power:', Tag_Small_Integer, [], '''\
 .loop:
 	imul rdi
 	mov r8, rax
-	shl r8, OME_NUM_TAG_BITS
-	sar r8, OME_NUM_TAG_BITS
+	shl r8, NUM_TAG_BITS
+	sar r8, NUM_TAG_BITS
 	cmp r8, rax
 	jne OME_overflow_error
 	sub rcx, 1
