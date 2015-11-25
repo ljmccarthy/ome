@@ -206,6 +206,12 @@ class Target_x86_64(object):
 	jmp %1
 %endmacro
 
+%macro get_gc_object_size 2
+	mov %1, [%2-8]
+	shr %1, 1
+	and %1, GC_SIZE_MASK
+%endmacro
+
 %macro get_tag 1
 	shr %1, OME_NUM_DATA_BITS
 %endmacro
@@ -970,9 +976,7 @@ BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''\
 
 BuiltInMethod('size', Tag_Array, [], '''\
 	untag_pointer rdi
-	mov rax, [rdi-8]                ; load gc header
-	shr rax, 1                      ; get array size
-	and rax, GC_SIZE_MASK
+	get_gc_object_size rax, rdi
 	tag_integer rax
 	ret
 '''),
@@ -986,9 +990,7 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 	untag_integer rsi
 	test rsi, rsi
 	js OME_index_error
-	mov rcx, [rdi-8]                ; load gc header
-	shr rcx, 1                      ; get array size
-	and rcx, GC_SIZE_MASK
+	get_gc_object_size rcx, rdi
 	cmp rsi, rcx                    ; check index
 	jae OME_index_error
 	mov rax, qword [rdi+rsi*8]
@@ -999,9 +1001,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	sub rsp, 32
 	mov [rsp+24], rdi       ; save tagged pointer for GC
 	untag_pointer rdi
-	mov rcx, [rdi-8]        ; load gc header
-	shr rcx, 1              ; get array size
-	and rcx, GC_SIZE_MASK
+	get_gc_object_size rcx, rdi
 	test rcx, rcx           ; check if zero
 	jz .exit
 	lea rcx, [rdi+rcx*8]    ; end of array
