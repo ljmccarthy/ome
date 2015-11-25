@@ -133,7 +133,8 @@ class Program(object):
                     source_line = self.data_table.allocate_string(ps.current_line.strip()))
 
     def compile_method_with_label(self, method, label):
-        code = method.generate_code(self.target_type)
+        code = method.generate_code()
+        code.optimise(self.target_type)
         code.allocate_data(self.data_table)
         return code.generate_assembly(label, self.target_type)
 

@@ -268,11 +268,9 @@ class Method(object):
         visitor(self)
         self.expr.walk(visitor)
 
-    def generate_code(self, target_type):
+    def generate_code(self):
         code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args))
         code.add_instruction(RETURN(self.expr.generate_code(code)))
-        #print('optimising %s' % self.symbol)
-        code.optimise(target_type)
         return code
 
 class Sequence(object):
