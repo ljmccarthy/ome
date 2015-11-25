@@ -268,8 +268,8 @@ class Method(object):
         visitor(self)
         self.expr.walk(visitor)
 
-    def generate_code(self):
-        code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args))
+    def generate_code(self, data_table):
+        code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args), data_table)
         code.add_instruction(RETURN(self.expr.generate_code(code)))
         return code
 
@@ -562,5 +562,6 @@ class String(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_STRING(dest, self.string))
+        label = code.data_table.allocate_string(self.string)
+        code.add_instruction(LOAD_LABEL(dest, Tag_String, label))
         return dest

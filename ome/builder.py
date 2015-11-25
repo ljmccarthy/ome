@@ -10,9 +10,10 @@ class Label(object):
         self.location = location
 
 class MethodCodeBuilder(object):
-    def __init__(self, num_args, num_locals):
+    def __init__(self, num_args, num_locals, data_table):
         self.num_args = num_args + 1  # self is arg 0
         self.num_locals = num_args + num_locals + 1
+        self.data_table = data_table
         self.instructions = []
         self.labels = []
         self.dest = self.add_temp()
@@ -40,11 +41,6 @@ class MethodCodeBuilder(object):
         self.instructions = eliminate_redundant_untags(self.instructions)
         self.num_locals = renumber_locals(self.instructions, self.num_args)
         self.instructions, self.num_stack_slots = allocate_registers(self.instructions, self.num_args, target_type)
-
-    def allocate_data(self, data_table):
-        for ins in self.instructions:
-            if isinstance(ins, LOAD_STRING):
-                ins.data_label = data_table.allocate_string(ins.string)
 
     def generate_assembly(self, label, target_type):
         emit = ProcedureCodeEmitter(label)

@@ -11,7 +11,6 @@ import sys
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .constants import *
 from .dispatcher import generate_dispatcher
-from .instructions import LOAD_STRING
 from .labels import *
 from .parser import Parser
 from .target_x86_64 import Target_x86_64
@@ -132,9 +131,8 @@ class Program(object):
                     source_line = self.data_table.allocate_string(ps.current_line.strip()))
 
     def compile_method_with_label(self, method, label):
-        code = method.generate_code()
+        code = method.generate_code(self.data_table)
         code.optimise(self.target_type)
-        code.allocate_data(self.data_table)
         return code.generate_assembly(label, self.target_type)
 
     def compile_method(self, method, tag):

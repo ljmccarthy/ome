@@ -28,7 +28,7 @@ def eliminate_aliases(instructions):
 
 def move_constants_to_usage_points(instructions, num_locals):
     """
-    Remove LOAD_VALUE/LOAD_STRING instructions and re-inserts loading to a
+    Remove LOAD_VALUE/LOAD_LABEL instructions and re-inserts loading to a
     new local just before they are needed. This reduces the size of the live
     set since it is only needed for an instance and can be re-loaded again
     as needed.
@@ -36,13 +36,13 @@ def move_constants_to_usage_points(instructions, num_locals):
 
     instructions_out = []
     constant_values = {}
-    constant_strings = {}
+    constant_labels = {}
 
     for ins in instructions:
         if isinstance(ins, LOAD_VALUE):
             constant_values[ins.dest] = ins
-        elif isinstance(ins, LOAD_STRING):
-            constant_strings[ins.dest] = ins
+        elif isinstance(ins, LOAD_LABEL):
+            constant_labels[ins.dest] = ins
         else:
             for i, arg in enumerate(ins.args):
                 if arg in constant_values:
@@ -50,9 +50,9 @@ def move_constants_to_usage_points(instructions, num_locals):
                     instructions_out.append(LOAD_VALUE(num_locals, cins.tag, cins.value))
                     ins.args[i] = num_locals
                     num_locals += 1
-                elif arg in constant_strings:
-                    cins = constant_strings[arg]
-                    instructions_out.append(LOAD_STRING(num_locals, cins.string))
+                elif arg in constant_labels:
+                    cins = constant_labels[arg]
+                    instructions_out.append(LOAD_LABEL(num_locals, cins.tag, cins.label))
                     ins.args[i] = num_locals
                     num_locals += 1
             instructions_out.append(ins)

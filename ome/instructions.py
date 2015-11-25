@@ -76,13 +76,14 @@ class LOAD_VALUE(Instruction):
     def __str__(self):
         return '%%%s = $%04X:%012X' % (self.dest, self.tag, self.value)
 
-class LOAD_STRING(Instruction):
-    def __init__(self, dest, string):
+class LOAD_LABEL(Instruction):
+    def __init__(self, dest, tag, label):
         self.dest = dest
-        self.string = string
+        self.tag = tag
+        self.label = label
 
     def __str__(self):
-        return "%%%s = '%s'" % (self.dest, self.string)
+        return "%%%s = LABEL $04X %s'" % (self.dest, self.tag, self.label)
 
 class GET_SLOT(Instruction):
     def __init__(self, dest, object, slot_index):

@@ -116,9 +116,9 @@ class Target_x86_64(object):
         else:
             self.emit('mov %s, 0x%x', ins.dest, value)
 
-    def LOAD_STRING(self, ins):
-        self.emit('lea %s, [rel %s]', ins.dest, ins.data_label)
-        self.emit_tag(ins.dest, Tag_String)
+    def LOAD_LABEL(self, ins):
+        self.emit('lea %s, [rel %s]', ins.dest, ins.label)
+        self.emit_tag(ins.dest, ins.tag)
 
     def GET_SLOT(self, ins):
         self.emit('mov %s, [%s+%s]', ins.dest, ins.object, ins.slot_index * 8)
