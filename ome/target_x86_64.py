@@ -470,7 +470,12 @@ OME_collect_nursery:
 	mov r12, [rbp+TC_nursery_base_pointer]
 	add r12, NURSERY_SIZE
 	mov rbx, rdi
-.exit:
+	; clear unused area
+	xor rax, rax
+	mov rcx, r12
+	sub rcx, rdi
+	shr rcx, 3
+	rep stosq
 	; restore caller registers
 	pop r11
 	pop r10
