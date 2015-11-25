@@ -99,7 +99,7 @@ class Target_x86_64(object):
             tb_emit('jmp .exit')
 
     def emit_tag(self, reg, tag):
-        self.emit('shl %s, %s', reg, NUM_TAG_BITS - 3)
+        self.emit('shl %s, %s', reg, NUM_TAG_BITS)
         self.emit('or %s, %s', reg, tag)
         self.emit('ror %s, %s', reg, NUM_TAG_BITS)
 
@@ -112,7 +112,7 @@ class Target_x86_64(object):
         if ins.dest != ins.source:
             self.emit('mov %s, %s', ins.dest, ins.source)
         self.emit('shl %s, %s', ins.dest, NUM_TAG_BITS)
-        self.emit('shr %s, %s', ins.dest, NUM_TAG_BITS - 3)
+        self.emit('shr %s, %s', ins.dest, NUM_TAG_BITS)
 
     def LOAD_VALUE(self, ins):
         value = encode_tagged_value(ins.value, ins.tag)
@@ -228,7 +228,7 @@ class Target_x86_64(object):
 %endmacro
 
 %macro tag_pointer 2
-	shl %1, OME_NUM_TAG_BITS - 3
+	shl %1, OME_NUM_TAG_BITS
 	or %1, %2
 	ror %1, OME_NUM_TAG_BITS
 %endmacro
@@ -245,7 +245,7 @@ class Target_x86_64(object):
 
 %macro untag_pointer 1
 	shl %1, OME_NUM_TAG_BITS
-	shr %1, OME_NUM_TAG_BITS - 3
+	shr %1, OME_NUM_TAG_BITS
 %endmacro
 
 %macro untag_value 1
