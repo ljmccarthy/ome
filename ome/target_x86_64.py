@@ -1032,8 +1032,8 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	mov [rsp], rdx
 	cmp rdx, rcx
 	jb .loop
-	xor rax, rax            ; return False
 .exit:
+	xor rax, rax            ; return False
 	add rsp, 32
 	ret
 ''')
