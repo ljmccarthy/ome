@@ -1003,7 +1003,8 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, ['item:'], '''\
-	sub rsp, 24
+	sub rsp, 32
+	mov [rsp+24], rdi       ; save tagged pointer for GC
 	untag_pointer rdi
 	mov rcx, [rdi-8]        ; load gc header
 	shr rcx, 1              ; get array size
@@ -1017,7 +1018,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	mov rdx, rdi
 	mov rdi, rsi
 .loop:
-	mov rsi, qword [rdx]
+	mov rsi, [rdx]
 	call OME_message_item__1
 	test rax, rax           ; check for error
 	js .exit
@@ -1030,7 +1031,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	jb .loop
 	xor rax, rax            ; return False
 .exit:
-	add rsp, 24
+	add rsp, 32
 	ret
 ''')
 
