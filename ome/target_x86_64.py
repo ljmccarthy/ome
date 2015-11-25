@@ -134,29 +134,22 @@ class Target_x86_64(object):
     def SET_SLOT(self, ins):
         self.emit('mov [%s+%s], %s', ins.object, ins.slot_index * 8, ins.value)
 
-    def emit_create(self, dest, num_slots):
+    def ALLOCATE(self, ins):
         return_label = '.gc_return_%d' % self.num_jumpback_labels
         full_label = '.gc_full_%d' % self.num_jumpback_labels
         self.num_jumpback_labels += 1
 
         self.emit.label(return_label)
-        self.emit('mov %s, %s', dest, self.nursery_bump_pointer)
-        self.emit('add %s, %s', self.nursery_bump_pointer, (num_slots + 1) * 8)
+        self.emit('mov %s, %s', ins.dest, self.nursery_bump_pointer)
+        self.emit('add %s, %s', self.nursery_bump_pointer, (ins.num_slots + 1) * 8)
         self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
         self.emit('jae %s', full_label)
-        self.emit('mov qword [%s], %s', dest, encode_gc_header(num_slots, num_slots))
-        self.emit('add %s, 8', dest)
+        self.emit('mov qword [%s], %s', ins.dest, encode_gc_header(ins.num_slots, ins.num_slots))
+        self.emit('add %s, 8', ins.dest)
 
         tail_emit = self.emit.tail_emitter(full_label)
         tail_emit('call OME_collect_nursery')
         tail_emit('jmp %s', return_label)
-
-    def CREATE(self, ins):
-        self.emit_create(ins.dest, ins.num_slots)
-
-    def CREATE_ARRAY(self, ins):
-        self.emit_create(ins.dest, ins.size)
-        self.emit('mov dword [%s-4], %s', ins.dest, ins.size)
 
     builtin_code = '''\
 %define OME_NUM_TAG_BITS {NUM_TAG_BITS}

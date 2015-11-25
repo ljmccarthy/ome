@@ -180,7 +180,7 @@ class Block(object):
             code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
         else:
             object = code.add_temp()
-            code.add_instruction(CREATE(object, self.tag, len(self.slots)))
+            code.add_instruction(ALLOCATE(object, len(self.slots)))
             for slot_index, var in enumerate(self.slots):
                 arg = var.generate_code(code)
                 code.add_instruction(SET_SLOT(object, slot_index, arg))
@@ -356,7 +356,7 @@ class Array(object):
     def generate_code(self, code):
         array = code.add_temp()
         dest = code.add_temp()
-        code.add_instruction(CREATE_ARRAY(array, len(self.elems)))
+        code.add_instruction(ALLOCATE(array, len(self.elems)))
         for i, elem in enumerate(self.elems):
             elem = elem.generate_code(code)
             code.add_instruction(SET_SLOT(array, i, elem))

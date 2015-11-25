@@ -47,22 +47,13 @@ class UNTAG(Instruction):
     def source(self):
         return self.args[0]
 
-class CREATE(Instruction):
-    def __init__(self, dest, tag, num_slots):
+class ALLOCATE(Instruction):
+    def __init__(self, dest, num_slots):
         self.dest = dest
-        self.tag = tag
         self.num_slots = num_slots
 
     def __str__(self):
-        return '%%%s = CREATE $%04X %d' % (self.dest, self.tag, self.num_slots)
-
-class CREATE_ARRAY(Instruction):
-    def __init__(self, dest, size):
-        self.dest = dest
-        self.size = size
-
-    def __str__(self):
-        return '%%%s = CREATE_ARRAY %s' % (self.dest, self.size)
+        return '%%%s = ALLOCATE %d' % (self.dest, self.num_slots)
 
 class ALIAS(Instruction):
     def __init__(self, dest, source):
