@@ -73,7 +73,6 @@ class Program(object):
             raise Error('Error: No main method defined')
 
         self.target_type = target_type
-        self.block_list = []
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = DataTable()
 
