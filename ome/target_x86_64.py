@@ -250,6 +250,7 @@ class Target_x86_64(object):
 default rel
 
 %define GC_DEBUG      0
+%define PAGE_SIZE     0x1000
 %define STACK_SIZE    0x1000
 %define NURSERY_SIZE  0x3800
 
@@ -322,20 +323,20 @@ _start:
 
 OME_allocate_thread_context:
 	mov rax, SYS_mmap
-	xor rdi, rdi	  ; addr
-	mov rsi, 0xA000   ; size
-	xor rdx, rdx	  ; PROT_NONE
+	xor rdi, rdi                                            ; addr
+	mov rsi, STACK_SIZE + NURSERY_SIZE*2 + PAGE_SIZE*2      ; size
+	xor rdx, rdx                                            ; PROT_NONE
 	mov r10, MAP_PRIVATE|MAP_ANONYMOUS
 	mov r8, r8
 	dec r8
 	xor r9, r9
 	syscall
-	lea rdi, [rax+0x1000]  ; save pointer returned by mmap
+	lea rdi, [rax+PAGE_SIZE]  ; save pointer returned by mmap
 	push rdi
 	shr rax, 47   ; test for MAP_FAILED or address that is too big
 	jnz .panic
 	mov rax, SYS_mprotect
-	mov rsi, 0x8000
+	mov rsi, STACK_SIZE + NURSERY_SIZE*2
 	mov rdx, PROT_READ|PROT_WRITE
 	syscall
 	test rax, rax
