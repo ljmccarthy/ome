@@ -17,9 +17,12 @@ from .parser import Parser
 from .target_x86_64 import Target_x86_64
 
 class TraceBackInfo(object):
-    def __init__(self, file_info, source_line):
+    def __init__(self, id, file_info, source_line, column, underline):
+        self.id = id
         self.file_info = file_info
         self.source_line = source_line
+        self.column = column
+        self.underline = underline
 
 def encode_string_data(string):
     """Add 32-bit length header and nul termination/alignment padding."""
@@ -127,9 +130,21 @@ class Program(object):
                 ps = send.parse_state
                 file_info = '\n  File "%s", line %s, in |%s|\n    ' % (
                     ps.stream_name, ps.line_number, send.method.symbol)
+
+                line_unstripped = ps.current_line.rstrip()
+                line = line_unstripped.lstrip()
+                column = 4 + (ps.column - (len(line_unstripped) - len(line)))
+
+                underline = send.symbol.find(':') + 1
+                if underline < 1:
+                    underline = len(send.symbol)
+
                 send.traceback_info = TraceBackInfo(
+                    id = (ps.stream_name, ps.line_number, ps.column),
                     file_info = self.data_table.allocate_string(file_info),
-                    source_line = self.data_table.allocate_string(ps.current_line.strip()))
+                    source_line = self.data_table.allocate_string(line),
+                    column = column,
+                    underline = underline)
 
     def compile_method_with_label(self, method, label):
         code = method.generate_code(self.data_table)

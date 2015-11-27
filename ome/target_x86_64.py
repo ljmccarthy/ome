@@ -75,15 +75,16 @@ class Target_x86_64(object):
 
     def CALL(self, ins):
         if ins.traceback_info:
-            if ins.traceback_info.file_info in self.tracebacks:
-                traceback_label = self.tracebacks[ins.traceback_info.file_info]
+            if ins.traceback_info.id in self.tracebacks:
+                traceback_label = self.tracebacks[ins.traceback_info.id]
             else:
                 traceback_label = '.traceback_%d' % self.num_traceback_labels
                 self.num_traceback_labels += 1
-                self.tracebacks[ins.traceback_info.file_info] = traceback_label
+                self.tracebacks[ins.traceback_info.id] = traceback_label
                 tb_emit = self.emit.tail_emitter(traceback_label)
                 tb_emit('lea rdi, [rel %s]', ins.traceback_info.file_info)
                 tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
+                tb_emit('mov rdx, %s', (ins.traceback_info.column << 16) | ins.traceback_info.underline)
                 tb_emit('call OME_append_traceback')
                 tb_emit('jmp .exit')
         else:
@@ -163,7 +164,8 @@ class Target_x86_64(object):
 ; Traceback entry structure
 %define TB_file_info 0
 %define TB_source_line 8
-%define TB_SIZE 16
+%define TB_column 16
+%define TB_SIZE 24
 
 %define SYS_write 1
 %define SYS_mmap 9
@@ -287,18 +289,47 @@ _start:
 	mov rdi, 2
 	syscall
 .tbloop:
+	; file and line info
 	mov rsi, [r14+TB_file_info]
 	mov edx, dword [rsi]
 	add rsi, 4
 	mov rax, SYS_write
 	mov rdi, 2
 	syscall
+	; source code line
 	mov rsi, [r14+TB_source_line]
 	mov edx, dword [rsi]
 	add rsi, 4
 	mov rax, SYS_write
 	mov rdi, 2
 	syscall
+	; red squiggle underline
+	mov rcx, [r14+TB_column]
+	mov rdx, rcx
+	and rdx, 0xffff         ; get number of squiggles
+	shr rcx, 16             ; get number of spaces
+	lea r15, [rcx+rdx+1+OME_vt100_red.size+OME_vt100_clear.size]
+	sub rsp, r15            ; allocate temp stack space for string
+	mov rdi, rsp
+	mov byte [rdi], 10      ; newline
+	inc rdi
+	mov al, ' '
+	rep stosb               ; spaces
+	mov rsi, OME_vt100_red
+	mov rcx, OME_vt100_red.size
+	rep movsb               ; VT100 red
+	mov rcx, rdx
+	mov al, '^'             ; squiggles
+	rep stosb
+	mov rsi, OME_vt100_clear
+	mov rcx, OME_vt100_clear.size
+	rep movsb               ; VT100 clear
+	mov rsi, rsp
+	mov rdx, r15
+	mov rax, SYS_write
+	mov rdi, 2
+	syscall
+	add rsp, r15
 	sub r14, TB_SIZE
 	cmp r14, r13
 	jae .tbloop
@@ -524,14 +555,16 @@ OME_print_value:
 
 ; rdi = traceback file_info
 ; rsi = traceback source_line
+; rdx = (column << 16) | underline
 OME_append_traceback:
-	mov rdx, [rbp+TC_traceback_pointer]
-	lea rcx, [rdx+TB_SIZE]
+	mov r8, [rbp+TC_traceback_pointer]
+	lea rcx, [r8+TB_SIZE]
 	cmp rcx, rsp            ; check to make sure we don't overwrite stack
 	ja .exit
 	mov [rbp+TC_traceback_pointer], rcx
-	mov [rdx+TB_file_info], rdi
-	mov [rdx+TB_source_line], rsi
+	mov [r8+TB_file_info], rdi
+	mov [r8+TB_source_line], rsi
+	mov [r8+TB_column], rdx
 .exit:
 	ret
 
@@ -577,6 +610,14 @@ constant_string OME_string_divide_by_zero_error, "Divide-By-Zero-Error"
 
 OME_message_traceback:
 .str:	db 10, "Traceback (most recent call last):"
+.size equ $-.str
+
+OME_vt100_red:
+.str:	db 0x1b, "[31m"
+.size equ $-.str
+
+OME_vt100_clear:
+.str:	db 0x1b, "[0m"
 .size equ $-.str
 
 OME_message_mmap_failed:

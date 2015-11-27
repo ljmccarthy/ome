@@ -330,13 +330,14 @@ class Parser(ParserState):
 
     def expr(self):
         expr = None
-        parse_state = self.copy_state()
         self.scan()
         if not self.peek(re_keyword):
             expr = self.unaryexpr()
         symbol = ''
         args = []
-        kw_parse_state = self.copy_state()
+        self.scan()
+        parse_state = self.copy_state()
+        kw_parse_state = parse_state
         for m in self.repeat_expr_token(re_keyword):
             part = m.group()
             if part[0] == '~':
