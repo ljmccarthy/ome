@@ -747,48 +747,42 @@ BuiltInMethod('string', constant_to_tag(Constant_DivideByZeroError), [], '''\
 '''),
 
 BuiltInMethod('string', Tag_Small_Integer, [], '''\
-	untag_integer rdi               ; untag integer
+	mov r9, rdi
+	untag_integer r9                ; untag integer
 .gc_return_0:
-	gc_alloc_data rsi, 24, .gc_full_0   ; pre-allocate string on heap
-	mov r11, rsi
+	gc_alloc_data rdi, 24, .gc_full_0   ; pre-allocate string on heap
+	mov r11, rdi
 	tag_pointer r11, Tag_String     ; tagged and ready for returning
-	mov rcx, rsp                    ; rcx = string output cursor
+	mov rsi, rsp                    ; rsi = string output cursor
+	mov r8, rsp
 	sub rsp, 16                     ; allocate temp stack space for string
 	mov r10, 10                     ; divisor
-	dec rcx
-	mov byte [rcx], 0       ; nul terminator
-	mov rax, rdi            ; number for division
+	dec rsi
+	mov byte [rsi], 0       ; nul terminator
+	mov rax, r9             ; number for division
 	mov rdx, rax
 	sar rdx, 63             ; compute absolute value
 	xor rax, rdx
 	sub rax, rdx
 .divloop:
 	xor rdx, rdx            ; clear for division
-	dec rcx                 ; next character
+	dec rsi                 ; next character
 	idiv r10                ; divide by 10
 	add dl, '0'             ; digit in remainder
-	mov byte [rcx], dl      ; store digit
+	mov byte [rsi], dl      ; store digit
 	test rax, rax           ; loop if not zero
 	jnz .divloop
-	test rdi, rdi
+	test r9, r9
 	jns .positive
-	dec rcx
-	mov byte [rcx], '-'     ; add sign
+	dec rsi
+	mov byte [rsi], '-'     ; add sign
 .positive:
-	lea rdi, [rsp+16]       ; original stack pointer
-	mov rdx, rdi
-	sub rdx, rcx            ; compute length
-	mov dword [rsi], edx    ; store length
-	add rsi, 4
-	; copy from stack to allocated string
-.copyloop:
-	mov al, byte [rcx]
-	mov byte [rsi], al
-	inc rsi
-	inc rcx
-	cmp rcx, rdi
-	jb .copyloop
-	mov rsp, rdi    ; restore stack pointer
+	mov rcx, r8
+	sub rcx, rsi            ; compute length
+	mov dword [rdi], ecx    ; store length
+	add rdi, 4
+	rep movsb       ; copy from stack to allocated string
+	mov rsp, r8     ; restore stack pointer
 	mov rax, r11    ; tagged return value
 	ret
 .gc_full_0:
