@@ -757,11 +757,9 @@ BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	mov r8, rsp
 	sub rsp, 16                     ; allocate temp stack space for string
 	mov r10, 10                     ; divisor
-	dec rsi
-	mov byte [rsi], 0       ; nul terminator
-	mov rax, r9             ; number for division
+	mov rax, r9                     ; number for division
 	mov rdx, rax
-	sar rdx, 63             ; compute absolute value
+	sar rdx, 63                     ; compute absolute value
 	xor rax, rdx
 	sub rax, rdx
 .divloop:
