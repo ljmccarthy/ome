@@ -357,7 +357,7 @@ class Array(object):
         num_elems = code.add_temp()
         array = code.add_temp()
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(num_slots, 0, len(self.elems)))
+        code.add_instruction(LOAD_VALUE(num_elems, 0, len(self.elems)))
         code.add_instruction(CALL(array, [num_elems], 'OME_allocate', None))
         for i, elem in enumerate(self.elems):
             elem = elem.generate_code(code)
