@@ -75,7 +75,7 @@ class Send(object):
         else:
             call_label = make_send_label(self.symbol)
 
-        code.add_instruction(CALL(dest, receiver, args, call_label, self.traceback_info))
+        code.add_instruction(CALL(dest, [receiver] + args, call_label, self.traceback_info))
         return dest
 
     check_error = True
@@ -179,8 +179,10 @@ class Block(object):
         if self.is_constant:
             code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
         else:
+            num_slots = code.add_temp()
             object = code.add_temp()
-            code.add_instruction(ALLOCATE(object, len(self.slots)))
+            code.add_instruction(LOAD_VALUE(num_slots, 0, len(self.slots)))
+            code.add_instruction(CALL(object, [num_slots], 'OME_allocate', None))
             for slot_index, var in enumerate(self.slots):
                 arg = var.generate_code(code)
                 code.add_instruction(SET_SLOT(object, slot_index, arg))
@@ -352,9 +354,11 @@ class Array(object):
             elem.walk(visitor)
 
     def generate_code(self, code):
+        num_elems = code.add_temp()
         array = code.add_temp()
         dest = code.add_temp()
-        code.add_instruction(ALLOCATE(array, len(self.elems)))
+        code.add_instruction(LOAD_VALUE(num_slots, 0, len(self.elems)))
+        code.add_instruction(CALL(array, [num_elems], 'OME_allocate', None))
         for i, elem in enumerate(self.elems):
             elem = elem.generate_code(code)
             code.add_instruction(SET_SLOT(array, i, elem))

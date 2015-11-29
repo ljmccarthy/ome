@@ -181,20 +181,6 @@ class Target_x86_64(object):
 %define PROT_WRITE 0x2
 %define PROT_EXEC 0x4
 
-%macro gc_alloc_data 3
-	mov %1, rbx
-	add rbx, (%2) + 8
-	cmp rbx, r12
-	jae %3
-	mov qword [%1], (%2 << 1) | 1
-	add %1, 8
-%endmacro
-
-%macro gc_return 1
-	call OME_collect_nursery
-	jmp %1
-%endmacro
-
 %macro get_gc_object_size 2
 	mov %1, [%2-8]
 	shr %1, 1
@@ -385,18 +371,27 @@ OME_panic:
 	mov rdi, 1
 	syscall
 
-OME_collect_nursery:
-	; push all registers to stack so that we can scan them
-	; the mutator could be using any of them at this time
-	push rax
+; rdi = number of slots
+OME_allocate:
+	mov rax, rbx
+	lea rbx, [rbx+rdi*8+8]  ; add object size to bump pointer
+	cmp rbx, r12            ; check if beyond limit
+	jae .full
+	mov rcx, 1              ; object header present bit
+	shl rdi, 1
+	or rcx, rdi             ; total number of slots
+	shl rdi, GC_SIZE_BITS
+	or rcx, rdi             ; number of slots to scan
+	mov [rax], rcx          ; store header
+	add rax, 8              ; return address after header
+	ret
+.full:
 	push rdi
-	push rsi
-	push rdx
-	push rcx
-	push r8
-	push r9
-	push r10
-	push r11
+	call OME_collect_nursery
+	pop rdi
+	jmp OME_allocate
+
+OME_collect_nursery:
 %if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
@@ -425,7 +420,7 @@ OME_collect_nursery:
 .stackuntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .stacknext
-	cmp rsi, rbx
+	cmp rsi, r12
 	jae .stacknext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
 	test rcx, 1
@@ -438,6 +433,8 @@ OME_collect_nursery:
 	mov [r8], r11           ; store new pointer to stack
 	shr rcx, 1              ; get object size
 	and rcx, GC_SIZE_MASK
+	test rcx, rcx           ; sanity check object size is not 0
+	jz .stacknext
 	rep movsq               ; copy object
 	jmp .stacknext
 .stackforward:
@@ -469,7 +466,7 @@ OME_collect_nursery:
 .fielduntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .fieldnext
-	cmp rsi, rbx
+	cmp rsi, r12
 	jae .fieldnext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
 	test rcx, 1
@@ -482,6 +479,8 @@ OME_collect_nursery:
 	mov [r8], r11           ; store new pointer to field
 	shr rcx, 1              ; get object size
 	and rcx, GC_SIZE_MASK
+	test rcx, rcx           ; sanity check object size is not 0
+	jz .fieldnext
 	rep movsq               ; copy object
 	jmp .fieldnext
 .fieldforward:
@@ -523,16 +522,6 @@ OME_collect_nursery:
 	mov rdi, 2
 	syscall
 %endif
-	; restore caller registers
-	pop r11
-	pop r10
-	pop r9
-	pop r8
-	pop rcx
-	pop rdx
-	pop rsi
-	pop rdi
-	pop rax
 	ret
 
 ; rdi = file descriptor
@@ -678,8 +667,7 @@ BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), [], '''\
 '''),
 
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
-	sub rsp, 8
-	mov [rsp], rsi
+	push rsi
 	mov rdi, rsi
 .loop:
 	call OME_message_while__0
@@ -747,10 +735,12 @@ BuiltInMethod('string', constant_to_tag(Constant_DivideByZeroError), [], '''\
 '''),
 
 BuiltInMethod('string', Tag_Small_Integer, [], '''\
-	mov r9, rdi
-	untag_integer r9                ; untag integer
-.gc_return_0:
-	gc_alloc_data rdi, 24, .gc_full_0   ; pre-allocate string on heap
+	push rdi
+	mov rdi, 3                      ; 3 slots = 24 bytes
+	call OME_allocate               ; pre-allocate string on heap
+	mov rdi, rax
+	pop r9
+	untag_integer r9
 	mov r11, rdi
 	tag_pointer r11, Tag_String     ; tagged and ready for returning
 	mov rsi, rsp                    ; rsi = string output cursor
@@ -783,8 +773,6 @@ BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	mov rsp, r8     ; restore stack pointer
 	mov rax, r11    ; tagged return value
 	ret
-.gc_full_0:
-	gc_return .gc_return_0
 '''),
 
 BuiltInMethod('plus:', Tag_Small_Integer, [], '''\
