@@ -354,6 +354,7 @@ OME_panic:
 	mov rdi, 1
 	syscall
 
+align 16
 ; rdi = number of slots
 OME_allocate:
 	mov rax, rbx
@@ -369,12 +370,7 @@ OME_allocate:
 	add rax, 8              ; return address after header
 	ret
 .full:
-	push rdi
-	call OME_collect_nursery
-	pop rdi
-	jmp OME_allocate
-
-OME_collect_nursery:
+	mov rbx, rdi            ; save number of slots argument
 %if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
@@ -484,8 +480,9 @@ OME_collect_nursery:
 	cmp r8, rdi
 	jb .tospaceloop
 	mov r12, [rbp+TC_nursery_base_pointer]
-	add r12, NURSERY_SIZE
-	mov rbx, rdi
+	add r12, NURSERY_SIZE   ; set GC nursery limit
+	mov r8, rbx             ; save number of slots argument to r8
+	mov rbx, rdi            ; set GC nursery pointer
 	; clear unused area
 	xor rax, rax
 	mov rcx, r12
@@ -505,7 +502,8 @@ OME_collect_nursery:
 	mov rdi, 2
 	syscall
 %endif
-	ret
+	mov rdi, r8             ; restore number of slots argument
+	jmp OME_allocate
 
 ; rdi = file descriptor
 ; rsi = value
