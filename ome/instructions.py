@@ -47,14 +47,6 @@ class UNTAG(Instruction):
     def source(self):
         return self.args[0]
 
-class ALLOCATE(Instruction):
-    def __init__(self, dest, num_slots):
-        self.dest = dest
-        self.num_slots = num_slots
-
-    def __str__(self):
-        return '%%%s = ALLOCATE %d' % (self.dest, self.num_slots)
-
 class ALIAS(Instruction):
     def __init__(self, dest, source):
         self.dest = dest

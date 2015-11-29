@@ -129,23 +129,6 @@ class Target_x86_64(object):
     def SET_SLOT(self, ins):
         self.emit('mov [%s+%s], %s', ins.object, ins.slot_index * 8, ins.value)
 
-    def ALLOCATE(self, ins):
-        return_label = '.gc_return_%d' % self.num_jumpback_labels
-        full_label = '.gc_full_%d' % self.num_jumpback_labels
-        self.num_jumpback_labels += 1
-
-        self.emit.label(return_label)
-        self.emit('mov %s, %s', ins.dest, self.nursery_bump_pointer)
-        self.emit('add %s, %s', self.nursery_bump_pointer, (ins.num_slots + 1) * 8)
-        self.emit('cmp %s, %s', self.nursery_bump_pointer, self.nursery_limit_pointer)
-        self.emit('jae %s', full_label)
-        self.emit('mov qword [%s], %s', ins.dest, encode_gc_header(ins.num_slots, ins.num_slots))
-        self.emit('add %s, 8', ins.dest)
-
-        tail_emit = self.emit.tail_emitter(full_label)
-        tail_emit('call OME_collect_nursery')
-        tail_emit('jmp %s', return_label)
-
     builtin_code = '''\
 %define OME_Value(value, tag) (((tag) << NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
