@@ -284,13 +284,13 @@ _start:
 	inc rdi
 	mov al, ' '
 	rep stosb               ; spaces
-	mov rsi, OME_vt100_red
+	lea rsi, [rel OME_vt100_red]
 	mov rcx, OME_vt100_red.size
 	rep movsb               ; VT100 red
 	mov rcx, rdx
 	mov al, '^'             ; squiggles
 	rep stosb
-	mov rsi, OME_vt100_clear
+	lea rsi, [rel OME_vt100_clear]
 	mov rcx, OME_vt100_clear.size
 	rep movsb               ; VT100 clear
 	mov rsi, rsp
@@ -344,7 +344,7 @@ OME_allocate_thread_context:
 	pop rax
 	ret
 .panic:
-	mov rsi, OME_message_mmap_failed
+	lea rsi, [rel OME_message_mmap_failed]
 	mov rdx, OME_message_mmap_failed.size
 OME_panic:
 	mov rax, SYS_write
