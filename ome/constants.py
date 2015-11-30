@@ -7,7 +7,7 @@ NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
 
-GC_SIZE_BITS = 10  # Maximum object size 2^10 = 1024 slots (8 KB)
+GC_SIZE_BITS = 8  # Maximum object size 2^8-1 = 255 slots (~2 KB)
 GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
 
 MAX_TAG = 2**(NUM_TAG_BITS-1) - 1  # Highest bit of tag is error bit
