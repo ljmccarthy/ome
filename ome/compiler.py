@@ -50,7 +50,7 @@ class DataTable(object):
         return '(OME_data+%s)' % self.string_offsets[string]
 
     def generate_assembly(self, out):
-        out.write('align 8\nOME_data:\n')
+        out.write('\nalign 8\nOME_data:\n')
         for data in self.data:
              out.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
         out.write('.end:\n')
@@ -182,8 +182,6 @@ class Program(object):
         methods.clear()
 
     def generate_assembly(self, out):
-        out.write('bits 64\n\nsection .text\n\n')
-
         define_format = self.target_type.define_constant_format
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int):
@@ -211,10 +209,8 @@ class Program(object):
                 out.write(generate_dispatcher(symbol, [], self.target_type))
                 out.write('\n')
 
-        out.write('section .rodata\n\n')
-        self.data_table.generate_assembly(out)
-        out.write('\n')
         out.write(self.target_type.builtin_data)
+        self.data_table.generate_assembly(out)
 
 def parse_file(filename):
     with open(filename) as f:

@@ -129,7 +129,12 @@ class Target_x86_64(object):
     def SET_SLOT(self, ins):
         self.emit('mov [%s+%s], %s', ins.object, ins.slot_index * 8, ins.value)
 
-    builtin_code = '''\
+    builtin_code = '''
+%define GC_DEBUG      0
+%define PAGE_SIZE     0x1000
+%define STACK_SIZE    0x1000
+%define NURSERY_SIZE  0x3800
+
 %define OME_Value(value, tag) (((tag) << NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
 %define OME_Error_Tag(tag) ((tag) | (1 << (NUM_TAG_BITS - 1)))
@@ -150,6 +155,7 @@ class Target_x86_64(object):
 %define TB_column 16
 %define TB_SIZE 24
 
+; System call numbers
 %define SYS_write 1
 %define SYS_mmap 9
 %define SYS_mprotect 10
@@ -218,12 +224,10 @@ class Target_x86_64(object):
 	align 8
 %endmacro
 
-default rel
+section .text
 
-%define GC_DEBUG      0
-%define PAGE_SIZE     0x1000
-%define STACK_SIZE    0x1000
-%define NURSERY_SIZE  0x3800
+bits 64
+default rel
 
 global _start
 _start:
@@ -569,6 +573,8 @@ OME_divide_by_zero_error:
 '''
 
     builtin_data = '''\
+section .rodata
+
 align 8
 constant_string OME_string_false, "False"
 constant_string OME_string_true, "True"
