@@ -639,7 +639,8 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	shr rax, 1
 	mov rdi, [rsp]
 	mov rsi, rax
-	call OME_message_catch__1
+	add rsp, 8
+	jmp OME_message_catch__1
 .exit:
 	add rsp, 8
 	ret
