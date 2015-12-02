@@ -4,6 +4,17 @@
 from . import arch_x86_64 as arch
 
 class Target_Linux_x86_64(arch.Target_x86_64):
+
+    platform = ('Linux', 'x86_64')
+
+    @classmethod
+    def get_assembler_args(cls, outfile):
+        return ['yasm', '-f', 'elf64', '-o', outfile, '-']
+
+    @classmethod
+    def get_linker_args(cls, infile, outfile):
+        return ['ld', '-s', '-o', outfile, infile]
+
     builtin_methods = arch.builtin_methods
 
     builtin_macros = arch.builtin_macros + '''

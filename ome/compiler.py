@@ -14,7 +14,7 @@ from .constants import *
 from .dispatcher import generate_dispatcher
 from .labels import *
 from .parser import Parser
-from .target import target_platforms, default_target_platform
+from .target import target_platform_map, default_target_platform
 
 class TraceBackInfo(object):
     def __init__(self, id, file_info, source_line, column, underline):
@@ -232,24 +232,24 @@ def compile_file_to_assembly(filename, target_type):
     #print(asm)
     return asm.encode('utf8')
 
-def run_assembler(input, outfile):
-    p = subprocess.Popen(['yasm', '-f', 'elf64', '-o', outfile, '-'], stdin=subprocess.PIPE)
+def run_assembler(target_type, input, outfile):
+    p = subprocess.Popen(target_type.get_assembler_args(outfile), stdin=subprocess.PIPE)
     p.communicate(input)
     if p.returncode != 0:
         sys.exit(p.returncode)
 
-def run_linker(infile, outfile):
-    p = subprocess.Popen(['ld', '-s', '-o', outfile, infile])
+def run_linker(target_type, infile, outfile):
+    p = subprocess.Popen(target_type.get_linker_args(infile, outfile))
     p.communicate()
     if p.returncode != 0:
         sys.exit(p.returncode)
 
 def compile_file(filename, target_platform=default_target_platform):
-    if target_platform not in target_platforms:
+    if target_platform not in target_platform_map:
         raise Error('Unsupported target platform: {0}-{1}'.format(*target_platform))
-    target_type = target_platforms[target_platform]
+    target_type = target_platform_map[target_platform]
     asm = compile_file_to_assembly(filename, target_type)
     exe_file = os.path.splitext(filename)[0]
     obj_file = exe_file + '.o'
-    run_assembler(asm, obj_file)
-    run_linker(obj_file, exe_file)
+    run_assembler(target_type, asm, obj_file)
+    run_linker(target_type, obj_file, exe_file)
