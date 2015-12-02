@@ -43,11 +43,14 @@ class DataTable(object):
         self.size += len(data)
         return offset
 
-    def allocate_string(self, string):
+    def allocate_string_offset(self, string):
         if string not in self.string_offsets:
             data = encode_string_data(string)
             self.string_offsets[string] = self.append_data(data)
-        return '(OME_data+%s)' % self.string_offsets[string]
+        return self.string_offsets[string]
+
+    def allocate_string(self, string):
+        return '(OME_data+%s)' % self.allocate_string_offset(string)
 
     def generate_assembly(self, out):
         out.write('\nalign 8\nOME_data:\n')
