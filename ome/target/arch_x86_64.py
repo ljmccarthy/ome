@@ -201,6 +201,11 @@ builtin_macros = '''
 	sar %1, NUM_TAG_BITS
 %endmacro
 
+%macro unwrap_error 1
+	shl %1, 1
+	shr %1, 1
+%endmacro
+
 %macro constant_string 2
 %1:
 	dd .end-$-5
@@ -223,20 +228,35 @@ OME_start:
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
-	xor rdi, rdi
-	test rax, rax
-	jns .success
-.abort:
-	; save error value
-	shl rax, 1
-	shr rax, 1
-	push rax
+	xor rdi, rdi            ; return code
+	test rax, rax           ; check for error
+	jns OME_exit
+	unwrap_error rax
+	push rax                ; save error value
+	call OME_print_traceback
+	call .newline           ; print error value
+	pop rsi
+	mov rdi, STDERR
+	call OME_print_value
+	call .newline
+	mov rdi, 1              ; return code
+	jmp OME_exit
+.newline:
+	lea rsi, [rel OME_message_traceback]
+	mov rdx, 1
+	mov rdi, STDERR
+	jmp OME_write
+
+OME_print_traceback:
+	push r13
+	push r14
+	push r15
 	; print traceback
 	mov r13, [rbp+TC_stack_limit]
 	mov r14, [rbp+TC_traceback_pointer]
 	sub r14, TB_SIZE
 	cmp r14, r13
-	jb .failure
+	jb .exit
 	lea rsi, [rel OME_message_traceback]
 	mov rdx, OME_message_traceback.size
 	mov rdi, STDERR
@@ -283,21 +303,11 @@ OME_start:
 	sub r14, TB_SIZE
 	cmp r14, r13
 	jae .tbloop
-.failure:
-	; print error value
-	call .newline
-	pop rsi
-	mov rdi, 2
-	call OME_print_value
-	call .newline
-	mov rdi, 1
-.success:
-	jmp OME_exit
-.newline:
-	lea rsi, [rel OME_message_traceback]
-	mov rdx, 1
-	mov rdi, STDERR
-	jmp OME_write
+.exit:
+	pop r15
+	pop r14
+	pop r13
+	ret
 
 align 16
 ; rdi = number of slots
@@ -563,8 +573,7 @@ BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 	call OME_message_do__0
 	mov rdi, [rbp+TC_stack_limit]
 	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
-	shl rax, 1                              ; clear error bit if present
-	shr rax, 1
+	unwrap_error rax                        ; clear error bit if present
 	ret
 '''),
 
@@ -577,8 +586,7 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	jns .exit
 	mov rdi, [rbp+TC_stack_limit]
 	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
-	shl rax, 1                              ; clear error bit if present
-	shr rax, 1
+	unwrap_error rax                        ; clear error bit if present
 	mov rdi, [rsp]
 	mov rsi, rax
 	add rsp, 8
