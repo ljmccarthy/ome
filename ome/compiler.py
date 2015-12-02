@@ -14,7 +14,7 @@ from .constants import *
 from .dispatcher import generate_dispatcher
 from .labels import *
 from .parser import Parser
-from .target_x86_64 import Target_x86_64
+from .target import target_platforms, default_target_platform
 
 class TraceBackInfo(object):
     def __init__(self, id, file_info, source_line, column, underline):
@@ -188,7 +188,9 @@ class Program(object):
                 out.write(define_format.format(name, value))
 
         out.write(define_format.format('OME_main', make_call_label(self.toplevel_block.tag, 'main')))
+        out.write(self.target_type.builtin_macros)
         out.write(self.target_type.builtin_code)
+        out.write('\n')
         out.write(self.compile_method_with_label(self.toplevel_method, 'OME_toplevel'))
         out.write('\n')
 
@@ -242,7 +244,10 @@ def run_linker(infile, outfile):
     if p.returncode != 0:
         sys.exit(p.returncode)
 
-def compile_file(filename, target_type=Target_x86_64):
+def compile_file(filename, target_platform=default_target_platform):
+    if target_platform not in target_platforms:
+        raise Error('Unsupported target platform: {0}-{1}'.format(*target_platform))
+    target_type = target_platforms[target_platform]
     asm = compile_file_to_assembly(filename, target_type)
     exe_file = os.path.splitext(filename)[0]
     obj_file = exe_file + '.o'

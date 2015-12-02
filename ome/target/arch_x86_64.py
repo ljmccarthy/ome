@@ -1,8 +1,8 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
-from .ast import BuiltInMethod
-from .constants import *
+from ..ast import BuiltInMethod
+from ..constants import *
 
 class Target_x86_64(object):
     stack_pointer = 'rsp'
@@ -129,7 +129,7 @@ class Target_x86_64(object):
     def SET_SLOT(self, ins):
         self.emit('mov [%s+%s], %s', ins.object, ins.slot_index * 8, ins.value)
 
-    builtin_code = '''
+builtin_macros = '''
 %define GC_DEBUG      0
 %define PAGE_SIZE     0x1000
 %define STACK_SIZE    0x1000
@@ -154,21 +154,6 @@ class Target_x86_64(object):
 %define TB_source_line 8
 %define TB_column 16
 %define TB_SIZE 24
-
-; System call numbers
-%define SYS_write 1
-%define SYS_mmap 9
-%define SYS_mprotect 10
-%define SYS_munmap 11
-%define SYS_mremap 25
-%define SYS_exit 60
-
-%define MAP_PRIVATE 0x2
-%define MAP_ANONYMOUS 0x20
-
-%define PROT_READ 0x1
-%define PROT_WRITE 0x2
-%define PROT_EXEC 0x4
 
 %macro get_gc_object_size 2
 	mov %1, [%2-8]
@@ -223,14 +208,10 @@ class Target_x86_64(object):
 .end:
 	align 8
 %endmacro
+'''
 
-section .text
-
-bits 64
-default rel
-
-global _start
-_start:
+builtin_code = '''
+OME_start:
 	call OME_allocate_thread_context
 	lea rsp, [rax+STACK_SIZE-TC_SIZE]       ; stack pointer (grows down)
 	mov rbp, rsp                            ; thread context pointer
@@ -258,24 +239,21 @@ _start:
 	jb .failure
 	lea rsi, [rel OME_message_traceback]
 	mov rdx, OME_message_traceback.size
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 .tbloop:
 	; file and line info
 	mov rsi, [r14+TB_file_info]
 	mov edx, dword [rsi]
 	add rsi, 4
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 	; source code line
 	mov rsi, [r14+TB_source_line]
 	mov edx, dword [rsi]
 	add rsi, 4
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 	; red squiggle underline
 	mov rcx, [r14+TB_column]
 	mov rdx, rcx
@@ -299,9 +277,8 @@ _start:
 	rep movsb               ; VT100 clear
 	mov rsi, rsp
 	mov rdx, r15
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 	add rsp, r15
 	sub r14, TB_SIZE
 	cmp r14, r13
@@ -315,48 +292,12 @@ _start:
 	call .newline
 	mov rdi, 1
 .success:
-	mov rax, SYS_exit
-	syscall
+	jmp OME_exit
 .newline:
 	lea rsi, [rel OME_message_traceback]
 	mov rdx, 1
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
-	ret
-
-OME_allocate_thread_context:
-	mov rax, SYS_mmap
-	xor rdi, rdi                                            ; addr
-	mov rsi, STACK_SIZE + NURSERY_SIZE*2 + PAGE_SIZE*2      ; size
-	xor rdx, rdx                                            ; PROT_NONE
-	mov r10, MAP_PRIVATE|MAP_ANONYMOUS
-	mov r8, r8
-	dec r8
-	xor r9, r9
-	syscall
-	lea rdi, [rax+PAGE_SIZE]  ; save pointer returned by mmap
-	push rdi
-	shr rax, 47   ; test for MAP_FAILED or address that is too big
-	jnz .panic
-	mov rax, SYS_mprotect
-	mov rsi, STACK_SIZE + NURSERY_SIZE*2
-	mov rdx, PROT_READ|PROT_WRITE
-	syscall
-	test rax, rax
-	js .panic
-	pop rax
-	ret
-.panic:
-	lea rsi, [rel OME_message_mmap_failed]
-	mov rdx, OME_message_mmap_failed.size
-OME_panic:
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
-	mov rax, SYS_exit
-	mov rdi, 1
-	syscall
+	mov rdi, STDERR
+	jmp OME_write
 
 align 16
 ; rdi = number of slots
@@ -379,9 +320,8 @@ OME_allocate:
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
 	mov rdx, OME_message_collect_nursery.size
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 %endif
 	mov r10, [rbp+TC_nursery_base_pointer]
 	lea rdi, [rbp+TC_SIZE]          ; space 1 is just after the TC data
@@ -502,12 +442,17 @@ OME_allocate:
 	; print debug message
 	lea rsi, [rel OME_message_done]
 	mov rdx, OME_message_done.size
-	mov rax, SYS_write
-	mov rdi, 2
-	syscall
+	mov rdi, STDERR
+	call OME_write
 %endif
 	mov rdi, r8             ; restore number of slots argument
 	jmp OME_allocate
+
+OME_panic:
+	mov rdi, STDERR
+	call OME_write
+	mov rdi, 1
+	jmp OME_exit
 
 ; rdi = file descriptor
 ; rsi = value
@@ -523,8 +468,7 @@ OME_print_value:
 	untag_pointer rsi
 	mov edx, dword [rsi]
 	add rsi, 4
-	mov rax, SYS_write
-	syscall
+	call OME_write
 	ret
 
 ; rdi = traceback file_info
@@ -572,9 +516,7 @@ OME_divide_by_zero_error:
 	ret
 '''
 
-    builtin_data = '''\
-section .rodata
-
+builtin_data = '''\
 align 8
 constant_string OME_string_false, "False"
 constant_string OME_string_true, "True"
@@ -609,10 +551,10 @@ OME_message_done:
 .size equ $-.str
 '''
 
-    builtin_methods = [
+builtin_methods = [
 
 BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
-	mov rdi, 1
+	mov rdi, STDOUT
 	jmp OME_print_value
 '''),
 
