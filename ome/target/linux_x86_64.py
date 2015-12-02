@@ -35,6 +35,9 @@ class Target_Linux_x86_64(arch.Target_x86_64):
 
 %define STDOUT 1
 %define STDERR 2
+
+%define EXIT_SUCCESS 0
+%define EXIT_FAILURE 1
 '''
 
     builtin_data = 'section .rodata\n\n' + arch.builtin_data

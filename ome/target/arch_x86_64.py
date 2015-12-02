@@ -228,7 +228,7 @@ OME_start:
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
-	xor rdi, rdi            ; return code
+	mov rdi, EXIT_SUCCESS
 	test rax, rax           ; check for error
 	jns OME_exit
 	unwrap_error rax
@@ -239,7 +239,7 @@ OME_start:
 	mov rdi, STDERR
 	call OME_print_value
 	call .newline
-	mov rdi, 1              ; return code
+	mov rdi, EXIT_FAILURE
 	jmp OME_exit
 .newline:
 	lea rsi, [rel OME_message_traceback]
@@ -461,7 +461,7 @@ OME_allocate:
 OME_panic:
 	mov rdi, STDERR
 	call OME_write
-	mov rdi, 1
+	mov rdi, EXIT_FAILURE
 	jmp OME_exit
 
 ; rdi = file descriptor
