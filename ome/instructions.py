@@ -12,11 +12,12 @@ class Instruction(object):
         getattr(target, self.__class__.__name__)(self)
 
 class CALL(Instruction):
-    def __init__(self, dest, args, call_label, traceback_info):
+    def __init__(self, dest, args, call_label, traceback_info, check_error=True):
         self.dest = dest
         self.args = args
         self.call_label = call_label
         self.traceback_info = traceback_info
+        self.check_error = check_error
 
     def __str__(self):
         dest = '%%%s = ' % self.dest if self.dest else ''

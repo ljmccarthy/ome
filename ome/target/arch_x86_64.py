@@ -74,7 +74,7 @@ class Target_x86_64(object):
         self.emit('push %s', ins.source_reg)
 
     def CALL(self, ins):
-        if ins.traceback_info:
+        if ins.traceback_info and ins.check_error:
             if ins.traceback_info.id in self.tracebacks:
                 traceback_label = self.tracebacks[ins.traceback_info.id]
             else:
@@ -93,8 +93,9 @@ class Target_x86_64(object):
         self.emit('call %s', ins.call_label)
         if ins.num_stack_args > 0:
             self.emit('add rsp, %s', ins.num_stack_args * 8)
-        self.emit('test rax, rax')
-        self.emit('js %s', traceback_label)
+        if ins.check_error:
+            self.emit('test rax, rax')
+            self.emit('js %s', traceback_label)
 
     def emit_tag(self, reg, tag):
         self.emit('shl %s, %s', reg, NUM_TAG_BITS)
