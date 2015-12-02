@@ -36,7 +36,7 @@ class Target_x86_64(object):
 
     def emit_dispatch(self, any_constant_tags):
         self.emit('mov rax, %s', self.arg_registers[0])
-        self.emit('shr rax, %s', NUM_DATA_BITS)
+        self.emit('get_tag rax')
         if any_constant_tags:
             self.emit('cmp rax, %s', Tag_Constant)
             self.emit('je .constant')
@@ -97,21 +97,15 @@ class Target_x86_64(object):
             self.emit('test rax, rax')
             self.emit('js %s', traceback_label)
 
-    def emit_tag(self, reg, tag):
-        self.emit('shl %s, %s', reg, NUM_TAG_BITS)
-        self.emit('or %s, %s', reg, tag)
-        self.emit('ror %s, %s', reg, NUM_TAG_BITS)
-
     def TAG(self, ins):
         if ins.dest != ins.source:
             self.emit('mov %s, %s', ins.dest, ins.source)
-        self.emit_tag(ins.dest, ins.tag)
+        self.emit('tag_pointer %s, %s', ins.dest, ins.tag)
 
     def UNTAG(self, ins):
         if ins.dest != ins.source:
             self.emit('mov %s, %s', ins.dest, ins.source)
-        self.emit('shl %s, %s', ins.dest, NUM_TAG_BITS)
-        self.emit('shr %s, %s', ins.dest, NUM_TAG_BITS)
+        self.emit('untag_pointer %s', ins.dest)
 
     def LOAD_VALUE(self, ins):
         value = encode_tagged_value(ins.value, ins.tag)
@@ -122,7 +116,7 @@ class Target_x86_64(object):
 
     def LOAD_LABEL(self, ins):
         self.emit('lea %s, [rel %s]', ins.dest, ins.label)
-        self.emit_tag(ins.dest, ins.tag)
+        self.emit('tag_pointer %s, %s', ins.dest, ins.tag)
 
     def GET_SLOT(self, ins):
         self.emit('mov %s, [%s+%s]', ins.dest, ins.object, ins.slot_index * 8)
