@@ -594,6 +594,7 @@ OME_message_mmap_failed:
 .str:	db "Aborted: Failed to allocate thread context", 10
 .size equ $-.str
 
+%if GC_DEBUG
 OME_message_collect_nursery:
 .str:	db "Running garbage collector..."
 .size equ $-.str
@@ -601,6 +602,7 @@ OME_message_collect_nursery:
 OME_message_done:
 .str:	db " done", 10
 .size equ $-.str
+%endif
 '''
 
 builtin_methods = [
