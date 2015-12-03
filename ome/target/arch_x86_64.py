@@ -78,7 +78,7 @@ class Target_x86_64(object):
         self.emit('mov rax, %s', self.arg_registers[0])
         self.emit('get_tag rax')
         if any_constant_tags:
-            self.emit('cmp rax, %s', Tag_Constant)
+            self.emit('cmp eax, %s', Tag_Constant)
             self.emit('je .constant')
         self.emit.label('.dispatch')
         if any_constant_tags:
@@ -90,12 +90,12 @@ class Target_x86_64(object):
         not_understood_emit('jmp OME_not_understood_error')
 
     def emit_dispatch_compare_eq(self, tag, tag_label, exit_label):
-        self.emit('cmp rax, 0x%X', tag)
+        self.emit('cmp eax, 0x%x', tag)
         self.emit('jne %s', exit_label)
         self.emit('jmp %s', tag_label)
 
     def emit_dispatch_compare_gte(self, tag, gte_label):
-        self.emit('cmp rax, 0x%X', tag)
+        self.emit('cmp eax, 0x%x', tag)
         self.emit('jae %s', gte_label)
 
     def emit_jump(self, label):
@@ -124,7 +124,7 @@ class Target_x86_64(object):
                 tb_emit = self.emit.tail_emitter(traceback_label)
                 tb_emit('lea rdi, [rel %s]', ins.traceback_info.file_info)
                 tb_emit('lea rsi, [rel %s]', ins.traceback_info.source_line)
-                tb_emit('mov rdx, %s', (ins.traceback_info.column << 16) | ins.traceback_info.underline)
+                tb_emit('mov edx, %s', (ins.traceback_info.column << 16) | ins.traceback_info.underline)
                 tb_emit('call OME_append_traceback')
                 tb_emit('jmp .exit')
         else:
@@ -270,7 +270,7 @@ OME_start:
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
-	mov rdi, EXIT_SUCCESS
+	mov edi, EXIT_SUCCESS
 	test rax, rax           ; check for error
 	jns OME_exit
 	unwrap_error rax
@@ -278,15 +278,15 @@ OME_start:
 	call OME_print_traceback
 	call .newline           ; print error value
 	pop rsi
-	mov rdi, STDERR
+	mov edi, STDERR
 	call OME_print_value
 	call .newline
-	mov rdi, EXIT_FAILURE
+	mov edi, EXIT_FAILURE
 	jmp OME_exit
 .newline:
 	lea rsi, [rel OME_message_traceback]
-	mov rdx, 1
-	mov rdi, STDERR
+	mov edx, 1
+	mov edi, STDERR
 	jmp OME_write
 
 OME_print_traceback:
@@ -300,21 +300,21 @@ OME_print_traceback:
 	cmp r14, r13
 	jb .exit
 	lea rsi, [rel OME_message_traceback]
-	mov rdx, OME_message_traceback.size
-	mov rdi, STDERR
+	mov edx, OME_message_traceback.size
+	mov edi, STDERR
 	call OME_write
 .tbloop:
 	; file and line info
 	mov rsi, [r14+TB_file_info]
 	mov edx, dword [rsi]
-	add rsi, 4
-	mov rdi, STDERR
+	add esi, 4
+	mov edi, STDERR
 	call OME_write
 	; source code line
 	mov rsi, [r14+TB_source_line]
 	mov edx, dword [rsi]
 	add rsi, 4
-	mov rdi, STDERR
+	mov edi, STDERR
 	call OME_write
 	; red squiggle underline
 	mov rcx, [r14+TB_column]
@@ -329,17 +329,17 @@ OME_print_traceback:
 	mov al, ' '
 	rep stosb               ; spaces
 	lea rsi, [rel OME_vt100_red]
-	mov rcx, OME_vt100_red.size
+	mov ecx, OME_vt100_red.size
 	rep movsb               ; VT100 red
 	mov rcx, rdx
 	mov al, '^'             ; squiggles
 	rep stosb
 	lea rsi, [rel OME_vt100_clear]
-	mov rcx, OME_vt100_clear.size
+	mov ecx, OME_vt100_clear.size
 	rep movsb               ; VT100 clear
 	mov rsi, rsp
 	mov rdx, r15
-	mov rdi, STDERR
+	mov edi, STDERR
 	call OME_write
 	add rsp, r15
 	sub r14, TB_SIZE
@@ -371,8 +371,8 @@ OME_allocate:
 %if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
-	mov rdx, OME_message_collect_nursery.size
-	mov rdi, STDERR
+	mov edx, OME_message_collect_nursery.size
+	mov edi, STDERR
 	call OME_write
 %endif
 	mov r10, [rbp+TC_nursery_base_pointer]
@@ -493,17 +493,17 @@ OME_allocate:
 	rep stosq
 	; print debug message
 	lea rsi, [rel OME_message_done]
-	mov rdx, OME_message_done.size
-	mov rdi, STDERR
+	mov edx, OME_message_done.size
+	mov edi, STDERR
 	call OME_write
 %endif
 	mov rdi, r8             ; restore number of slots argument
 	jmp OME_allocate
 
 OME_panic:
-	mov rdi, STDERR
+	mov edi, STDERR
 	call OME_write
-	mov rdi, EXIT_FAILURE
+	mov edi, EXIT_FAILURE
 	jmp OME_exit
 
 ; rdi = file descriptor

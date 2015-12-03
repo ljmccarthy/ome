@@ -89,6 +89,6 @@ OME_allocate_thread_context:
 	ret
 .panic:
 	lea rsi, [rel OME_message_mmap_failed]
-	mov rdx, OME_message_mmap_failed.size
+	mov edx, OME_message_mmap_failed.size
 	jmp OME_panic
 ''' + arch.builtin_code
