@@ -186,16 +186,20 @@ builtin_macros = '''
 %define True OME_Value(1, Tag_Boolean)
 
 ; Thread context structure
-%define TC_stack_limit 0
-%define TC_traceback_pointer 8
-%define TC_nursery_base_pointer 16
-%define TC_SIZE 24
+struc TC
+	.stack_limit: resq 1
+	.traceback_pointer: resq 1
+	.nursery_base_pointer: resq 1
+	.size:
+endstruc
 
 ; Traceback entry structure
-%define TB_file_info 0
-%define TB_source_line 8
-%define TB_column 16
-%define TB_SIZE 24
+struc TB
+	.file_info: resq 1
+	.source_line: resq 1
+	.column: resq 1
+	.size:
+endstruc
 
 %macro get_gc_object_size 2
 	mov %1, [%2-8]
@@ -260,13 +264,13 @@ builtin_macros = '''
 builtin_code = '''
 OME_start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+STACK_SIZE-TC_SIZE]       ; stack pointer (grows down)
+	lea rsp, [rax+STACK_SIZE-TC.size]       ; stack pointer (grows down)
 	mov rbp, rsp                            ; thread context pointer
-	lea rbx, [rsp+TC_SIZE]                  ; GC nursery pointer (grows up)
+	lea rbx, [rsp+TC.size]                  ; GC nursery pointer (grows up)
 	lea r12, [rbx+NURSERY_SIZE]             ; GC nursery limit
-	mov [rbp+TC_stack_limit], rax
-	mov [rbp+TC_traceback_pointer], rax
-	mov [rbp+TC_nursery_base_pointer], rbx
+	mov [rbp+TC.stack_limit], rax
+	mov [rbp+TC.traceback_pointer], rax
+	mov [rbp+TC.nursery_base_pointer], rbx
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
@@ -294,9 +298,9 @@ OME_print_traceback:
 	push r14
 	push r15
 	; print traceback
-	mov r13, [rbp+TC_stack_limit]
-	mov r14, [rbp+TC_traceback_pointer]
-	sub r14, TB_SIZE
+	mov r13, [rbp+TC.stack_limit]
+	mov r14, [rbp+TC.traceback_pointer]
+	sub r14, TB.size
 	cmp r14, r13
 	jb .exit
 	lea rsi, [rel OME_message_traceback]
@@ -305,19 +309,19 @@ OME_print_traceback:
 	call OME_write
 .tbloop:
 	; file and line info
-	mov rsi, [r14+TB_file_info]
+	mov rsi, [r14+TB.file_info]
 	mov edx, dword [rsi]
 	add esi, 4
 	mov edi, STDERR
 	call OME_write
 	; source code line
-	mov rsi, [r14+TB_source_line]
+	mov rsi, [r14+TB.source_line]
 	mov edx, dword [rsi]
 	add rsi, 4
 	mov edi, STDERR
 	call OME_write
 	; red squiggle underline
-	mov rcx, [r14+TB_column]
+	mov rcx, [r14+TB.column]
 	mov rdx, rcx
 	and rdx, 0xffff         ; get number of squiggles
 	shr rcx, 16             ; get number of spaces
@@ -342,7 +346,7 @@ OME_print_traceback:
 	mov edi, STDERR
 	call OME_write
 	add rsp, r15
-	sub r14, TB_SIZE
+	sub r14, TB.size
 	cmp r14, r13
 	jae .tbloop
 .exit:
@@ -375,13 +379,13 @@ OME_allocate:
 	mov edi, STDERR
 	call OME_write
 %endif
-	mov r10, [rbp+TC_nursery_base_pointer]
-	lea rdi, [rbp+TC_SIZE]          ; space 1 is just after the TC data
+	mov r10, [rbp+TC.nursery_base_pointer]
+	lea rdi, [rbp+TC.size]          ; space 1 is just after the TC data
 	cmp rdi, r10
 	jne .space1
 	add rdi, NURSERY_SIZE           ; space 2 is after space 1
 .space1:
-	mov [rbp+TC_nursery_base_pointer], rdi
+	mov [rbp+TC.nursery_base_pointer], rdi
 	mov r8, rsp
 .stackloop:
 	mov rsi, [r8]           ; get tagged pointer from stack
@@ -420,7 +424,7 @@ OME_allocate:
 	cmp r8, rbp
 	jb .stackloop
 	; now scan objects in to space
-	mov r8, [rbp+TC_nursery_base_pointer]
+	mov r8, [rbp+TC.nursery_base_pointer]
 	jmp .tospacenext
 .tospaceloop:
 	mov rdx, [r8]
@@ -475,7 +479,7 @@ OME_allocate:
 .tospacenext:
 	cmp r8, rdi
 	jb .tospaceloop
-	mov r12, [rbp+TC_nursery_base_pointer]
+	mov r12, [rbp+TC.nursery_base_pointer]
 	add r12, NURSERY_SIZE   ; set GC nursery limit
 	mov r8, rbx             ; save number of slots argument to r8
 	mov rbx, rdi            ; set GC nursery pointer
@@ -527,14 +531,14 @@ OME_print_value:
 ; rsi = traceback source_line
 ; rdx = (column << 16) | underline
 OME_append_traceback:
-	mov r8, [rbp+TC_traceback_pointer]
-	lea rcx, [r8+TB_SIZE]
+	mov r8, [rbp+TC.traceback_pointer]
+	lea rcx, [r8+TB.size]
 	cmp rcx, rsp            ; check to make sure we don't overwrite stack
 	ja .exit
-	mov [rbp+TC_traceback_pointer], rcx
-	mov [r8+TB_file_info], rdi
-	mov [r8+TB_source_line], rsi
-	mov [r8+TB_column], rdx
+	mov [rbp+TC.traceback_pointer], rcx
+	mov [r8+TB.file_info], rdi
+	mov [r8+TB.source_line], rsi
+	mov [r8+TB.column], rdx
 .exit:
 	ret
 
@@ -615,8 +619,8 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
 BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 	mov rdi, rsi
 	call OME_message_do__0
-	mov rdi, [rbp+TC_stack_limit]
-	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
+	mov rdi, [rbp+TC.stack_limit]
+	mov [rbp+TC.traceback_pointer], rdi     ; reset traceback pointer
 	unwrap_error rax                        ; clear error bit if present
 	ret
 '''),
@@ -628,8 +632,8 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	call OME_message_do__0
 	test rax, rax
 	jns .exit
-	mov rdi, [rbp+TC_stack_limit]
-	mov [rbp+TC_traceback_pointer], rdi     ; reset traceback pointer
+	mov rdi, [rbp+TC.stack_limit]
+	mov [rbp+TC.traceback_pointer], rdi     ; reset traceback pointer
 	unwrap_error rax                        ; clear error bit if present
 	mov rdi, [rsp]
 	mov rsi, rax
