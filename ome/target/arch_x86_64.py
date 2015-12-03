@@ -4,6 +4,46 @@
 from ..ast import BuiltInMethod
 from ..constants import *
 
+DWORD_MAX = (1 << 32) - 1
+
+byte_register = {
+    'rax': 'al',
+    'rbx': 'bl',
+    'rcx': 'cl',
+    'rdx': 'dl',
+    'rsi': 'sil',
+    'rdi': 'dil',
+    'rbp': 'bpl',
+    'rsp': 'spl',
+    'r8':  'r8b',
+    'r9':  'r9b',
+    'r10': 'r10b',
+    'r11': 'r11b',
+    'r12': 'r12b',
+    'r13': 'r13b',
+    'r14': 'r14b',
+    'r15': 'r15b',
+}
+
+dword_register = {
+    'rax': 'eax',
+    'rbx': 'ebx',
+    'rcx': 'ecx',
+    'rdx': 'edx',
+    'rsi': 'esi',
+    'rdi': 'edi',
+    'rbp': 'ebp',
+    'rsp': 'esp',
+    'r8':  'r8d',
+    'r9':  'r9d',
+    'r10': 'r10d',
+    'r11': 'r11d',
+    'r12': 'r12d',
+    'r13': 'r13d',
+    'r14': 'r14d',
+    'r15': 'r15d',
+}
+
 class Target_x86_64(object):
     stack_pointer = 'rsp'
     context_pointer = 'rbp'
@@ -108,11 +148,18 @@ class Target_x86_64(object):
         self.emit('untag_pointer %s', ins.dest)
 
     def LOAD_VALUE(self, ins):
-        value = encode_tagged_value(ins.value, ins.tag)
-        if value == 0:
+        tagged_value = encode_tagged_value(ins.value, ins.tag)
+        if tagged_value == 0:
             self.emit('xor %s, %s', ins.dest, ins.dest)
         else:
-            self.emit('mov %s, 0x%x', ins.dest, value)
+            rot_value = (ins.value << NUM_TAG_BITS) | ins.tag
+            if tagged_value > DWORD_MAX and rot_value <= DWORD_MAX:
+                self.emit('mov %s, 0x%x', dword_register[ins.dest], rot_value)
+                self.emit('ror %s, %s', ins.dest, NUM_TAG_BITS)
+            elif tagged_value <= DWORD_MAX:
+                self.emit('mov %s, 0x%x', dword_register[ins.dest], tagged_value)
+            else:
+                self.emit('mov %s, 0x%x', ins.dest, tagged_value)
 
     def LOAD_LABEL(self, ins):
         self.emit('lea %s, [rel %s]', ins.dest, ins.label)
