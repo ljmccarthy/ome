@@ -174,9 +174,9 @@ class LocalStorage(object):
         # | arg1 | 1  4
         # | arg2 | 0  5
 
-        self.local_stack = {i: num_args - i - 1 for i in range(len(self.arg_regs), num_args)}
+        self.local_stack = {i: i - len(self.arg_regs) for i in range(len(self.arg_regs), num_args)}
         self.free_stack_slots = []
-        self.stack_offset = len(self.local_stack) + 1  # One slot for return address after args
+        self.stack_offset = len(self.local_stack)
         self.num_stack_slots = 0
 
         self.spills = []
@@ -316,7 +316,7 @@ class LocalStorage(object):
                     self.remove_local_from_register(local)
 
         # Push stack arguments
-        for arg in reversed(call_ins.args[len(self.arg_regs):]):
+        for arg in call_ins.args[len(self.arg_regs):]:
             reg = self.get_local_to_any_register(arg, call_ins.usage_distance)
             self.spills.append(PUSH(reg))
             self.remove_local_from_register(arg)
@@ -347,14 +347,14 @@ class LocalStorage(object):
 
     def adjust_stack_offsets(self, instructions):
         # Fix up stack offsets to be relative to stack pointer
-        stack_adjust = self.stack_offset - 1
+        stack_adjust = self.stack_offset
         for ins in instructions:
             if isinstance(ins, (SPILL, UNSPILL)):
                 ins.stack_slot = stack_adjust - ins.stack_slot
             elif isinstance(ins, PUSH):
                 stack_adjust += 1
             elif isinstance(ins, CALL):
-                stack_adjust = self.stack_offset - 1
+                stack_adjust = self.stack_offset
 
 def allocate_registers(instructions, num_args, target):
     locals = LocalStorage(num_args, target)

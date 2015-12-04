@@ -44,13 +44,21 @@ dword_register = {
     'r15': 'r15d',
 }
 
+# Register usage
+#
+# rsp - Call stack pointer (grows down)
+# rbp - Thread context pointer, bottom of call stack
+# r13 - GC allocation pointer
+# r14 - GC allocation limit
+# r15 - Data stack pointer (grows up)
+#
+# The GC scans and updates the data stack and ignores the call stack.
+# GC-allocated pointers must never be stored in the call stack.
+# The data stack must contain only tagged values or GC-allocated pointers.
+
 class Target_x86_64(object):
-    stack_pointer = 'rsp'
-    context_pointer = 'rbp'
-    nursery_bump_pointer = 'rbx'
-    nursery_limit_pointer = 'r12'
-    arg_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
     return_register = 'rax'
+    arg_registers = ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9')
     temp_registers = ('r10', 'r11')
 
     define_constant_format = '%define {0} {1}\n'
@@ -63,12 +71,12 @@ class Target_x86_64(object):
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
-            self.emit('sub rsp, %s', num_stack_slots * 8)
+            self.emit('add r15, %s', num_stack_slots * 8)
 
     def emit_leave(self, num_stack_slots):
         self.emit.label('.exit')
         if num_stack_slots > 0:
-            self.emit('add rsp, %s', num_stack_slots * 8)
+            self.emit('sub r15, %s', num_stack_slots * 8)
         self.emit('ret')
 
     def emit_empty_dispatch(self):
@@ -105,13 +113,14 @@ class Target_x86_64(object):
         self.emit('mov %s, %s', ins.dest_reg, ins.source_reg)
 
     def SPILL(self, ins):
-        self.emit('mov [rsp+%s], %s', ins.stack_slot * 8, ins.register)
+        self.emit('mov [r15-%s], %s', ins.stack_slot * 8, ins.register)
 
     def UNSPILL(self, ins):
-        self.emit('mov %s, [rsp+%s]', ins.register, ins.stack_slot * 8)
+        self.emit('mov %s, [r15-%s]', ins.register, ins.stack_slot * 8)
 
     def PUSH(self, ins):
-        self.emit('push %s', ins.source_reg)
+        self.emit('mov [r15], %s', ins.source_reg)
+        self.emit('add r15, 8')
 
     def CALL(self, ins):
         if ins.traceback_info and ins.check_error:
@@ -132,7 +141,7 @@ class Target_x86_64(object):
 
         self.emit('call %s', ins.call_label)
         if ins.num_stack_args > 0:
-            self.emit('add rsp, %s', ins.num_stack_args * 8)
+            self.emit('sub r15, %s', ins.num_stack_args * 8)
         if ins.check_error:
             self.emit('test rax, rax')
             self.emit('js %s', traceback_label)
@@ -174,8 +183,8 @@ class Target_x86_64(object):
 builtin_macros = '''
 %define GC_DEBUG      0
 %define PAGE_SIZE     0x1000
-%define STACK_SIZE    0x1000
-%define NURSERY_SIZE  0x3800
+%define STACK_SIZE    0x800
+%define NURSERY_SIZE  0x7800
 
 %define OME_Value(value, tag) (((tag) << NUM_DATA_BITS) | (value))
 %define OME_Constant(value) OME_Value(value, Tag_Constant)
@@ -187,9 +196,10 @@ builtin_macros = '''
 
 ; Thread context structure
 struc TC
-	.stack_limit: resq 1
+	.call_stack_limit: resq 1
 	.traceback_pointer: resq 1
-	.nursery_base_pointer: resq 1
+	.nursery_base: resq 1
+	.data_stack_base: resq 1
 	.size:
 endstruc
 
@@ -264,13 +274,15 @@ endstruc
 builtin_code = '''
 OME_start:
 	call OME_allocate_thread_context
-	lea rsp, [rax+STACK_SIZE-TC.size]       ; stack pointer (grows down)
-	mov rbp, rsp                            ; thread context pointer
-	lea rbx, [rsp+TC.size]                  ; GC nursery pointer (grows up)
-	lea r12, [rbx+NURSERY_SIZE]             ; GC nursery limit
-	mov [rbp+TC.stack_limit], rax
+	lea rbp, [rax+STACK_SIZE-TC.size]       ; thread context pointer
+	mov rsp, rbp                            ; call stack pointer (grows down)
+	lea r13, [rbp+TC.size]                  ; GC nursery pointer (grows up)
+	lea r14, [r13+NURSERY_SIZE]             ; GC nursery limit
+	lea r15, [r14+NURSERY_SIZE]             ; data stack pointer (grows up)
+	mov [rbp+TC.call_stack_limit], rax
 	mov [rbp+TC.traceback_pointer], rax
-	mov [rbp+TC.nursery_base_pointer], rbx
+	mov [rbp+TC.nursery_base], r13
+	mov [rbp+TC.data_stack_base], r15
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
@@ -298,7 +310,7 @@ OME_print_traceback:
 	push r14
 	push r15
 	; print traceback
-	mov r13, [rbp+TC.stack_limit]
+	mov r13, [rbp+TC.call_stack_limit]
 	mov r14, [rbp+TC.traceback_pointer]
 	sub r14, TB.size
 	cmp r14, r13
@@ -358,9 +370,9 @@ OME_print_traceback:
 align 16
 ; rdi = number of slots
 OME_allocate:
-	mov rax, rbx
-	lea rbx, [rbx+rdi*8+8]  ; add object size to bump pointer
-	cmp rbx, r12            ; check if beyond limit
+	mov rax, r13
+	lea r13, [r13+rdi*8+8]  ; add object size to bump pointer
+	cmp r13, r14            ; check if beyond limit
 	jae .full
 	mov rcx, 1              ; object header present bit
 	shl rdi, 1
@@ -371,7 +383,7 @@ OME_allocate:
 	add rax, 8              ; return address after header
 	ret
 .full:
-	mov rbx, rdi            ; save number of slots argument
+	push rdi                ; save number of slots argument
 %if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
@@ -379,14 +391,14 @@ OME_allocate:
 	mov edi, STDERR
 	call OME_write
 %endif
-	mov r10, [rbp+TC.nursery_base_pointer]
+	mov r10, [rbp+TC.nursery_base]
 	lea rdi, [rbp+TC.size]          ; space 1 is just after the TC data
 	cmp rdi, r10
 	jne .space1
 	add rdi, NURSERY_SIZE           ; space 2 is after space 1
 .space1:
-	mov [rbp+TC.nursery_base_pointer], rdi
-	mov r8, rsp
+	mov [rbp+TC.nursery_base], rdi
+	mov r8, [rbp+TC.data_stack_base]
 .stackloop:
 	mov rsi, [r8]           ; get tagged pointer from stack
 	mov rax, rsi
@@ -399,7 +411,7 @@ OME_allocate:
 .stackuntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .stacknext
-	cmp rsi, r12
+	cmp rsi, r14
 	jae .stacknext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
 	test rcx, 1
@@ -421,10 +433,10 @@ OME_allocate:
 	mov [r8], rcx
 .stacknext:
 	add r8, 8
-	cmp r8, rbp
+	cmp r8, r15
 	jb .stackloop
 	; now scan objects in to space
-	mov r8, [rbp+TC.nursery_base_pointer]
+	mov r8, [rbp+TC.nursery_base]
 	jmp .tospacenext
 .tospaceloop:
 	mov rdx, [r8]
@@ -445,7 +457,7 @@ OME_allocate:
 .fielduntagged:
 	cmp rsi, r10            ; check pointer in from-space
 	jb .fieldnext
-	cmp rsi, r12
+	cmp rsi, r14
 	jae .fieldnext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
 	test rcx, 1
@@ -479,13 +491,12 @@ OME_allocate:
 .tospacenext:
 	cmp r8, rdi
 	jb .tospaceloop
-	mov r12, [rbp+TC.nursery_base_pointer]
-	add r12, NURSERY_SIZE   ; set GC nursery limit
-	mov r8, rbx             ; save number of slots argument to r8
-	mov rbx, rdi            ; set GC nursery pointer
+	mov r14, [rbp+TC.nursery_base]
+	add r14, NURSERY_SIZE   ; set GC nursery limit
+	mov r13, rdi            ; set GC nursery pointer
 	; clear unused area
 	xor rax, rax
-	mov rcx, r12
+	mov rcx, r14
 	sub rcx, rdi
 	shr rcx, 3
 	rep stosq
@@ -501,7 +512,7 @@ OME_allocate:
 	mov edi, STDERR
 	call OME_write
 %endif
-	mov rdi, r8             ; restore number of slots argument
+	pop rdi                 ; restore number of slots argument
 	jmp OME_allocate
 
 OME_panic:
@@ -619,28 +630,28 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), ['string'], '''\
 BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 	mov rdi, rsi
 	call OME_message_do__0
-	mov rdi, [rbp+TC.stack_limit]
+	mov rdi, [rbp+TC.call_stack_limit]
 	mov [rbp+TC.traceback_pointer], rdi     ; reset traceback pointer
 	unwrap_error rax                        ; clear error bit if present
 	ret
 '''),
 
 BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
-	sub rsp, 8
-	mov [rsp], rsi
+	add r15, 8
+	mov [r15-8], rsi
 	mov rdi, rsi
 	call OME_message_do__0
 	test rax, rax
 	jns .exit
-	mov rdi, [rbp+TC.stack_limit]
+	mov rdi, [rbp+TC.call_stack_limit]
 	mov [rbp+TC.traceback_pointer], rdi     ; reset traceback pointer
 	unwrap_error rax                        ; clear error bit if present
-	mov rdi, [rsp]
+	mov rdi, [r15-8]
 	mov rsi, rax
-	add rsp, 8
+	sub r15, 8
 	jmp OME_message_catch__1
 .exit:
-	add rsp, 8
+	sub r15, 8
 	ret
 '''),
 
@@ -653,25 +664,26 @@ BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), [], '''\
 '''),
 
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
-	push rsi
+	mov [r15], rsi
+	add r15, 8
 	mov rdi, rsi
 .loop:
 	call OME_message_while__0
-	mov rdi, [rsp]
+	mov rdi, [r15-8]
 	test rax, rax
 	jz .exit                ; exit if |while| returned False
 	js .exit                ; exit if |while| returned an error
 	cmp rax, True           ; compare with True
 	jne .type_error         ; if not True then we have a type error
 	call OME_message_do__0
-	mov rdi, [rsp]
+	mov rdi, [r15-8]
 	test rax, rax
 	jns .loop               ; repeat if |do| did not return an error
 .exit:
-	add rsp, 8
+	sub r15, 8
 	ret
 .type_error:
-	add rsp, 8
+	sub r15, 8
 	jmp OME_type_error
 '''),
 
@@ -1019,33 +1031,35 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, ['item:'], '''\
-	sub rsp, 32
-	mov [rsp+24], rdi       ; save tagged pointer for GC
+	sub rsp, 8
+	add r15, 16
 	untag_pointer rdi
-	get_gc_object_size rcx, rdi
-	test rcx, rcx           ; check if zero
+	get_gc_object_size rax, rdi
+	test rax, rax           ; check if zero
 	jz .exit
-	lea rcx, [rdi+rcx*8]    ; end of array
-	mov [rsp], rdi          ; save array pointer
-	mov [rsp+8], rcx        ; save end pointer
-	mov [rsp+16], rsi       ; save block
+	mov [r15-8], rdi        ; save array pointer
+	mov [r15-16], rsi       ; save block
+	xor rcx, rcx
+	mov [rsp], rcx          ; save index
 	mov rdx, rdi
 	mov rdi, rsi
 .loop:
-	mov rsi, [rdx]
+	mov rsi, [rdx+rcx*8]
 	call OME_message_item__1
 	test rax, rax           ; check for error
 	js .exit
-	mov rdx, [rsp]          ; load array pointer
-	mov rcx, [rsp+8]        ; load end pointer
-	mov rdi, [rsp+16]       ; load block
-	add rdx, 8
-	mov [rsp], rdx
-	cmp rdx, rcx
+	mov rdi, [r15-16]       ; load block
+	mov rdx, [r15-8]        ; load array pointer
+	mov rcx, [rsp]          ; load index
+	get_gc_object_size rax, rdx
+	inc rcx
+	mov [rsp], rcx
+	cmp rcx, rax
 	jb .loop
 .exit:
 	xor rax, rax            ; return False
-	add rsp, 32
+	add rsp, 8
+	sub r15, 16
 	ret
 ''')
 

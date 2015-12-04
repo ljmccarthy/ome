@@ -68,7 +68,7 @@ OME_write:
 OME_allocate_thread_context:
 	mov rax, SYS_mmap
 	xor rdi, rdi                                            ; addr
-	mov rsi, STACK_SIZE + NURSERY_SIZE*2 + PAGE_SIZE*2      ; size
+	mov rsi, STACK_SIZE*2 + NURSERY_SIZE*2 + PAGE_SIZE*2    ; size
 	xor rdx, rdx                                            ; PROT_NONE
 	mov r10, MAP_PRIVATE|MAP_ANONYMOUS
 	mov r8, r8
@@ -80,7 +80,7 @@ OME_allocate_thread_context:
 	shr rax, 47   ; test for MAP_FAILED or address that is too big
 	jnz .panic
 	mov rax, SYS_mprotect
-	mov rsi, STACK_SIZE + NURSERY_SIZE*2
+	mov rsi, STACK_SIZE*2 + NURSERY_SIZE*2
 	mov rdx, PROT_READ|PROT_WRITE
 	syscall
 	test rax, rax
@@ -88,6 +88,7 @@ OME_allocate_thread_context:
 	pop rax
 	ret
 .panic:
+	add rsp, 8
 	lea rsi, [rel OME_message_mmap_failed]
 	mov edx, OME_message_mmap_failed.size
 	jmp OME_panic
