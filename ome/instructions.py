@@ -76,7 +76,7 @@ class LOAD_LABEL(Instruction):
         self.label = label
 
     def __str__(self):
-        return "%%%s = LABEL $04X %s'" % (self.dest, self.tag, self.label)
+        return "%%%s = LABEL $%04X %s'" % (self.dest, self.tag, self.label)
 
 class GET_SLOT(Instruction):
     def __init__(self, dest, object, slot_index):
