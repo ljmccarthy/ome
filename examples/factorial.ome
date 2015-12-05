@@ -1,7 +1,7 @@
 |factorial: n|
     n == 0 if: {
         |then| 1
-        |else| n * (factorial: n - 1)
+        |else| n × (factorial: n - 1)
     }
 
 |main|
