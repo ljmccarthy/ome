@@ -14,7 +14,7 @@ re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
-re_assign = re.compile(r'=[^=]|:=')
+re_assign = re.compile(r'=(?!=)|:=')
 re_operator = re.compile(r'\+|-|\*|/|==|!=|<=|>=|<|>')
 re_comparison_operator = re.compile(r'==|!=|<=|>=|<|>')
 re_addition_operator = re.compile('\+|-')
@@ -310,8 +310,6 @@ class Parser(ParserState):
             if m:
                 if m.group() == ':=':
                     self.error('Mutable variables are only allowed in blocks')
-                else:
-                    self.pos -= 1  # backtrack by 1 for character after =
                 if name[0] == '~':
                     parse_state.error('Local variables cannot be private')
                 self.check_name(name, parse_state)
