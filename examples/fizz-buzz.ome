@@ -4,7 +4,7 @@
         d5 = (n mod: 5) == 0
         d3 && print: 'Fizz'
         d5 && print: 'Buzz'
-        (d3 or: d5) || print: n
+        d3 or: d5 || print: n
         print: '\n'
         n: n + 1
     }
