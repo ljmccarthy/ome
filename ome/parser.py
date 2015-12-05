@@ -8,9 +8,9 @@ from .constants import *
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
 re_comment = re.compile(r'(?:#|--)([^\r\n]*)')
-re_name = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
-re_arg_name = re.compile(r'([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)')
-re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
+re_name = re.compile(r'~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*(?![:a-zA-Z0-9-])')
+re_arg_name = re.compile(r'[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*(?![:a-zA-Z0-9-])')
+re_keyword = re.compile(r'~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
@@ -194,9 +194,6 @@ class Parser(ParserState):
         return name
 
     def argument_name(self, message='Expected argument name'):
-        self.scan()
-        if self.peek(re_keyword):
-            self.error(message)
         return self.expect_token(re_arg_name, message).group()
 
     def check_num_params(self, n, parse_state):
@@ -259,8 +256,6 @@ class Parser(ParserState):
         self.push_indent()
         for _ in self.statement_lines():
             self.scan()
-            if self.peek(re_keyword):
-                break
             parse_state = self.copy_state()
             m = self.token(re_name)
             if not m:
@@ -402,8 +397,6 @@ class Parser(ParserState):
         expr = self.atom()
         while True:
             self.scan()
-            if self.peek(re_keyword):
-                break
             parse_state = self.copy_state()
             m = self.expr_token(re_name)
             if not m:
