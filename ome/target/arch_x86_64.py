@@ -368,22 +368,33 @@ OME_print_traceback:
 	ret
 
 align 16
-; rdi = number of slots
+OME_allocate_slots:
+	mov rsi, rdi
+; rdi = number of slots to allocate
+; rsi = number of slots containing GC-scannable pointers
 OME_allocate:
+	cmp rdi, MAX_SMALL_OBJECT_SIZE
+	ja .toobig
+	cmp rsi, rdi
+	ja .toobig
 	mov rax, r13
 	lea r13, [r13+rdi*8+8]  ; add object size to bump pointer
 	cmp r13, r14            ; check if beyond limit
 	jae .full
-	mov rcx, 1              ; object header present bit
+	mov ecx, 1              ; object header present bit
 	shl rdi, 1
 	or rcx, rdi             ; total number of slots
-	shl rdi, GC_SIZE_BITS
-	or rcx, rdi             ; number of slots to scan
+	shl rsi, GC_SIZE_BITS + 1
+	or rcx, rsi             ; number of slots to scan
 	mov [rax], rcx          ; store header
 	add rax, 8              ; return address after header
 	ret
+.toobig:
+	xor rax, rax
+	ret
 .full:
-	push rdi                ; save number of slots argument
+	push rdi                ; save arguments
+	push rsi
 %if GC_DEBUG
 	; print debug message
 	lea rsi, [rel OME_message_collect_nursery]
@@ -512,7 +523,8 @@ OME_allocate:
 	mov edi, STDERR
 	call OME_write
 %endif
-	pop rdi                 ; restore number of slots argument
+	pop rsi                 ; restore arguments
+	pop rdi
 	jmp OME_allocate
 
 OME_panic:
@@ -735,6 +747,7 @@ BuiltInMethod('string', constant_to_tag(Constant_DivideByZeroError), [], '''\
 BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	push rdi
 	mov rdi, 3                      ; 3 slots = 24 bytes
+	xor rsi, rsi
 	call OME_allocate               ; pre-allocate string on heap
 	mov rdi, rax
 	pop r9

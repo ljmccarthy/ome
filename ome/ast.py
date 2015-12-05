@@ -182,7 +182,7 @@ class Block(object):
             num_slots = code.add_temp()
             object = code.add_temp()
             code.add_instruction(LOAD_VALUE(num_slots, 0, len(self.slots)))
-            code.add_instruction(CALL(object, [num_slots], 'OME_allocate', None, check_error=False))
+            code.add_instruction(CALL(object, [num_slots], 'OME_allocate_slots', None, check_error=False))
             for slot_index, var in enumerate(self.slots):
                 arg = var.generate_code(code)
                 code.add_instruction(SET_SLOT(object, slot_index, arg))
@@ -358,7 +358,7 @@ class Array(object):
         array = code.add_temp()
         dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(num_elems, 0, len(self.elems)))
-        code.add_instruction(CALL(array, [num_elems], 'OME_allocate', None, check_error=False))
+        code.add_instruction(CALL(array, [num_elems], 'OME_allocate_slots', None, check_error=False))
         for i, elem in enumerate(self.elems):
             elem = elem.generate_code(code)
             code.add_instruction(SET_SLOT(array, i, elem))
