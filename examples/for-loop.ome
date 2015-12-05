@@ -1,6 +1,6 @@
 |main|
-    for: {i := 0 |while| i less-than: 10 |do|
+    for: {i := 0 |while| i < 10 |do|
         print: i
         print: '\n'
-        i: (i plus: 1)
+        i: i + 1
     }

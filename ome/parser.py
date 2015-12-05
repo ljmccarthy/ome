@@ -14,7 +14,11 @@ re_keyword = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:)')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
 re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
-re_assign = re.compile(r'=|:=')
+re_assign = re.compile(r'=[^=]|:=')
+re_operator = re.compile(r'\+|-|\*|/|==|!=|<=|>=|<|>')
+re_comparison_operator = re.compile(r'==|!=|<=|>=|<|>')
+re_addition_operator = re.compile('\+|-')
+re_multiplication_operator = re.compile(r'\*|/')
 re_end_token = re.compile(r'[|)}\]]')
 
 string_escapes = {
@@ -220,9 +224,14 @@ class Parser(ParserState):
                     parse_state.error("Duplicate parameter name '%s'" % name)
                 argnames.append(name)
         if not symbol:
-            parse_state = self.copy_state()
-            m = self.expect_token(re_name, 'Expected name or keyword')
-            symbol = self.check_name(m.group(), parse_state)
+            m = self.match(re_operator)
+            if m:
+                argnames.append(self.argument_name())
+                symbol = m.group()
+            else:
+                parse_state = self.copy_state()
+                m = self.expect_token(re_name, 'Expected name or keyword')
+                symbol = self.check_name(m.group(), parse_state)
         self.check_num_params(len(argnames), self)
         return symbol, argnames
 
@@ -301,6 +310,8 @@ class Parser(ParserState):
             if m:
                 if m.group() == ':=':
                     self.error('Mutable variables are only allowed in blocks')
+                else:
+                    self.pos -= 1  # backtrack by 1 for character after =
                 if name[0] == '~':
                     parse_state.error('Local variables cannot be private')
                 self.check_name(name, parse_state)
@@ -332,7 +343,7 @@ class Parser(ParserState):
         expr = None
         self.scan()
         if not self.peek(re_keyword):
-            expr = self.unaryexpr()
+            expr = self.cmpexpr()
         symbol = ''
         args = []
         self.scan()
@@ -346,15 +357,48 @@ class Parser(ParserState):
                 if expr:
                     kw_parse_state.error('Private message sent to an explicit receiver')
             symbol += part
-            args.append(self.unaryexpr())
+            args.append(self.cmpexpr())
             for m in self.repeat_expr_token(','):
                 symbol += ','
-                args.append(self.unaryexpr())
+                args.append(self.cmpexpr())
             kw_parse_state = self.copy_state()
         if args:
             self.check_num_params(len(args), parse_state)
             expr = ast.Send(expr, symbol, args, parse_state)
         return expr
+
+    def cmpexpr(self):
+        lhs = self.addexpr()
+        self.scan()
+        parse_state = self.copy_state()
+        for m in self.repeat_expr_token(re_comparison_operator):
+            rhs = self.addexpr()
+            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            self.scan()
+            parse_state = self.copy_state()
+        return lhs
+
+    def addexpr(self):
+        lhs = self.mulexpr()
+        self.scan()
+        parse_state = self.copy_state()
+        for m in self.repeat_expr_token(re_addition_operator):
+            rhs = self.mulexpr()
+            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            self.scan()
+            parse_state = self.copy_state()
+        return lhs
+
+    def mulexpr(self):
+        lhs = self.unaryexpr()
+        self.scan()
+        parse_state = self.copy_state()
+        for m in self.repeat_expr_token(re_multiplication_operator):
+            rhs = self.unaryexpr()
+            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            self.scan()
+            parse_state = self.copy_state()
+        return lhs
 
     def unaryexpr(self):
         expr = self.atom()

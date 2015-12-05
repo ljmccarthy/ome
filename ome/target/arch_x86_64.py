@@ -773,7 +773,7 @@ BuiltInMethod('string', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('plus:', Tag_Small_Integer, [], '''\
+BuiltInMethod('+', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rsi
 	cmp rsi, Tag_Small_Integer
@@ -784,7 +784,7 @@ BuiltInMethod('plus:', Tag_Small_Integer, [], '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('minus:', Tag_Small_Integer, [], '''\
+BuiltInMethod('-', Tag_Small_Integer, [], '''\
 	mov rax, rdi
 	mov rdx, rsi
 	get_tag rsi
@@ -796,7 +796,7 @@ BuiltInMethod('minus:', Tag_Small_Integer, [], '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('times:', Tag_Small_Integer, [], '''\
+BuiltInMethod('*', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rsi
 	cmp rsi, Tag_Small_Integer
@@ -926,7 +926,7 @@ BuiltInMethod('negate', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('less-than:', Tag_Small_Integer, [], '''\
+BuiltInMethod('<', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
 	cmp rax, Tag_Small_Integer
@@ -939,7 +939,7 @@ BuiltInMethod('less-than:', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('less-or-equal:', Tag_Small_Integer, [], '''\
+BuiltInMethod('<=', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
 	cmp rax, Tag_Small_Integer
@@ -952,7 +952,7 @@ BuiltInMethod('less-or-equal:', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('equals:', Tag_Small_Integer, [], '''\
+BuiltInMethod('==', Tag_Small_Integer, [], '''\
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
