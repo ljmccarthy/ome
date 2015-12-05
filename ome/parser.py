@@ -15,11 +15,19 @@ re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[
 re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
 re_assign = re.compile(r'=(?!=)|:=')
-re_operator = re.compile(r'\+|-|\*|/|==|!=|<=|>=|<|>')
-re_comparison_operator = re.compile(r'==|!=|<=|>=|<|>')
+re_operator = re.compile(r'\+|-|\*|/|×|÷|==|!=|<=|>=|<|>|≠|≤|≥')
+re_comparison_operator = re.compile(r'==|!=|<=|>=|<|>|≠|≤|≥')
 re_addition_operator = re.compile('\+|-')
-re_multiplication_operator = re.compile(r'\*|/')
+re_multiplication_operator = re.compile(r'\*|/|×|÷')
 re_end_token = re.compile(r'[|)}\]]')
+
+operator_aliases = {
+    '*' : '×',
+    '/' : '÷',
+    '!=': '≠',
+    '<=': '≤',
+    '>=': '≥',
+}
 
 string_escapes = {
     'a': chr(7),
@@ -224,7 +232,7 @@ class Parser(ParserState):
             m = self.match(re_operator)
             if m:
                 argnames.append(self.argument_name())
-                symbol = m.group()
+                symbol = operator_aliases.get(m.group(), m.group())
             else:
                 parse_state = self.copy_state()
                 m = self.expect_token(re_name, 'Expected name or keyword')
@@ -365,8 +373,9 @@ class Parser(ParserState):
         self.scan()
         parse_state = self.copy_state()
         for m in self.repeat_expr_token(re_comparison_operator):
+            op = m.group()
             rhs = self.addexpr()
-            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            lhs = ast.Send(lhs, operator_aliases.get(op, op), [rhs], parse_state)
             self.scan()
             parse_state = self.copy_state()
         return lhs
@@ -376,8 +385,9 @@ class Parser(ParserState):
         self.scan()
         parse_state = self.copy_state()
         for m in self.repeat_expr_token(re_addition_operator):
+            op = m.group()
             rhs = self.mulexpr()
-            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            lhs = ast.Send(lhs, operator_aliases.get(op, op), [rhs], parse_state)
             self.scan()
             parse_state = self.copy_state()
         return lhs
@@ -387,8 +397,9 @@ class Parser(ParserState):
         self.scan()
         parse_state = self.copy_state()
         for m in self.repeat_expr_token(re_multiplication_operator):
+            op = m.group()
             rhs = self.unaryexpr()
-            lhs = ast.Send(lhs, m.group(), [rhs], parse_state)
+            lhs = ast.Send(lhs, operator_aliases.get(op, op), [rhs], parse_state)
             self.scan()
             parse_state = self.copy_state()
         return lhs

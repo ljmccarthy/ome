@@ -8,14 +8,14 @@ re_symbol_part = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
 operator_labels = {
     '+' : '_ADD',
     '-' : '_SUB',
-    '*' : '_MUL',
-    '/' : '_DIV',
+    '×' : '_MUL',
+    '÷' : '_DIV',
     '==': '_EQ',
-    '!=': '_NE',
+    '≠' : '_NE',
     '<' : '_LT',
-    '<=': '_LE',
+    '≤' : '_LE',
     '>' : '_GT',
-    '>=': '_GE',
+    '≥' : '_GE',
 }
 
 def symbol_to_label(symbol):

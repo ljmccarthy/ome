@@ -809,7 +809,7 @@ BuiltInMethod('-', Tag_Small_Integer, [], '''\
 	jmp OME_check_overflow
 '''),
 
-BuiltInMethod('*', Tag_Small_Integer, [], '''\
+BuiltInMethod('×', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rsi
 	cmp rsi, Tag_Small_Integer
@@ -952,7 +952,7 @@ BuiltInMethod('<', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('<=', Tag_Small_Integer, [], '''\
+BuiltInMethod('≤', Tag_Small_Integer, [], '''\
 	mov rax, rsi
 	get_tag rax
 	cmp rax, Tag_Small_Integer
