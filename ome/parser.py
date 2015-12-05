@@ -94,12 +94,15 @@ class ParserState(object):
     def column(self):
         return self.pos - self.line_pos
 
-    def error(self, message):
+    def format_error(self, message):
         line = self.current_line
         column = self.column
-        arrow = ' ' * column + '^'
-        raise Error('In "%s", line %d, column %d\n    %s\n    %s\nError: %s' % (
-            self.stream_name, self.line_number, column, line, arrow, message))
+        arrow = ' ' * column + '\x1b[31m^\x1b[0m'
+        return ('In "{0.stream_name}", line {0.line_number}, column {1}\n'
+              + '    {2}\n    {3}\nError: {4}').format(self, column, line, arrow, message)
+
+    def error(self, message):
+        raise Error(self.format_error(message))
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
