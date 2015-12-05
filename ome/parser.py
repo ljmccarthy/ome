@@ -67,17 +67,8 @@ def parse_string_escapes(string, parse_state):
     return ''.join(parts)
 
 class ParserState(object):
-    def __init__(self, stream='', stream_name='<string>'):
-        self.stream = stream
-        self.stream_name = stream_name
-        self.pos = 0            # Current position
-        self.line_pos = 0       # Position of the 1st character of the current line
-        self.line_number = 1    # Current line number (starting from 1)
-        self.line_indent = 0    # Indentation level of current line
-        self.indent_level = -1  # Minimum indentation level of current sub-expression
-        self.indent_line = -1   # Line number where indentation level begines
-        self.indent_stack = []  # Stack of indent levels for outer expressions
-        self.comments = []      # List of comments collected by previous scan()
+    def __init__(self, state):
+        self.set_state(state)
 
     def set_state(self, state):
         self.stream = state.stream
@@ -92,9 +83,7 @@ class ParserState(object):
         self.comments = state.comments
 
     def copy_state(self):
-        state = ParserState(self.stream)
-        state.set_state(self)
-        return state
+        return ParserState(self)
 
     @property
     def current_line(self):
@@ -114,7 +103,16 @@ class ParserState(object):
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
-        super(Parser, self).__init__(stream, stream_name)
+        self.stream = stream
+        self.stream_name = stream_name
+        self.pos = 0            # Current position
+        self.line_pos = 0       # Position of the 1st character of the current line
+        self.line_number = 1    # Current line number (starting from 1)
+        self.line_indent = 0    # Indentation level of current line
+        self.indent_level = -1  # Minimum indentation level of current sub-expression
+        self.indent_line = -1   # Line number where indentation level begines
+        self.indent_stack = []  # Stack of indent levels for outer expressions
+        self.comments = []      # List of comments collected by previous scan()
         self.tab_width = tab_width
 
     def match(self, pattern):
