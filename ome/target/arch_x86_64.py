@@ -1011,6 +1011,14 @@ BuiltInMethod('then:', Tag_Boolean, ['do'], '''\
 	ret
 '''),
 
+BuiltInMethod('else:', Tag_Boolean, ['do'], '''\
+	mov rax, rdi
+	mov rdi, rsi
+	test rax, rax
+	jz OME_message_do__0
+	ret
+'''),
+
 BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''\
 	mov rax, rdi
 	mov rdi, rsi

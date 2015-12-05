@@ -15,7 +15,8 @@ re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[
 re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
 re_assign = re.compile(r'=(?!=)|:=')
-re_operator = re.compile(r'\+|-|\*|/|×|÷|==|!=|<=|>=|<|>|≠|≤|≥')
+re_operator = re.compile(r'\+|-|\*|/|×|÷|==|!=|<=|>=|<|>|≠|≤|≥|&&|\|\|')
+re_logical_operator = re.compile(r'&&|\|\|')
 re_comparison_operator = re.compile(r'==|!=|<=|>=|<|>|≠|≤|≥')
 re_addition_operator = re.compile('\+|-')
 re_multiplication_operator = re.compile(r'\*|/|×|÷')
@@ -27,6 +28,8 @@ operator_aliases = {
     '!=': '≠',
     '<=': '≤',
     '>=': '≥',
+    '&&': 'then:',
+    '||': 'else:',
 }
 
 string_escapes = {
@@ -340,7 +343,7 @@ class Parser(ParserState):
             self.error('Array size too big.')
         return ast.Array(elems)
 
-    def expr(self):
+    def keywordexpr(self):
         expr = None
         self.scan()
         if not self.peek(re_keyword):
@@ -367,6 +370,21 @@ class Parser(ParserState):
             self.check_num_params(len(args), parse_state)
             expr = ast.Send(expr, symbol, args, parse_state)
         return expr
+
+    def expr(self):
+        return self.logicalexpr()
+
+    def logicalexpr(self):
+        lhs = self.keywordexpr()
+        self.scan()
+        parse_state = self.copy_state()
+        for m in self.repeat_expr_token(re_logical_operator):
+            op = m.group()
+            rhs = ast.Block([], [ast.Method('do', [], self.keywordexpr())])
+            lhs = ast.Send(lhs, operator_aliases.get(op, op), [rhs], parse_state)
+            self.scan()
+            parse_state = self.copy_state()
+        return lhs
 
     def cmpexpr(self):
         lhs = self.addexpr()

@@ -2,9 +2,9 @@
     for: {n := 1 |while| n ≤ 100 |do|
         d3 = (n mod: 3) == 0
         d5 = (n mod: 5) == 0
-        d3 then: {|do| print: 'Fizz'}
-        d5 then: {|do| print: 'Buzz'}
-        (d3 or: d5) not then: {|do| print: n}
+        d3 && print: 'Fizz'
+        d5 && print: 'Buzz'
+        (d3 or: d5) || print: n
         print: '\n'
         n: n + 1
     }
