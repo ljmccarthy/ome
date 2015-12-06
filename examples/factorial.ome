@@ -6,10 +6,6 @@
 
 |main|
     for: {n := 0 |while| n < 17 |do|
-        print: 'factorial('
-        print: n
-        print: ') = '
-        print: (factorial: n)
-        print: '\n'
+        print: 'factorial($n) = $(factorial: n)\n'
         n: n + 1
     }

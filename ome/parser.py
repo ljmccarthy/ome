@@ -2,6 +2,7 @@
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import re
+import math
 from . import ast
 from .constants import *
 
@@ -12,7 +13,8 @@ re_name = re.compile(r'~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*(?![:a-zA-Z0-9-])
 re_arg_name = re.compile(r'[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*(?![:a-zA-Z0-9-])')
 re_keyword = re.compile(r'~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*:')
 re_number = re.compile(r'([+-]?)0*(0|[1-9]+(?:0*[1-9]+)*)(0*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?')
-re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'])*)'?")
+re_string = re.compile(r"'((?:\\(?:\r\n|\r|\n|.)|[^\r\n'$])*)['$]?")
+re_string_next = re.compile(r"((?:\\(?:\r\n|\r|\n|.)|[^\r\n'$])*)['$]?")
 re_string_escape = re.compile(r'\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|\r\n|\r|\n|.)')
 re_assign = re.compile(r'=(?!=)|:=')
 re_operator = re.compile(r'\+|-|\*|/|×|÷|==|!=|<=|>=|<|>|≠|≤|≥|&&|\|\|')
@@ -43,6 +45,7 @@ string_escapes = {
     'e': chr(27),
     "'": "'",
     '"': '"',
+    '$': '$',
     '\\': '\\',
     '\r\n': '',
     '\r': '',
@@ -105,9 +108,10 @@ class ParserState(object):
         raise OmeError(self.format_error(message))
 
 class Parser(ParserState):
-    def __init__(self, stream, stream_name='<string>', tab_width=8):
+    def __init__(self, stream, stream_name, builtin, tab_width=8):
         self.stream = stream
         self.stream_name = stream_name
+        self.builtin = builtin
         self.pos = 0            # Current position
         self.line_pos = 0       # Position of the 1st character of the current line
         self.line_number = 1    # Current line number (starting from 1)
@@ -117,6 +121,12 @@ class Parser(ParserState):
         self.indent_stack = []  # Stack of indent levels for outer expressions
         self.comments = []      # List of comments collected by previous scan()
         self.tab_width = tab_width
+        self.gensym_num = 0
+
+    def gensym(self, name):
+        n = self.gensym_num
+        self.gensym_num += 1
+        return '<%s#%d>' % (name, n)
 
     def match(self, pattern):
         """
@@ -239,7 +249,7 @@ class Parser(ParserState):
                 symbol = operator_aliases.get(m.group(), m.group())
             else:
                 parse_state = self.copy_state()
-                m = self.expect_token(re_name, 'Expected name or keyword')
+                m = self.expect_token(re_name, 'expected name or keyword')
                 symbol = self.check_name(m.group(), parse_state)
         self.check_num_params(len(argnames), self)
         return symbol, argnames
@@ -275,7 +285,7 @@ class Parser(ParserState):
             name = self.check_name(m.group(), parse_state)
             if name in defined_symbols:
                 parse_state.error("variable '%s' is already defined" % name)
-            mutable = self.expect_token(re_assign, "Expected '=' or ':='").group() == ':='
+            mutable = self.expect_token(re_assign, "expected '=' or ':='").group() == ':='
             statements.append(ast.LocalVariable(name, self.expr()))
             slots.append(ast.BlockVariable(name, mutable, len(slots)))
             defined_symbols.add(name)
@@ -287,7 +297,7 @@ class Parser(ParserState):
                 self.error("method '%s' is already defined" % symbol)
             if symbol in defined_symbols:
                 self.error("method '%s' conflicts with variable definition" % symbol)
-            self.expect_token('|', "Expected '|'")
+            self.expect_token('|', "expected '|'")
             methods.append(ast.Method(symbol, args, self.statements()))
             defined_methods.add(symbol)
         self.pop_indent()
@@ -440,15 +450,15 @@ class Parser(ParserState):
     def atom(self):
         if self.expr_token('('):
             statements = self.statements()
-            self.expect_token(')', "Expected ')'")
+            self.expect_token(')', "expected ')'")
             return statements
         if self.expr_token('{'):
             block = self.block()
-            self.expect_token('}', "Expected '}'")
+            self.expect_token('}', "expected '}'")
             return block
         if self.expr_token('['):
             array = self.array()
-            self.expect_token(']', "Expected ']'")
+            self.expect_token(']', "expected ']'")
             return array
         parse_state = self.copy_state()
         m = self.expr_token(re_name)
@@ -471,8 +481,43 @@ class Parser(ParserState):
         m = self.expr_token(re_string)
         if m:
             s = m.group()
-            if s[-1] != "'" or len(s) == 1:
+            exprs = []
+            bufsize = 0
+            while s[-1] == '$':
+                s = parse_string_escapes(m.group(1), parse_state)
+                if len(s) > 0:
+                    bufsize += len(s)
+                    exprs.append(ast.String(s))
+                bufsize += 16
+                if self.match('('):
+                    exprs.append(self.statements())
+                    self.expect_token(')', "expected ')'")
+                else:
+                    parse_state = self.copy_state()
+                    m = self.expect_token(re_name, 'expected name or expression')
+                    name = m.group()
+                    if name in ast.reserved_names:
+                        exprs.append(ast.reserved_names[name])
+                    else:
+                        exprs.append(ast.Send(None, name, [], parse_state))
+                parse_state = self.copy_state()
+                m = self.match(re_string_next)
+                if not m:
+                    parse_state.error('error parsing string')
+                s = m.group()
+            if s[-1] != "'" or (len(s) == 1 and not exprs):
                 self.error('reached end of line while parsing string')
-            string = parse_string_escapes(m.group(1), parse_state)
-            return ast.String(string)
+            s = parse_string_escapes(m.group(1), parse_state)
+            if not exprs:
+                return ast.String(s)
+            if len(s) > 0:
+                exprs.append(ast.String(s))
+            bufsize = int(2**math.ceil(math.log(bufsize, 2)))
+            bufvar = self.gensym('buf')
+            statements = [ast.LocalVariable(bufvar,
+                ast.Send(self.builtin.constant_ref, 'make-string-buffer:', [ast.Number(bufsize, 0, None)]))]
+            for expr in exprs:
+                statements.append(ast.Send(ast.Send(None, bufvar, []), 'write:', [expr]))
+            statements.append(ast.Send(ast.Send(None, bufvar, []), 'string', []))
+            return ast.Sequence(statements)
         self.error('expected expression')

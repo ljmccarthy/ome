@@ -224,7 +224,7 @@ class Program(object):
         out.write(self.target_type.builtin_data)
         self.data_table.generate_assembly(out)
 
-def parse_file(filename):
+def parse_file(filename, builtin):
     try:
         with open(filename) as f:
             source = f.read()
@@ -234,11 +234,11 @@ def parse_file(filename):
         raise OmeFileError(filename, 'utf-8 decoding failed at position {0.start}: {0.reason}'.format(e))
     except Exception as e:
         raise OmeFileError(filename, str(e))
-    return Parser(source, filename).toplevel()
+    return Parser(source, filename, builtin).toplevel()
 
 def compile_file_to_assembly(filename, target_type):
     builtin = BuiltInBlock(target_type)
-    ast = parse_file(filename)
+    ast = parse_file(filename, builtin)
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(builtin)
     ast = ast.resolve_block_refs(builtin)
