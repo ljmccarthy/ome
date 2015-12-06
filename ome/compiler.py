@@ -96,6 +96,9 @@ class Program(object):
     def error(self, message):
         raise OmeFileError(self.filename, message)
 
+    def warning(self, message):
+        sys.stderr.write('\x1b[1m{0}: \x1b[35mwarning:\x1b[0m {1}\n'.format(self.filename, message))
+
     def allocate_tag_ids(self):
         tag = Tag_User
         for block in self.block_list:
@@ -214,7 +217,7 @@ class Program(object):
 
         for symbol in self.sent_messages:
             if symbol not in dispatchers:
-                sys.stderr.write("Warning: No methods defined for message '%s'\n" % symbol)
+                self.warning("no methods defined for message '%s'" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target_type))
                 out.write('\n')
 
