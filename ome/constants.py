@@ -9,6 +9,7 @@ NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
 
 GC_SIZE_BITS = 8  # Maximum object size 2^8-1 = 255 slots (~2 KB)
 GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
+NUM_GC_HEADER_FLAGS = 1
 MAX_SMALL_OBJECT_SIZE = GC_SIZE_MASK
 
 # Tag with all 1 bits is reserved (for untagged negative integers)
@@ -37,7 +38,8 @@ Tag_Small_Integer = 2
 Tag_Small_Decimal = 3
 Tag_String = 256
 Tag_Array = 257
-Tag_User = 258          # First ID for user-defined blocks
+Tag_String_Buffer = 258
+Tag_User = 259          # First ID for user-defined blocks
 Constant_Empty = 0      # The empty block
 Constant_BuiltIn = 1    # Block for built-in methods
 Constant_NotUnderstoodError = 2

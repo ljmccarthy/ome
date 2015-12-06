@@ -211,10 +211,23 @@ struc TB
 	.size:
 endstruc
 
+struc StringBuffer
+	.buffer: resq 1
+	.cached_string: resq 1
+	.position: resd 1
+	align 8
+	.size:
+endstruc
+
 %macro get_gc_object_size 2
 	mov %1, [%2-8]
-	shr %1, 1
+	shr %1, NUM_GC_HEADER_FLAGS
 	and %1, GC_SIZE_MASK
+%endmacro
+
+%macro get_gc_object_size_bytes 2
+	get_gc_object_size %1, %2
+	shl %1, 3
 %endmacro
 
 %macro get_tag 1
@@ -260,6 +273,10 @@ endstruc
 %macro unwrap_error 1
 	shl %1, 1
 	shr %1, 1
+%endmacro
+
+%macro object_header 2
+	dq ((%2) << (GC_SIZE_BITS + NUM_GC_HEADER_FLAGS)) | ((%1) << NUM_GC_HEADER_FLAGS) | 1
 %endmacro
 
 %macro constant_string 2
@@ -377,14 +394,15 @@ OME_allocate:
 	ja .toobig
 	cmp rsi, rdi
 	ja .toobig
+.retry:
 	mov rax, r13
 	lea r13, [r13+rdi*8+8]  ; add object size to bump pointer
 	cmp r13, r14            ; check if beyond limit
 	jae .full
 	mov ecx, 1              ; object header present bit
-	shl rdi, 1
+	shl rdi, NUM_GC_HEADER_FLAGS
 	or rcx, rdi             ; total number of slots
-	shl rsi, GC_SIZE_BITS + 1
+	shl rsi, GC_SIZE_BITS + NUM_GC_HEADER_FLAGS
 	or rcx, rsi             ; number of slots to scan
 	mov [rax], rcx          ; store header
 	add rax, 8              ; return address after header
@@ -433,8 +451,8 @@ OME_allocate:
 	mov r11, rdi
 	tag_pointer r11, rax
 	mov [r8], r11           ; store new pointer to stack
-	shr rcx, 1              ; get object size
-	and rcx, GC_SIZE_MASK
+	shr rcx, NUM_GC_HEADER_FLAGS
+	and rcx, GC_SIZE_MASK   ; get object size
 	test rcx, rcx           ; sanity check object size is not 0
 	jz .stacknext
 	rep movsq               ; copy object
@@ -453,8 +471,8 @@ OME_allocate:
 	mov rdx, [r8]
 	add r8, 8
 	mov rcx, rdx
-	shr rcx, GC_SIZE_BITS + 1       ; get number of fields to scan
-	and rcx, GC_SIZE_MASK
+	shr rcx, GC_SIZE_BITS + NUM_GC_HEADER_FLAGS
+	and rcx, GC_SIZE_MASK           ; get number of fields to scan
 	lea r9, [r8+rcx*8]              ; compute address of last field to scan
 .fieldloop:
 	mov rsi, [r8]           ; get tagged pointer from field
@@ -479,8 +497,8 @@ OME_allocate:
 	mov r11, rdi
 	tag_pointer r11, rax
 	mov [r8], r11           ; store new pointer to field
-	shr rcx, 1              ; get object size
-	and rcx, GC_SIZE_MASK
+	shr rcx, NUM_GC_HEADER_FLAGS
+	and rcx, GC_SIZE_MASK   ; get object size
 	test rcx, rcx           ; sanity check object size is not 0
 	jz .fieldnext
 	rep movsq               ; copy object
@@ -495,8 +513,8 @@ OME_allocate:
 	mov rcx, rdx
 	shr rcx, 1                      ; get object size
 	and rcx, GC_SIZE_MASK
-	shr rdx, GC_SIZE_BITS + 1       ; get number of fields to scan
-	and rdx, GC_SIZE_MASK
+	shr rdx, GC_SIZE_BITS + NUM_GC_HEADER_FLAGS
+	and rdx, GC_SIZE_MASK           ; get number of fields to scan
 	sub rcx, rdx
 	lea r8, [r8+rcx*8]              ; add to end pointer
 .tospacenext:
@@ -525,7 +543,7 @@ OME_allocate:
 %endif
 	pop rsi                 ; restore arguments
 	pop rdi
-	jmp OME_allocate
+	jmp .retry
 
 OME_panic:
 	mov edi, STDERR
@@ -597,6 +615,7 @@ OME_divide_by_zero_error:
 
 builtin_data = '''\
 align 8
+constant_string OME_string_empty, ""
 constant_string OME_string_false, "False"
 constant_string OME_string_true, "True"
 constant_string OME_string_not_understood_error, "Not-Understood-Error"
@@ -1082,6 +1101,150 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	add rsp, 8
 	sub r15, 16
 	ret
-''')
+'''),
+
+BuiltInMethod('make-string-buffer:', constant_to_tag(Constant_BuiltIn), [], '''\
+	mov rdi, rsi
+	get_tag rsi
+	untag_integer rdi
+	cmp esi, Tag_Small_Integer
+	jne OME_type_error
+	cmp rdi, MAX_SMALL_OBJECT_SIZE*8
+	ja OME_overflow_error
+	add rdi, 7              ; convert bytes to qwords
+	shr rdi, 3
+	xor rsi, rsi
+	call OME_allocate
+	mov [r15], rax
+	add r15, 8
+	mov edi, StringBuffer.size/8    ; allocate StringBuffer object
+	mov esi, 2
+	call OME_allocate_slots
+	sub r15, 8
+	mov rdx, [r15]
+	mov [rax+StringBuffer.buffer], rdx
+	tag_pointer rax, Tag_String_Buffer
+	ret
+'''),
+
+BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
+	untag_pointer rdi
+	mov rax, rsi
+	get_tag rax
+	cmp eax, Tag_String
+	jne .notstring
+.withstring:
+	untag_pointer rsi
+	mov rax, [rdi+StringBuffer.buffer]
+	mov r8d, [rdi+StringBuffer.position]
+	get_gc_object_size_bytes rdx, rax
+	mov ecx, [rsi]          ; get string length
+	test ecx, ecx
+	jz .empty
+	lea r9, [rcx+r8]        ; get size after write
+	cmp r9, rdx             ; do we have enough space?
+	ja .resize
+.continue:
+	xor r10, r10
+	mov [rdi+StringBuffer.position], r9d
+	mov [rdi+StringBuffer.cached_string], r10  ; invalidate cached string
+	add rsi, 4
+	lea rdi, [rax+r8]
+	rep movsb
+	mov rax, r9
+.exit:
+	tag_integer rax
+	ret
+.empty:
+	mov rax, r8
+	jmp .exit
+.notstring:
+	mov [r15], rdi
+	add r15, 8
+	mov rdi, rsi
+	call OME_message_string__0
+	sub r15, 8
+	mov rdi, [r15]
+	mov rsi, rax
+	get_tag rax
+	cmp eax, Tag_String
+	jne OME_type_error
+	jmp .withstring
+.resize:
+	shl rdx, 1
+	cmp rdx, MAX_SMALL_OBJECT_SIZE*8
+	ja OME_overflow_error
+	cmp r9, rdx
+	ja .resize
+	mov [r15], rdi
+	mov [r15+8], rsi
+	add r15, 16
+	mov rdi, rdx
+	shr rdi, 3              ; convert bytes to qwords
+	xor rsi, rsi
+	call OME_allocate
+	sub r15, 16
+	mov r10, [r15]
+	mov r11, [r15+8]
+	mov rdi, rax
+	mov rsi, [r10+StringBuffer.buffer]
+	get_gc_object_size rcx, rsi
+	rep movsq
+	mov rdi, r10
+	mov rsi, r11
+	mov [rdi+StringBuffer.buffer], rax
+	mov ecx, [rsi]
+	mov r8d, [rdi+StringBuffer.position]
+	lea r9, [rcx+r8]
+	jmp .continue
+'''),
+
+BuiltInMethod('string', Tag_String_Buffer, [], '''\
+	mov r8, rdi
+	untag_pointer r8
+	mov rax, [r8+StringBuffer.cached_string]
+	test rax, rax
+	jnz .exit
+	mov edi, [r8+StringBuffer.position]
+	test edi, edi
+	jz .empty
+	mov [r15], r8
+	add r15, 8
+	add rdi, 4+7            ; allocate string
+	shr rdi, 3
+	xor rsi, rsi
+	call OME_allocate
+	sub r15, 8
+	mov r8, [r15]
+	mov rsi, [r8+StringBuffer.buffer]
+	mov ecx, [r8+StringBuffer.position]
+	mov [rax], ecx          ; store length
+	add rcx, 7
+	shr rcx, 3
+	lea rdi, [rax+4]
+	rep movsq
+	mov [r8+StringBuffer.cached_string], rax
+.exit
+	tag_pointer rax, Tag_String
+	ret
+.empty:
+	lea rax, [rel OME_string_empty]
+	jmp .exit
+'''),
+
+BuiltInMethod('clear', Tag_String_Buffer, [], '''\
+	xor rcx, rcx
+	untag_pointer rdi
+	mov [rdi+StringBuffer.cached_string], rcx
+	mov [rdi+StringBuffer.position], ecx
+	ret
+'''),
+
+BuiltInMethod('size', Tag_String_Buffer, [], '''\
+	untag_pointer rdi
+	mov eax, [rdi+StringBuffer.position]
+	tag_integer rax
+	ret
+'''),
 
 ]
