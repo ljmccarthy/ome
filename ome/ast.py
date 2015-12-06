@@ -35,7 +35,7 @@ class Send(object):
                     return ref
             self.receiver_block = parent.lookup_receiver(self.symbol)
             if not self.receiver_block:
-                self.parse_state.error("Receiver could not be resolved for '%s'" % self.symbol)
+                self.parse_state.error("receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
@@ -546,7 +546,7 @@ class Number(TerminalNode):
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
-            self.parse_state.error('Number out of range')
+            self.parse_state.error('number out of range')
 
         value = ((self.significand & MASK_SIGNIFICAND) << NUM_EXPONENT_BITS) | (self.exponent & MASK_EXPONENT)
         return (Tag_Small_Decimal, value)
