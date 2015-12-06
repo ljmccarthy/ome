@@ -6,17 +6,19 @@ import re
 re_symbol_part = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
 
 operator_labels = {
-    '+' : '_ADD',
-    '-' : '_SUB',
-    '×' : '_MUL',
-    '÷' : '_DIV',
-    '==': '_EQ',
-    '≠' : '_NE',
-    '<' : '_LT',
-    '≤' : '_LE',
-    '>' : '_GT',
-    '≥' : '_GE',
+    '+' : '__ADD',
+    '-' : '__SUB',
+    '×' : '__MUL',
+    '÷' : '__DIV',
+    '==': '__EQ',
+    '≠' : '__NE',
+    '<' : '__LT',
+    '≤' : '__LE',
+    '>' : '__GT',
+    '≥' : '__GE',
 }
+
+re_hyphen_or_tilde = re.compile(r'[~-]')
 
 def symbol_to_label(symbol):
     """
@@ -26,12 +28,14 @@ def symbol_to_label(symbol):
         foo-bar-baz    foo_bar_baz__0
         foo:,,         foo__3
         foo4:,,bar5:,  foo4__3bar5__2
-        +              _ADD
+        ~foo:          _foo__1
+        +              __ADD
+        ≠              __NE
     """
     if symbol in operator_labels:
         return operator_labels[symbol]
     return ''.join(
-        name.replace('-', '_') + '__' + str(len(args))
+        re_hyphen_or_tilde.sub('_', name) + '__' + str(len(args))
         for name, args in re_symbol_part.findall(symbol))
 
 def make_send_label(symbol):
