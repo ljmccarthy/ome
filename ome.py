@@ -4,7 +4,7 @@
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import sys
-from ome.compiler import compile_file, Error
+from ome.compiler import compile_file, OmeError
 
 def main():
     if len(sys.argv) != 2:
@@ -12,7 +12,7 @@ def main():
     else:
         try:
             compile_file(sys.argv[1])
-        except Error as e:
+        except OmeError as e:
             sys.exit(str(e))
 
 if __name__ == '__main__':

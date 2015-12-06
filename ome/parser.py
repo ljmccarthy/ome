@@ -61,7 +61,7 @@ def parse_string_escapes(string, parse_state):
             parts.append(string_escapes[esc])
         else:
             parse_state.pos += m.start() + 2
-            parse_state.error("Invalid escape sequence '%s'" % esc)
+            parse_state.error("invalid escape sequence '%s'" % esc)
         i = m.end()
     parts.append(string[i:])
     return ''.join(parts)
@@ -95,14 +95,14 @@ class ParserState(object):
         return self.pos - self.line_pos
 
     def format_error(self, message):
-        line = self.current_line
-        column = self.column
-        arrow = ' ' * column + '\x1b[31m^\x1b[0m'
-        return ('In "{0.stream_name}", line {0.line_number}, column {1}\n'
-              + '    {2}\n    {3}\nError: {4}').format(self, column, line, arrow, message)
+        line_unstripped = self.current_line
+        line = line_unstripped.strip()
+        arrow = ' ' * (self.column - (len(line_unstripped) - len(line))) + '\x1b[1;32m^\x1b[0m'
+        return ('\x1b[1m{0.stream_name}:{0.line_number}:{0.column}: \x1b[31merror:\x1b[0m {1}\n'
+              + '    {2}\n    {3}').format(self, message, line, arrow)
 
     def error(self, message):
-        raise Error(self.format_error(message))
+        raise OmeError(self.format_error(message))
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name='<string>', tab_width=8):
@@ -205,12 +205,12 @@ class Parser(ParserState):
             parse_state.error('%s is a reserved name' % name)
         return name
 
-    def argument_name(self, message='Expected argument name'):
+    def argument_name(self, message='expected argument name'):
         return self.expect_token(re_arg_name, message).group()
 
     def check_num_params(self, n, parse_state):
         if n >= 16:
-            parse_state.error('Seriously? %d parameters? Take a step back and redesign your code' % n)
+            parse_state.error('too many parameters')
 
     def signature(self):
         argnames = []
@@ -218,19 +218,19 @@ class Parser(ParserState):
         for m in self.repeat_token(re_keyword):
             part = m.group()
             if part[0] == '~' and symbol:
-                self.error('Expected keyword')
+                self.error('expected keyword')
             symbol += part
             parse_state = self.copy_state()
             name = self.argument_name()
             if name in argnames:
-                parse_state.error("Duplicate parameter name '%s'" % name)
+                parse_state.error("duplicate parameter name '%s'" % name)
             argnames.append(name)
             for m in self.repeat_token(','):
                 symbol += ','
                 parse_state = self.copy_state()
                 name = self.argument_name()
                 if name in argnames:
-                    parse_state.error("Duplicate parameter name '%s'" % name)
+                    parse_state.error("duplicate parameter name '%s'" % name)
                 argnames.append(name)
         if not symbol:
             m = self.match(re_operator)
@@ -253,7 +253,7 @@ class Parser(ParserState):
                 break
             self.set_indent()
             if self.line_number == prev_indent_line:
-                self.error('Expected end of statement')
+                self.error('expected end of statement')
             prev_indent_line = self.indent_line
             yield
             if self.token(';'):
@@ -274,7 +274,7 @@ class Parser(ParserState):
                 break
             name = self.check_name(m.group(), parse_state)
             if name in defined_symbols:
-                parse_state.error("Variable '%s' is already defined" % name)
+                parse_state.error("variable '%s' is already defined" % name)
             mutable = self.expect_token(re_assign, "Expected '=' or ':='").group() == ':='
             statements.append(ast.LocalVariable(name, self.expr()))
             slots.append(ast.BlockVariable(name, mutable, len(slots)))
@@ -284,16 +284,16 @@ class Parser(ParserState):
         for _ in self.repeat_token('|'):
             symbol, args = self.signature()
             if symbol in defined_methods:
-                self.error("Method '%s' is already defined" % symbol)
+                self.error("method '%s' is already defined" % symbol)
             if symbol in defined_symbols:
-                self.error("Method '%s' conflicts with variable definition" % symbol)
+                self.error("method '%s' conflicts with variable definition" % symbol)
             self.expect_token('|', "Expected '|'")
             methods.append(ast.Method(symbol, args, self.statements()))
             defined_methods.add(symbol)
         self.pop_indent()
         self.scan()
         if self.pos < len(self.stream) and not self.peek('}'):
-            self.error('Expected declaration or end of block')
+            self.error('expected declaration or end of block')
         if not slots and not methods:
             return ast.EmptyBlock
         block = ast.Block(slots, methods)
@@ -305,7 +305,7 @@ class Parser(ParserState):
     def toplevel(self):
         block = self.block()
         if self.pos < len(self.stream):
-            self.error('Expected declaration or end of file')
+            self.error('expected declaration or end of file')
         return block
 
     def statement(self):
@@ -316,9 +316,9 @@ class Parser(ParserState):
             m = self.token(re_assign)
             if m:
                 if m.group() == ':=':
-                    self.error('Mutable variables are only allowed in blocks')
+                    self.error('mutable variables are only allowed in blocks')
                 if name[0] == '~':
-                    parse_state.error('Local variables cannot be private')
+                    parse_state.error('local variables cannot be private')
                 self.check_name(name, parse_state)
                 return ast.LocalVariable(name, self.expr())
         self.set_state(parse_state)
@@ -331,7 +331,7 @@ class Parser(ParserState):
             statements.append(self.statement())
         self.pop_indent()
         if not statements or isinstance(statements[-1], ast.LocalVariable):
-            self.error('Expected statement or expression')
+            self.error('expected statement or expression')
         return statements[0] if len(statements) == 1 else ast.Sequence(statements)
 
     def array(self):
@@ -341,7 +341,7 @@ class Parser(ParserState):
             elems.append(self.expr())
         self.pop_indent()
         if len(elems) > MAX_ARRAY_SIZE:
-            self.error('Array size too big.')
+            self.error('array size too big')
         return ast.Array(elems)
 
     def keywordexpr(self):
@@ -358,9 +358,9 @@ class Parser(ParserState):
             part = m.group()
             if part[0] == '~':
                 if symbol:
-                    kw_parse_state.error('Expected keyword')
+                    kw_parse_state.error('expected keyword')
                 if expr:
-                    kw_parse_state.error('Private message sent to an explicit receiver')
+                    kw_parse_state.error('private message sent to an explicit receiver')
             symbol += part
             args.append(self.cmpexpr())
             for m in self.repeat_expr_token(','):
@@ -433,7 +433,7 @@ class Parser(ParserState):
                 break
             name = m.group()
             if name[0] == '~':
-                parse_state.error('Private message sent to an explicit receiver')
+                parse_state.error('private message sent to an explicit receiver')
             expr = ast.Send(expr, name, [], parse_state)
         return expr
 
@@ -472,7 +472,7 @@ class Parser(ParserState):
         if m:
             s = m.group()
             if s[-1] != "'" or len(s) == 1:
-                self.error('Reached end of line while parsing string')
+                self.error('reached end of line while parsing string')
             string = parse_string_escapes(m.group(1), parse_state)
             return ast.String(string)
-        self.error('Expected expression')
+        self.error('expected expression')

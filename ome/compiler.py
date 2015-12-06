@@ -67,7 +67,8 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class Program(object):
-    def __init__(self, ast, builtin, target_type):
+    def __init__(self, filename, ast, builtin, target_type):
+        self.filename = filename
         self.builtin = builtin
         self.toplevel_method = ast
         self.toplevel_block = ast.expr
@@ -76,7 +77,7 @@ class Program(object):
             self.toplevel_block = self.toplevel_block.statements[-1]
 
         if 'main' not in self.toplevel_block.symbols:
-            raise Error('Error: No main method defined')
+            self.error('no main method defined')
 
         self.target_type = target_type
         self.code_table = []  # list of (symbol, [list of (tag, method)])
@@ -92,6 +93,9 @@ class Program(object):
 
         self.build_code_table()
 
+    def error(self, message):
+        raise OmeFileError(self.filename, message)
+
     def allocate_tag_ids(self):
         tag = Tag_User
         for block in self.block_list:
@@ -99,7 +103,7 @@ class Program(object):
                 block.tag = tag
                 tag += 1
         if tag > MAX_TAG:
-            raise Error('Exhausted all tag IDs, your program is too big!')
+            self.error('exhausted all tag IDs')
 
     def allocate_constant_tag_ids(self):
         constant_tag = Constant_User
@@ -109,7 +113,7 @@ class Program(object):
                 block.tag_constant = constant_tag
                 constant_tag += 1
         if constant_tag > MAX_CONSTANT_TAG:
-            raise Error('Exhausted all constant tag IDs, your program is too big!')
+            self.error('exhausted all constant tag IDs')
 
     def find_used_methods(self):
         self.sent_messages = set(['string'])
@@ -218,8 +222,15 @@ class Program(object):
         self.data_table.generate_assembly(out)
 
 def parse_file(filename):
-    with open(filename) as f:
-        source = f.read()
+    try:
+        with open(filename) as f:
+            source = f.read()
+    except FileNotFoundError:
+        raise OmeFileError('ome', 'file does not exist: ' + filename)
+    except UnicodeDecodeError as e:
+        raise OmeFileError(filename, 'utf-8 decoding failed at position {0.start}: {0.reason}'.format(e))
+    except Exception as e:
+        raise OmeFileError(filename, str(e))
     return Parser(source, filename).toplevel()
 
 def compile_file_to_assembly(filename, target_type):
@@ -228,7 +239,7 @@ def compile_file_to_assembly(filename, target_type):
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(builtin)
     ast = ast.resolve_block_refs(builtin)
-    program = Program(ast, builtin, target_type)
+    program = Program(filename, ast, builtin, target_type)
     out = io.StringIO()
     program.generate_assembly(out)
     asm = out.getvalue()
@@ -249,7 +260,7 @@ def run_linker(target_type, infile, outfile):
 
 def compile_file(filename, target_platform=default_target_platform):
     if target_platform not in target_platform_map:
-        raise Error('Unsupported target platform: {0}-{1}'.format(*target_platform))
+        raise OmeFileError('ome', 'unsupported target platform: {0}-{1}'.format(*target_platform))
     target_type = target_platform_map[target_platform]
     asm = compile_file_to_assembly(filename, target_type)
     exe_file = os.path.splitext(filename)[0]

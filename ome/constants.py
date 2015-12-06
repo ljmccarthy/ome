@@ -69,5 +69,11 @@ def encode_gc_header(num_slots, num_scan_slots):
     assert (num_scan_slots & GC_SIZE_MASK) == num_slots
     return (num_scan_slots << (GC_SIZE_BITS + 1)) | (num_slots << 1) | 1
 
-class Error(Exception):
+class OmeError(Exception):
     pass
+
+class OmeFileError(OmeError):
+    _format = '\x1b[1m{0}: \x1b[31merror:\x1b[0m {1}'
+
+    def __init__(self, filename, message):
+        super(OmeFileError, self).__init__(self._format.format(filename, message))
