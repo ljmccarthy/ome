@@ -1247,4 +1247,12 @@ BuiltInMethod('size', Tag_String_Buffer, [], '''\
 	ret
 '''),
 
+BuiltInMethod('reserved-size', Tag_String_Buffer, [], '''\
+	untag_pointer rdi
+	mov rsi, [rdi+StringBuffer.buffer]
+	get_gc_object_size_bytes rax, rsi
+	tag_integer rax
+	ret
+'''),
+
 ]
