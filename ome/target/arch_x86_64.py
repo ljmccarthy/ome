@@ -996,10 +996,17 @@ BuiltInMethod('or:', Tag_Boolean, [], '''\
 	ret
 '''),
 
-BuiltInMethod('equals:', Tag_Boolean, [], '''\
+BuiltInMethod('==', Tag_Boolean, [], '''\
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
+	ret
+'''),
+
+BuiltInMethod('≠', Tag_Boolean, [], '''\
+	xor rax, rax
+	cmp rdi, rsi
+	setne al
 	ret
 '''),
 
