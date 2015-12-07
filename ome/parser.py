@@ -108,10 +108,9 @@ class ParserState(object):
         raise OmeError(self.format_error(message))
 
 class Parser(ParserState):
-    def __init__(self, stream, stream_name, builtin, tab_width=8):
+    def __init__(self, stream, stream_name, tab_width=8):
         self.stream = stream
         self.stream_name = stream_name
-        self.builtin = builtin
         self.pos = 0            # Current position
         self.line_pos = 0       # Position of the 1st character of the current line
         self.line_number = 1    # Current line number (starting from 1)
@@ -126,7 +125,7 @@ class Parser(ParserState):
     def gensym(self, name):
         n = self.gensym_num
         self.gensym_num += 1
-        return '<%s#%d>' % (name, n)
+        return '?%s#%d' % (name, n)
 
     def match(self, pattern):
         """
@@ -515,7 +514,7 @@ class Parser(ParserState):
             bufsize = int(2**math.ceil(math.log(bufsize, 2)))
             bufvar = self.gensym('buf')
             statements = [ast.LocalVariable(bufvar,
-                ast.Send(self.builtin.constant_ref, 'make-string-buffer:', [ast.Number(bufsize, 0, None)]))]
+                ast.Send(None, '?make-string-buffer:', [ast.Number(bufsize, 0, None)]))]
             for expr in exprs:
                 statements.append(ast.Send(ast.Send(None, bufvar, []), 'write:', [expr]))
             statements.append(ast.Send(ast.Send(None, bufvar, []), 'string', []))

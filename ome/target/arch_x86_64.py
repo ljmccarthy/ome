@@ -1103,7 +1103,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''\
 	ret
 '''),
 
-BuiltInMethod('make-string-buffer:', constant_to_tag(Constant_BuiltIn), [], '''\
+BuiltInMethod('?make-string-buffer:', constant_to_tag(Constant_BuiltIn), [], '''\
 	mov rdi, rsi
 	get_tag rsi
 	untag_integer rdi

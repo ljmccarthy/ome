@@ -3,7 +3,7 @@
 
 import re
 
-re_symbol_part = re.compile(r'(~?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
+re_symbol_part = re.compile(r'([?~]?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
 
 operator_labels = {
     '+' : '__ADD',
