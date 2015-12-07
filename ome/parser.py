@@ -510,6 +510,7 @@ class Parser(ParserState):
             if not exprs:
                 return ast.String(s)
             if len(s) > 0:
+                bufsize += len(s)
                 exprs.append(ast.String(s))
             bufsize = int(2**math.ceil(math.log(bufsize, 2)))
             bufvar = self.gensym('buf')
