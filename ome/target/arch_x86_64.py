@@ -958,36 +958,17 @@ BuiltInMethod('negate', Tag_Small_Integer, [], '''\
 	ret
 '''),
 
-BuiltInMethod('<', Tag_Small_Integer, [], '''\
-	mov rax, rsi
-	get_tag rax
-	cmp rax, Tag_Small_Integer
-	jne OME_type_error
-	untag_integer rdi
-	untag_integer rsi
-	xor rax, rax
-	cmp rdi, rsi
-	setl al
-	ret
-'''),
-
-BuiltInMethod('≤', Tag_Small_Integer, [], '''\
-	mov rax, rsi
-	get_tag rax
-	cmp rax, Tag_Small_Integer
-	jne OME_type_error
-	untag_integer rdi
-	untag_integer rsi
-	xor rax, rax
-	cmp rdi, rsi
-	setle al
-	ret
-'''),
-
 BuiltInMethod('==', Tag_Small_Integer, [], '''\
 	xor rax, rax
 	cmp rdi, rsi
 	sete al
+	ret
+'''),
+
+BuiltInMethod('≠', Tag_Small_Integer, [], '''\
+	xor rax, rax
+	cmp rdi, rsi
+	setne al
 	ret
 '''),
 
@@ -1256,3 +1237,20 @@ BuiltInMethod('reserved-size', Tag_String_Buffer, [], '''\
 '''),
 
 ]
+
+def generate_builtins():
+    for op, flag in [('<', 'l'), ('≤', 'le'), ('>', 'g'), ('≥', 'ge')]:
+        builtin_methods.append(BuiltInMethod(op, Tag_Small_Integer, [], '''\
+	xor rax, rax
+	mov rdx, rsi
+	get_tag rdx
+	untag_integer rdi
+	untag_integer rsi
+	cmp rdx, Tag_Small_Integer
+	jne OME_type_error
+	cmp rdi, rsi
+	set%s al
+	ret
+''' % flag))
+
+generate_builtins()
