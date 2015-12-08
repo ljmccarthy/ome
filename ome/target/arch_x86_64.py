@@ -1188,13 +1188,15 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	restore r10, r11
 	mov rdi, rax
 	mov rsi, [r10+StringBuffer.buffer]
-	get_gc_object_size rcx, rsi
+	mov ecx, [r10+StringBuffer.position]
+	mov r8, rcx
+	add rcx, 7
+	shr rcx, 3
 	rep movsq
 	mov rdi, r10
 	mov rsi, r11
 	mov [rdi+StringBuffer.buffer], rax
 	mov ecx, [rsi]
-	mov r8d, [rdi+StringBuffer.position]
 	lea r9, [rcx+r8]
 	jmp .continue
 '''),
