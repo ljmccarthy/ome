@@ -94,7 +94,7 @@ class Program(object):
         self.build_code_table()
 
     def error(self, message):
-        raise OmeFileError(self.filename, message)
+        raise OmeError(message, self.filename)
 
     def warning(self, message):
         sys.stderr.write('\x1b[1m{0}: \x1b[35mwarning:\x1b[0m {1}\n'.format(self.filename, message))
@@ -229,11 +229,11 @@ def parse_file(filename):
         with open(filename) as f:
             source = f.read()
     except FileNotFoundError:
-        raise OmeFileError('ome', 'file does not exist: ' + filename)
+        raise OmeError('file does not exist: ' + filename)
     except UnicodeDecodeError as e:
-        raise OmeFileError(filename, 'utf-8 decoding failed at position {0.start}: {0.reason}'.format(e))
+        raise OmeError('utf-8 decoding failed at position {0.start}: {0.reason}'.format(e), filename)
     except Exception as e:
-        raise OmeFileError(filename, str(e))
+        raise OmeError(str(e), filename)
     return Parser(source, filename).toplevel()
 
 def compile_file_to_assembly(filename, target_type):
@@ -263,7 +263,7 @@ def run_linker(target_type, infile, outfile):
 
 def compile_file(filename, target_platform=default_target_platform):
     if target_platform not in target_platform_map:
-        raise OmeFileError('ome', 'unsupported target platform: {0}-{1}'.format(*target_platform))
+        raise OmeError('unsupported target platform: {0}-{1}'.format(*target_platform))
     target_type = target_platform_map[target_platform]
     asm = compile_file_to_assembly(filename, target_type)
     exe_file = os.path.splitext(filename)[0]

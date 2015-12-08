@@ -22,6 +22,12 @@ class Send(object):
         args = format_list(self.args)
         return '(send %s %s%s)' % (self.symbol, self.receiver or '<free>', args)
 
+    def error(self, message):
+        if self.parse_state:
+            self.parse_state.error(message)
+        else:
+            raise OmeError(message)
+
     def resolve_free_vars(self, parent):
         self.method = parent.find_method()
         for i, arg in enumerate(self.args):
@@ -35,7 +41,7 @@ class Send(object):
                     return ref
             self.receiver_block = parent.lookup_receiver(self.symbol)
             if not self.receiver_block:
-                self.parse_state.error("receiver could not be resolved for '%s'" % self.symbol)
+                self.error("receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
