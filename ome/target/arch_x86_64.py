@@ -71,12 +71,12 @@ class Target_x86_64(object):
 
     def emit_enter(self, num_stack_slots):
         if num_stack_slots > 0:
-            self.emit('add r15, %s', num_stack_slots * 8)
+            self.emit('add dsp, %s', num_stack_slots * 8)
 
     def emit_leave(self, num_stack_slots):
         self.emit.label('.exit')
         if num_stack_slots > 0:
-            self.emit('sub r15, %s', num_stack_slots * 8)
+            self.emit('sub dsp, %s', num_stack_slots * 8)
         self.emit('ret')
 
     def emit_empty_dispatch(self):
@@ -113,14 +113,14 @@ class Target_x86_64(object):
         self.emit('mov %s, %s', ins.dest_reg, ins.source_reg)
 
     def SPILL(self, ins):
-        self.emit('mov [r15-%s], %s', ins.stack_slot * 8, ins.register)
+        self.emit('mov [dsp-%s], %s', ins.stack_slot * 8, ins.register)
 
     def UNSPILL(self, ins):
-        self.emit('mov %s, [r15-%s]', ins.register, ins.stack_slot * 8)
+        self.emit('mov %s, [dsp-%s]', ins.register, ins.stack_slot * 8)
 
     def PUSH(self, ins):
-        self.emit('mov [r15], %s', ins.source_reg)
-        self.emit('add r15, 8')
+        self.emit('mov [dsp], %s', ins.source_reg)
+        self.emit('add dsp, 8')
 
     def CALL(self, ins):
         if ins.traceback_info and ins.check_error:
@@ -141,7 +141,7 @@ class Target_x86_64(object):
 
         self.emit('call %s', ins.call_label)
         if ins.num_stack_args > 0:
-            self.emit('sub r15, %s', ins.num_stack_args * 8)
+            self.emit('sub dsp, %s', ins.num_stack_args * 8)
         if ins.check_error:
             self.emit('test rax, rax')
             self.emit('js %s', traceback_label)
@@ -193,6 +193,34 @@ builtin_macros = '''
 
 %define False OME_Value(0, Tag_Boolean)
 %define True OME_Value(1, Tag_Boolean)
+
+; Data stack pointer
+%define dsp r15
+
+%macro save 1-*
+	%assign %%offset 0
+	%rep %0
+	mov qword [dsp+%%offset], %1
+	%assign %%offset %%offset+8
+	%rotate 1
+	%endrep
+	lea dsp, [dsp+%%offset]
+%endmacro
+
+%macro restore 1-*
+	lea dsp, [dsp-%%size]
+	%assign %%offset 0
+	%rep %0
+	mov %1, qword [dsp+%%offset]
+	%assign %%offset %%offset+8
+	%rotate 1
+	%endrep
+	%%size equ %%offset
+%endmacro
+
+%macro drop 1
+	lea dsp, [dsp-(%1)*8]
+%endmacro
 
 ; Thread context structure
 struc TC
@@ -295,11 +323,11 @@ OME_start:
 	mov rsp, rbp                            ; call stack pointer (grows down)
 	lea r13, [rbp+TC.size]                  ; GC nursery pointer (grows up)
 	lea r14, [r13+NURSERY_SIZE]             ; GC nursery limit
-	lea r15, [r14+NURSERY_SIZE]             ; data stack pointer (grows up)
+	lea dsp, [r14+NURSERY_SIZE]             ; data stack pointer (grows up)
 	mov [rbp+TC.call_stack_limit], rax
 	mov [rbp+TC.traceback_pointer], rax
 	mov [rbp+TC.nursery_base], r13
-	mov [rbp+TC.data_stack_base], r15
+	mov [rbp+TC.data_stack_base], dsp
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
@@ -462,7 +490,7 @@ OME_allocate:
 	mov [r8], rcx
 .stacknext:
 	add r8, 8
-	cmp r8, r15
+	cmp r8, dsp
 	jb .stackloop
 	; now scan objects in to space
 	mov r8, [rbp+TC.nursery_base]
@@ -668,8 +696,7 @@ BuiltInMethod('catch:', constant_to_tag(Constant_BuiltIn), ['do'], '''\
 '''),
 
 BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
-	add r15, 8
-	mov [r15-8], rsi
+	save rsi
 	mov rdi, rsi
 	call OME_message_do__0
 	test rax, rax
@@ -677,12 +704,11 @@ BuiltInMethod('try:', constant_to_tag(Constant_BuiltIn), ['do', 'catch:'],'''\
 	mov rdi, [rbp+TC.call_stack_limit]
 	mov [rbp+TC.traceback_pointer], rdi     ; reset traceback pointer
 	unwrap_error rax                        ; clear error bit if present
-	mov rdi, [r15-8]
+	restore rdi
 	mov rsi, rax
-	sub r15, 8
 	jmp OME_message_catch__1
 .exit:
-	sub r15, 8
+	drop 1
 	ret
 '''),
 
@@ -695,26 +721,25 @@ BuiltInMethod('error:', constant_to_tag(Constant_BuiltIn), [], '''\
 '''),
 
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while'], '''\
-	mov [r15], rsi
-	add r15, 8
+	save rsi
 	mov rdi, rsi
 .loop:
 	call OME_message_while__0
-	mov rdi, [r15-8]
+	mov rdi, [dsp-8]
 	test rax, rax
 	jz .exit                ; exit if |while| returned False
 	js .exit                ; exit if |while| returned an error
 	cmp rax, True           ; compare with True
 	jne .type_error         ; if not True then we have a type error
 	call OME_message_do__0
-	mov rdi, [r15-8]
+	mov rdi, [dsp-8]
 	test rax, rax
 	jns .loop               ; repeat if |do| did not return an error
 .exit:
-	sub r15, 8
+	drop 1
 	ret
 .type_error:
-	sub r15, 8
+	drop 1
 	jmp OME_type_error
 '''),
 
@@ -1059,35 +1084,30 @@ BuiltInMethod('at:', Tag_Array, [], '''\
 '''),
 
 BuiltInMethod('each:', Tag_Array, ['item:'], '''\
-	sub rsp, 8
-	add r15, 16
+	push rbx
+	xor rbx, rbx
 	untag_pointer rdi
 	get_gc_object_size rax, rdi
 	test rax, rax           ; check if zero
 	jz .exit
-	mov [r15-8], rdi        ; save array pointer
-	mov [r15-16], rsi       ; save block
-	xor rcx, rcx
-	mov [rsp], rcx          ; save index
+	save rdi, rsi           ; save array and block
 	mov rdx, rdi
 	mov rdi, rsi
 .loop:
-	mov rsi, [rdx+rcx*8]
+	mov rsi, [rdx+rbx*8]
 	call OME_message_item__1
+	inc rbx
 	test rax, rax           ; check for error
 	js .exit
-	mov rdi, [r15-16]       ; load block
-	mov rdx, [r15-8]        ; load array pointer
-	mov rcx, [rsp]          ; load index
+	mov rdi, [dsp-8]        ; load block
+	mov rdx, [dsp-16]       ; load array pointer
 	get_gc_object_size rax, rdx
-	inc rcx
-	mov [rsp], rcx
-	cmp rcx, rax
+	cmp rbx, rax
 	jb .loop
 .exit:
 	xor rax, rax            ; return False
-	add rsp, 8
-	sub r15, 16
+	drop 2
+	pop rbx
 	ret
 '''),
 
@@ -1099,17 +1119,15 @@ BuiltInMethod('?make-string-buffer:', constant_to_tag(Constant_BuiltIn), [], '''
 	jne OME_type_error
 	cmp rdi, MAX_SMALL_OBJECT_SIZE*8
 	ja OME_overflow_error
-	add rdi, 7              ; convert bytes to qwords
+	add rdi, 7                      ; convert bytes to qwords
 	shr rdi, 3
 	xor rsi, rsi
 	call OME_allocate
-	mov [r15], rax
-	add r15, 8
+	save rax
 	mov edi, StringBuffer.size/8    ; allocate StringBuffer object
 	mov esi, 2
 	call OME_allocate_slots
-	sub r15, 8
-	mov rdx, [r15]
+	restore rdx
 	mov [rax+StringBuffer.buffer], rdx
 	tag_pointer rax, Tag_String_Buffer
 	ret
@@ -1147,12 +1165,10 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	mov rax, r8
 	jmp .exit
 .notstring:
-	mov [r15], rdi
-	add r15, 8
+	save rdi
 	mov rdi, rsi
 	call OME_message_string__0
-	sub r15, 8
-	mov rdi, [r15]
+	restore rdi
 	mov rsi, rax
 	get_tag rax
 	cmp eax, Tag_String
@@ -1164,16 +1180,12 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	ja OME_overflow_error
 	cmp r9, rdx
 	ja .resize
-	mov [r15], rdi
-	mov [r15+8], rsi
-	add r15, 16
+	save rdi, rsi
 	mov rdi, rdx
 	shr rdi, 3              ; convert bytes to qwords
 	xor rsi, rsi
 	call OME_allocate
-	sub r15, 16
-	mov r10, [r15]
-	mov r11, [r15+8]
+	restore r10, r11
 	mov rdi, rax
 	mov rsi, [r10+StringBuffer.buffer]
 	get_gc_object_size rcx, rsi
@@ -1196,14 +1208,12 @@ BuiltInMethod('string', Tag_String_Buffer, [], '''\
 	mov edi, [r8+StringBuffer.position]
 	test edi, edi
 	jz .empty
-	mov [r15], r8
-	add r15, 8
+	save r8
 	add rdi, 4+7            ; allocate string
 	shr rdi, 3
 	xor rsi, rsi
 	call OME_allocate
-	sub r15, 8
-	mov r8, [r15]
+	restore r8
 	mov rsi, [r8+StringBuffer.buffer]
 	mov ecx, [r8+StringBuffer.position]
 	mov [rax], ecx          ; store length
