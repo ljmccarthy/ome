@@ -476,7 +476,8 @@ class Parser(ParserState):
                 significand = significand * 10**(len(decimal)) + int(decimal, 10)
                 exponent -= len(decimal)
             return ast.Number(significand, exponent, parse_state)
-        parse_state = self.copy_state()
+        str_state = self.copy_state()
+        parse_state = str_state
         m = self.expr_token(re_string)
         if m:
             s = m.group()
@@ -515,9 +516,9 @@ class Parser(ParserState):
             bufsize = int(2**math.ceil(math.log(bufsize, 2)))
             bufvar = self.gensym('buf')
             statements = [ast.LocalVariable(bufvar,
-                ast.Send(None, '?make-string-buffer:', [ast.Number(bufsize, 0, None)]))]
+                ast.Send(None, '?make-string-buffer:', [ast.Number(bufsize, 0, None)], str_state))]
             for expr in exprs:
-                statements.append(ast.Send(ast.Send(None, bufvar, []), 'write:', [expr]))
-            statements.append(ast.Send(ast.Send(None, bufvar, []), 'string', []))
+                statements.append(ast.Send(ast.Send(None, bufvar, [], str_state), 'write:', [expr], str_state))
+            statements.append(ast.Send(ast.Send(None, bufvar, [], str_state), 'string', [], str_state))
             return ast.Sequence(statements)
         self.error('expected expression')
