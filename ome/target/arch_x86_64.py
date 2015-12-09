@@ -222,12 +222,21 @@ builtin_macros = '''
 	lea dsp, [dsp-(%1)*8]
 %endmacro
 
+struc LargeObjectHeader
+	.next: resq 1
+	.prev: resq 1
+	.header: resq 1
+	.size:
+endstruc
+
 ; Thread context structure
 struc TC
 	.call_stack_limit: resq 1
 	.traceback_pointer: resq 1
 	.nursery_base: resq 1
 	.data_stack_base: resq 1
+	.large_object_next: resq 1
+	.large_object_prev: resq 2
 	.size:
 endstruc
 
@@ -328,6 +337,9 @@ OME_start:
 	mov [rbp+TC.traceback_pointer], rax
 	mov [rbp+TC.nursery_base], r13
 	mov [rbp+TC.data_stack_base], dsp
+	lea rdi, [rbp+TC.large_object_next]
+	mov [rbp+TC.large_object_next], rdi
+	mov [rbp+TC.large_object_prev], rdi
 	call OME_toplevel       ; create top-level block
 	mov rdi, rax
 	call OME_main           ; call main method on top-level block
@@ -418,26 +430,41 @@ OME_allocate_slots:
 ; rdi = number of slots to allocate
 ; rsi = number of slots containing GC-scannable pointers
 OME_allocate:
+	mov rcx, rsi            ; number of slots to scan
+	shl rcx, GC_SIZE_BITS
+	or rcx, rdi             ; total number of slots
+	shl rcx, NUM_GC_HEADER_FLAGS
+	or ecx, GC_FLAG_PRESENT
 	cmp rdi, MAX_SMALL_OBJECT_SIZE
-	ja .toobig
+	ja .large
 	cmp rsi, rdi
 	ja .toobig
-.retry:
 	mov rax, r13
 	lea r13, [r13+rdi*8+8]  ; add object size to bump pointer
 	cmp r13, r14            ; check if beyond limit
 	jae .full
-	mov ecx, 1              ; object header present bit
-	shl rdi, NUM_GC_HEADER_FLAGS
-	or rcx, rdi             ; total number of slots
-	shl rsi, GC_SIZE_BITS + NUM_GC_HEADER_FLAGS
-	or rcx, rsi             ; number of slots to scan
 	mov [rax], rcx          ; store header
 	add rax, 8              ; return address after header
 	ret
-.toobig:
-	xor rax, rax
+.large:
+	cmp rdi, MAX_LARGE_OBJECT_SIZE
+	ja .toobig
+	push rcx
+	lea rdi, [LargeObjectHeader.size+rdi*8]
+	call OME_vmem_allocate
+	pop qword [rax+LargeObjectHeader.header]
+	mov rdi, [rbp+TC.large_object_next]
+	mov rsi, [rbp+TC.large_object_prev]
+	mov [rdi+LargeObjectHeader.prev], rax
+	mov [rsi+LargeObjectHeader.next], rax
+	mov [rax+LargeObjectHeader.next], rdi
+	mov [rax+LargeObjectHeader.prev], rsi
+	add rax, LargeObjectHeader.size
 	ret
+.toobig:
+	lea rsi, [rel OME_message_invalid_allocation]
+	mov edx, OME_message_invalid_allocation.size
+	jmp OME_panic
 .full:
 	push rdi                ; save arguments
 	push rsi
@@ -471,7 +498,7 @@ OME_allocate:
 	cmp rsi, r14
 	jae .stacknext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
-	test rcx, 1
+	test rcx, GC_FLAG_PRESENT
 	jz .stackforward
 	mov [rdi], rcx          ; store header in to-space
 	add rdi, 8
@@ -517,7 +544,7 @@ OME_allocate:
 	cmp rsi, r14
 	jae .fieldnext
 	mov rcx, [rsi-8]        ; get header or forwarding pointer
-	test rcx, 1
+	test rcx, GC_FLAG_PRESENT
 	jz .fieldforward
 	mov [rdi], rcx          ; store header in to-space
 	add rdi, 8
@@ -571,8 +598,36 @@ OME_allocate:
 %endif
 	pop rsi                 ; restore arguments
 	pop rdi
-	jmp .retry
+	jmp OME_allocate
 
+; rdi = object to resize
+; rsi = new size (number of slots)
+OME_resize:
+	push rsi
+	lea rdx, [LargeObjectHeader.size+rsi*8]
+	get_gc_object_size rsi, rdi
+	cmp rsi, MAX_SMALL_OBJECT_SIZE
+	jbe .panic
+	lea rsi, [LargeObjectHeader.size+rsi*8]
+	sub rdi, LargeObjectHeader.size
+	call OME_vmem_resize
+	pop rdx
+	shl rdx, NUM_GC_HEADER_FLAGS
+	or edx, GC_FLAG_PRESENT
+	mov [rax+LargeObjectHeader.header], rdx
+	mov rdi, [rax+LargeObjectHeader.next]
+	mov rsi, [rax+LargeObjectHeader.prev]
+	mov [rdi+LargeObjectHeader.prev], rax
+	mov [rsi+LargeObjectHeader.next], rax
+	add rax, LargeObjectHeader.size
+	ret
+.panic:
+	lea rsi, [rel OME_message_invalid_allocation]
+	mov edx, OME_message_invalid_allocation.size
+	jmp OME_panic
+
+; rsi = panic message
+; rdx = panic message length
 OME_panic:
 	mov edi, STDERR
 	call OME_write
@@ -664,8 +719,12 @@ OME_vt100_clear:
 .str:	db 0x1b, "[0m"
 .size equ $-.str
 
+OME_message_invalid_allocation:
+.str:	db "Aborted: Invalid allocation request", 10
+.size equ $-.str
+
 OME_message_mmap_failed:
-.str:	db "Aborted: Failed to allocate thread context", 10
+.str:	db "Aborted: mmap() failed", 10
 .size equ $-.str
 
 %if GC_DEBUG
@@ -1176,12 +1235,16 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	jmp .withstring
 .resize:
 	shl rdx, 1
-	cmp rdx, MAX_SMALL_OBJECT_SIZE*8
+	cmp rdx, MAX_LARGE_OBJECT_SIZE*8
 	ja OME_overflow_error
 	cmp r9, rdx
 	ja .resize
 	save rdi, rsi
+	get_gc_object_size rcx, rax
+	cmp ecx, MAX_SMALL_OBJECT_SIZE
+	ja .resizelarge
 	mov rdi, rdx
+	add rdi, 7
 	shr rdi, 3              ; convert bytes to qwords
 	xor rsi, rsi
 	call OME_allocate
@@ -1195,6 +1258,18 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	rep movsq
 	mov rdi, r10
 	mov rsi, r11
+	mov [rdi+StringBuffer.buffer], rax
+	mov ecx, [rsi]
+	lea r9, [rcx+r8]
+	jmp .continue
+.resizelarge:
+	mov rdi, rax
+	mov rsi, rdx
+	add rsi, 7
+	shr rsi, 3
+	call OME_resize
+	restore rdi, rsi
+	mov r8, [rdi+StringBuffer.position]
 	mov [rdi+StringBuffer.buffer], rax
 	mov ecx, [rsi]
 	lea r9, [rcx+r8]

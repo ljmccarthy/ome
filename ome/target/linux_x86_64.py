@@ -28,6 +28,7 @@ class Target_Linux_x86_64(arch.Target_x86_64):
 
 %define MAP_PRIVATE 0x2
 %define MAP_ANONYMOUS 0x20
+%define MREMAP_MAYMOVE 0x1
 
 %define PROT_READ 0x1
 %define PROT_WRITE 0x2
@@ -54,24 +55,54 @@ _start:
 
 ; rdi = exit code
 OME_exit:
-	mov rax, SYS_exit
+	mov eax, SYS_exit
 	syscall
 
 ; rdi = file descriptor
 ; rsi = point to string
 ; rdx = number of bytes
 OME_write:
-	mov rax, SYS_write
+	mov eax, SYS_write
 	syscall
 	ret
 
+; rdi = size in bytes
+OME_vmem_allocate:
+	mov eax, SYS_mmap
+	mov rsi, rdi                            ; size
+	xor rdi, rdi                            ; addr
+	mov edx, PROT_READ|PROT_WRITE           ; prot
+	mov r10d, MAP_PRIVATE|MAP_ANONYMOUS     ; flags
+	xor r8, r8
+	dec r8                                  ; fd
+	xor r9, r9                              ; offset
+	syscall
+	test rax, rax
+	js .panic
+	ret
+.panic:
+	lea rsi, [rel OME_message_mmap_failed]
+	mov edx, OME_message_mmap_failed.size
+	jmp OME_panic
+
+; rdi = pointer to block allocated by OME_vm_allocate
+; rsi = old size
+; rdx = new size
+OME_vmem_resize:
+	mov eax, SYS_mremap
+	mov r10d, MREMAP_MAYMOVE
+	syscall
+	test rax, rax
+	js OME_vmem_allocate.panic
+	ret
+
 OME_allocate_thread_context:
-	mov rax, SYS_mmap
+	mov eax, SYS_mmap
 	xor rdi, rdi                                            ; addr
-	mov rsi, STACK_SIZE*2 + NURSERY_SIZE*2 + PAGE_SIZE*2    ; size
+	mov esi, STACK_SIZE*2 + NURSERY_SIZE*2 + PAGE_SIZE*2    ; size
 	xor rdx, rdx                                            ; PROT_NONE
-	mov r10, MAP_PRIVATE|MAP_ANONYMOUS
-	mov r8, r8
+	mov r10d, MAP_PRIVATE|MAP_ANONYMOUS
+	xor r8, r8
 	dec r8
 	xor r9, r9
 	syscall
@@ -79,9 +110,9 @@ OME_allocate_thread_context:
 	push rdi
 	shr rax, 47   ; test for MAP_FAILED or address that is too big
 	jnz .panic
-	mov rax, SYS_mprotect
-	mov rsi, STACK_SIZE*2 + NURSERY_SIZE*2
-	mov rdx, PROT_READ|PROT_WRITE
+	mov eax, SYS_mprotect
+	mov esi, STACK_SIZE*2 + NURSERY_SIZE*2
+	mov edx, PROT_READ|PROT_WRITE
 	syscall
 	test rax, rax
 	js .panic

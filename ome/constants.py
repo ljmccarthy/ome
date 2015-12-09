@@ -7,10 +7,12 @@ NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
 
-GC_SIZE_BITS = 8  # Maximum object size 2^8-1 = 255 slots (~2 KB)
+GC_SIZE_BITS = 29  # Maximum object size 2^29-1 = 0x1fffffff slots (4 GB)
 GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
+GC_FLAG_PRESENT = 1
 NUM_GC_HEADER_FLAGS = 1
-MAX_SMALL_OBJECT_SIZE = GC_SIZE_MASK
+MAX_SMALL_OBJECT_SIZE = 255
+MAX_LARGE_OBJECT_SIZE = (1 << GC_SIZE_BITS) - 1
 
 # Tag with all 1 bits is reserved (for untagged negative integers)
 MAX_TAG = 2**(NUM_TAG_BITS-1) - 2  # Highest bit of tag is error bit
