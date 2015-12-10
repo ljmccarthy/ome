@@ -1338,8 +1338,6 @@ def generate_builtins():
 	xor rax, rax
 	mov rdx, rsi
 	get_tag rdx
-	untag_integer rdi
-	untag_integer rsi
 	cmp rdx, Tag_Small_Integer
 	jne OME_type_error
 	cmp rdi, rsi
