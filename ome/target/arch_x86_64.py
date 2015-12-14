@@ -603,13 +603,14 @@ OME_allocate:
 ; rdi = object to resize
 ; rsi = new size (number of slots)
 OME_resize:
-	push rsi
+	mov rax, rsi
 	lea rdx, [LargeObjectHeader.size+rsi*8]
 	get_gc_object_size rsi, rdi
 	cmp rsi, MAX_SMALL_OBJECT_SIZE
 	jbe .panic
 	lea rsi, [LargeObjectHeader.size+rsi*8]
 	sub rdi, LargeObjectHeader.size
+	push rax
 	call OME_vmem_resize
 	pop rdx
 	shl rdx, NUM_GC_HEADER_FLAGS
