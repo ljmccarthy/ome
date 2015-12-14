@@ -1250,6 +1250,7 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	ja OME_overflow_error
 	cmp r9, rdx
 	ja .resize2loop
+	sub rdx, LargeObjectHeader.size
 .resizecont:
 	save rdi, rsi
 	get_gc_object_size rcx, rax
