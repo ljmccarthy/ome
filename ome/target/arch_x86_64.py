@@ -1236,10 +1236,21 @@ BuiltInMethod('write:', Tag_String_Buffer, ['string'], '''\
 	jmp .withstring
 .resize:
 	shl rdx, 1
+	cmp rdx, MAX_SMALL_OBJECT_SIZE*8
+	ja .resize2
+	cmp r9, rdx
+	ja .resize
+	jmp .resizecont
+.resize2:
+	add r9, LargeObjectHeader.size
+	mov rdx, 0x10000
+.resize2loop:
+	shl rdx, 1
 	cmp rdx, MAX_LARGE_OBJECT_SIZE*8
 	ja OME_overflow_error
 	cmp r9, rdx
-	ja .resize
+	ja .resize2loop
+.resizecont:
 	save rdi, rsi
 	get_gc_object_size rcx, rax
 	cmp ecx, MAX_SMALL_OBJECT_SIZE
