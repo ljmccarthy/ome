@@ -62,6 +62,11 @@ class Target_x86_64(object):
     temp_registers = ('r10', 'r11')
 
     define_constant_format = '%define {0} {1}\n'
+    comment_format = '; {0}'
+    define_label_format = '.{0}:'
+    label_format = '.{0}'
+    begin_procedure_format = '{0}:'
+    end_procedure_format = ''
 
     def __init__(self, emitter):
         self.emit = emitter
@@ -74,7 +79,7 @@ class Target_x86_64(object):
             self.emit('add dsp, %s', num_stack_slots * 8)
 
     def emit_leave(self, num_stack_slots):
-        self.emit.label('.exit')
+        self.emit.label('exit')
         if num_stack_slots > 0:
             self.emit('sub dsp, %s', num_stack_slots * 8)
         self.emit('ret')
@@ -88,13 +93,13 @@ class Target_x86_64(object):
         if any_constant_tags:
             self.emit('cmp eax, %s', Tag_Constant)
             self.emit('je .constant')
-        self.emit.label('.dispatch')
+        self.emit.label('dispatch')
         if any_constant_tags:
-            const_emit = self.emit.tail_emitter('.constant')
+            const_emit = self.emit.tail_emitter('constant')
             const_emit('mov eax, edi')
             const_emit('add eax, 0x%x', MIN_CONSTANT_TAG)
             const_emit('jmp .dispatch')
-        not_understood_emit = self.emit.tail_emitter('.not_understood')
+        not_understood_emit = self.emit.tail_emitter('not_understood')
         not_understood_emit('jmp OME_not_understood_error')
 
     def emit_dispatch_compare_eq(self, tag, tag_label, exit_label):
@@ -127,7 +132,7 @@ class Target_x86_64(object):
             if ins.traceback_info.id in self.tracebacks:
                 traceback_label = self.tracebacks[ins.traceback_info.id]
             else:
-                traceback_label = '.traceback_%d' % self.num_traceback_labels
+                traceback_label = 'traceback_%d' % self.num_traceback_labels
                 self.num_traceback_labels += 1
                 self.tracebacks[ins.traceback_info.id] = traceback_label
                 tb_emit = self.emit.tail_emitter(traceback_label)
@@ -144,7 +149,7 @@ class Target_x86_64(object):
             self.emit('sub dsp, %s', ins.num_stack_args * 8)
         if ins.check_error:
             self.emit('test rax, rax')
-            self.emit('js %s', traceback_label)
+            self.emit('js .%s', traceback_label)
 
     def TAG(self, ins):
         if ins.dest != ins.source:

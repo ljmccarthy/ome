@@ -3,12 +3,6 @@
 
 from .instructions import *
 
-def apply_labels_to_instructions(instructions, labels):
-    labels = {label.location: label.name for label in labels}
-    for loc, ins in enumerate(instructions):
-        if loc in labels:
-            ins.label = labels[loc]
-
 def eliminate_aliases(instructions):
     """Eliminate all local variable aliases (i.e. ALIAS instructions)."""
 

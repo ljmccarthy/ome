@@ -15,7 +15,6 @@ class MethodCodeBuilder(object):
         self.num_locals = num_args + num_locals + 1
         self.data_table = data_table
         self.instructions = []
-        self.labels = []
         self.dest = self.add_temp()
 
     def add_temp(self):
@@ -23,19 +22,10 @@ class MethodCodeBuilder(object):
         self.num_locals += 1
         return local
 
-    def here(self):
-        return len(self.instructions)
-
-    def add_label(self):
-        label = Label('.L%d' % len(self.labels), self.here())
-        self.labels.append(label)
-        return label
-
     def add_instruction(self, instruction):
         self.instructions.append(instruction)
 
     def optimise(self, target_type):
-        apply_labels_to_instructions(self.instructions, self.labels)
         self.instructions = eliminate_aliases(self.instructions)
         self.instructions = move_constants_to_usage_points(self.instructions, self.num_locals)
         self.instructions = eliminate_redundant_untags(self.instructions)
@@ -43,7 +33,7 @@ class MethodCodeBuilder(object):
         self.instructions, self.num_stack_slots = allocate_registers(self.instructions, self.num_args, target_type)
 
     def generate_assembly(self, label, target_type):
-        emit = ProcedureCodeEmitter(label)
+        emit = ProcedureCodeEmitter(label, target_type)
         target = target_type(emit)
         target.emit_enter(self.num_stack_slots)
         for ins in self.instructions:

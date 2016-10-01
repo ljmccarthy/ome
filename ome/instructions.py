@@ -6,7 +6,6 @@ def format_instruction_args(args):
 
 class Instruction(object):
     args = ()
-    label = None
 
     def emit(self, target):
         getattr(target, self.__class__.__name__)(self)
