@@ -19,12 +19,8 @@ class ProcedureCodeEmitter(CodeEmitter):
     def __init__(self, name, target_type):
         super(ProcedureCodeEmitter, self).__init__(target_type)
         self.name = name
-        self.header_output = []
         self.output = []
         self.tail_emitters = []
-
-    def header_comment(self, format, *args):
-        self.header_output.append(self.target_type.comment_format.format(format % args))
 
     def tail_emitter(self, label):
         emitter = CodeEmitter(self.target_type)
@@ -33,8 +29,7 @@ class ProcedureCodeEmitter(CodeEmitter):
         return emitter
 
     def get_output(self):
-        lines = self.header_output[:]
-        lines.append(self.target_type.begin_procedure_format.format(self.name))
+        lines = [self.target_type.begin_procedure_format.format(self.name)]
         lines.extend(self.output)
         for emitter in self.tail_emitters:
             lines.extend(emitter.output)
