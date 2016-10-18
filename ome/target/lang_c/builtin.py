@@ -6,9 +6,10 @@ from ...constants import *
 
 builtin_macros = '''\
 #include <stdint.h>
+#include <inttypes.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 typedef uint32_t OME_Tag;
 typedef union OME_Value OME_Value;
@@ -332,9 +333,124 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return
     }
 '''),
 
-BuiltInMethod('string', constant_to_tag(Constant_Not_Understood), [], '''
-    OME_STATIC_STRING(string, "NotUnderstood");
-    return OME_tag_pointer(OME_Tag_String, &string);
+BuiltInMethod('string', Tag_Boolean, [], '''
+    OME_STATIC_STRING(s_false, "False");
+    OME_STATIC_STRING(s_true, "True");
+    return OME_tag_pointer(OME_Tag_String, OME_untag_unsigned(_0) ? &s_true : &s_false);
+'''),
+
+BuiltInMethod('string', Tag_Small_Integer, [], '''
+    intptr_t n = OME_untag_signed(_0);
+    OME_String *s = OME_allocate_data(32);
+    s->size = snprintf(s->data, 31 - sizeof(OME_String), "%" PRIdPTR, n);
+    return OME_tag_pointer(OME_Tag_String, s);
+'''),
+
+BuiltInMethod('or:', Tag_Boolean, [], '''
+    return OME_untag_unsigned(_0) ? _0 : _1;
+'''),
+
+BuiltInMethod('and:', Tag_Boolean, [], '''
+    return OME_untag_unsigned(_0) ? _1 : _0;
+'''),
+
+BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''
+    if (OME_untag_unsigned(_0)) {
+        return OME_message_then__0(_1);
+    }
+    else {
+        return OME_message_else__0(_1);
+    }
+'''),
+
+BuiltInMethod('then:', Tag_Boolean, ['do'], '''
+    if (OME_untag_unsigned(_0)) {
+        OME_message_do__0(_1);
+    }
+    return OME_Empty;
+'''),
+
+BuiltInMethod('else:', Tag_Boolean, ['do'], '''
+    if (!OME_untag_unsigned(_0)) {
+        OME_message_do__0(_1);
+    }
+    return OME_Empty;
+'''),
+
+BuiltInMethod('+', Tag_Small_Integer, [], '''
+    intptr_t result = OME_untag_signed(_0) + OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
+        return OME_error_constant(OME_Constant_Overflow);
+    }
+    return OME_tag_signed(OME_Tag_Small_Integer, result);
+'''),
+
+BuiltInMethod('-', Tag_Small_Integer, [], '''
+    intptr_t result = OME_untag_signed(_0) - OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
+        return OME_error_constant(OME_Constant_Overflow);
+    }
+    return OME_tag_signed(OME_Tag_Small_Integer, result);
+'''),
+
+BuiltInMethod('×', Tag_Small_Integer, [], '''
+    __int128_t result = (__int128_t) OME_untag_signed(_0) * OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
+        return OME_error_constant(OME_Constant_Overflow);
+    }
+    return OME_tag_signed(OME_Tag_Small_Integer, (intptr_t) result);
+'''),
+
+BuiltInMethod('mod:', Tag_Small_Integer, [], '''
+    intptr_t result = OME_untag_signed(_0) % OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    return OME_tag_signed(OME_Tag_Small_Integer, result);
+'''),
+
+BuiltInMethod('==', Tag_Small_Integer, [], '''
+    uintptr_t result = OME_untag_signed(_0) == OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_False;
+    }
+    return OME_tag_unsigned(OME_Tag_Boolean, result);
+'''),
+
+BuiltInMethod('<', Tag_Small_Integer, [], '''
+    uintptr_t result = OME_untag_signed(_0) < OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    return OME_tag_unsigned(OME_Tag_Boolean, result);
+'''),
+
+BuiltInMethod('≤', Tag_Small_Integer, [], '''
+    uintptr_t result = OME_untag_signed(_0) <= OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    return OME_tag_unsigned(OME_Tag_Boolean, result);
 '''),
 
 ] # end of builtin_methods
+
+def build_builtin_methods():
+    for name in constant_names:
+        value = constant_value[name]
+        builtin_methods.append(BuiltInMethod('string', constant_to_tag(value), [], '''
+    OME_STATIC_STRING(s, "{}");
+    return OME_tag_pointer(OME_Tag_String, &s);
+'''.format(name)))
+
+build_builtin_methods()
+del build_builtin_methods
