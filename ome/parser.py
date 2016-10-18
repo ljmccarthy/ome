@@ -5,6 +5,7 @@ import re
 import math
 from . import ast
 from .constants import *
+from .error import OmeError
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
@@ -507,5 +508,5 @@ class Parser(ParserState):
                 return ast.String(s)
             if len(s) > 0:
                 exprs.append(ast.String(s))
-            return ast.Concat(exprs, parse_state)
+            return ast.Concat(exprs, str_state)
         self.error('expected expression')

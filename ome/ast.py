@@ -3,6 +3,7 @@
 
 from .builder import MethodCodeBuilder
 from .constants import *
+from .error import OmeError
 from .instructions import *
 from .labels import *
 

@@ -11,6 +11,7 @@ from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .constants import *
 from .dispatcher import generate_dispatcher
+from .error import OmeError
 from .labels import *
 from .parser import Parser
 from .target import target_platform_map, default_target_platform
@@ -116,7 +117,7 @@ class Program(object):
                     column = ps.column - (len(line_unstripped) - len(line))
                     underline = send.symbol.find(':') + 1
                     if underline < 1:
-                        underline = len(send.symbol)
+                        underline = max(len(send.symbol), 1)
                     tbinfo = TraceBackInfo(
                         index = len(self.traceback_table),
                         method_name = send.method.symbol,
@@ -201,9 +202,11 @@ class Program(object):
                 out.write('\n')
                 dispatchers.add(symbol)
 
+        optional_messages = ['return']
         for symbol in sorted(self.sent_messages):
             if symbol not in dispatchers:
-                self.warning("no methods defined for message '%s'" % symbol)
+                if symbol not in optional_messages:
+                    self.warning("no methods defined for message '%s'" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target_type))
                 out.write('\n')
 

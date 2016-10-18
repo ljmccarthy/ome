@@ -42,25 +42,28 @@ Tag_Array = 257
 Tag_String_Buffer = 258
 Tag_User = 259          # First ID for user-defined blocks
 
-Constant_Empty = 0      # The empty block
-Constant_BuiltIn = 1    # Block for built-in methods
-Constant_Stack_Overflow = 2
-Constant_Not_Understood = 3
-Constant_Type_Error = 4
-Constant_Index_Error = 5
-Constant_Overflow = 6
-Constant_Divide_By_Zero = 7
-Constant_User = 8       # First ID for user-defined constant blocks
+constant_names = [
+    'Empty',                # The empty block
+    'BuiltIn',              # Block for built-in methods
+    'Stack-Overflow',
+    'Not-Understood',
+    'Type-Error',
+    'Index-Error',
+    'Overflow',
+    'Divide-By-Zero',
+    'User',                 # First ID for user-defined constant blocks
+]
+
+constant_value = {}
+
+def build_constants():
+    g = globals()
+    for value, name in enumerate(constant_names):
+        constant_value[name] = value
+        g['Constant_' + name.replace('-', '_')] = value
+
+build_constants()
+del build_constants
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
-
-class OmeError(Exception):
-    _format = '\x1b[1m{0}: \x1b[31merror:\x1b[0m {1}'
-
-    def __init__(self, message, filename='ome'):
-        self.message = message
-        self.filename = filename
-
-    def __str__(self):
-        return self._format.format(self.filename, self.message)
