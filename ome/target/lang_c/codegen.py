@@ -193,7 +193,7 @@ def encode_string_data(string):
     """Add 32-bit length header and nul termination/alignment padding."""
     string = string.encode('utf8')
     string = struct.pack('I', len(string)) + string
-    padding = b'\0' * (8 - (len(string) & 7))
+    padding = b'\0' * (HEAP_ALIGNMENT - (len(string) % HEAP_ALIGNMENT))
     return string + padding
 
 class DataTable(object):
@@ -218,7 +218,7 @@ class DataTable(object):
         return '&OME_data_table[{}]'.format(self.allocate_string_offset(string))
 
     def emit(self, out):
-        out.write('const uint8_t OME_data_table[] __attribute__((aligned(16))) = {\n')
+        out.write('static const uint8_t OME_data_table[] __attribute__((aligned(OME_HEAP_ALIGNMENT))) = {\n')
         for index, string in enumerate(self.data):
             out.write(','.join(str(c) for c in string))
             out.write(',\n')

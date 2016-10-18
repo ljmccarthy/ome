@@ -177,7 +177,7 @@ static size_t OME_heap_alignment(size_t size)
     while (0)
 
 #define OME_STATIC_STRING(name, string)\\
-    static const OME_String name = {sizeof(string), string}
+    static const OME_String name __attribute__((aligned(OME_HEAP_ALIGNMENT))) = {sizeof(string), string}
 '''
 
 builtin_code = '''\
@@ -187,7 +187,8 @@ static void OME_print_value(FILE *out, OME_Value value)
         value = OME_message_string__0(value);
     }
     if (OME_get_tag(value) == OME_Tag_String) {
-        fputs(OME_untag_string(value)->data, out);
+        OME_String *string = OME_untag_string(value);
+        fwrite(string->data, 1, string->size, out);
     }
     else {
         fprintf(out, "#<%ld:%ld>", (long) OME_get_tag(value), (long) OME_untag_unsigned(value));
