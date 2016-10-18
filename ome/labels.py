@@ -1,9 +1,9 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import re
 
-re_symbol_part = re.compile(r'([?~]?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
+re_symbol_part = re.compile(r'([~]?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?')
 
 operator_labels = {
     '+' : '__ADD',
@@ -42,14 +42,20 @@ def make_send_label(symbol):
     return 'OME_message_' + symbol_to_label(symbol)
 
 def make_call_label_format(symbol):
-    return 'OME_method_%X_' + symbol_to_label(symbol)
+    return 'OME_method_{}_' + symbol_to_label(symbol)
 
 def make_call_label(tag, symbol):
-    return make_call_label_format(symbol) % tag
+    return make_call_label_format(symbol).format(tag)
+
+def symbol_arity(symbol):
+    if symbol in operator_labels:
+        return 2
+    return symbol.count(':') + symbol.count(',') + 1
 
 __all__ = [
     'symbol_to_label',
     'make_send_label',
     'make_call_label_format',
     'make_call_label',
+    'symbol_arity',
 ]

@@ -1,77 +1,59 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 NUM_BITS = 64
-NUM_TAG_BITS = 17
+NUM_TAG_BITS = 20
 NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
+ERROR_BIT = 1 << (NUM_TAG_BITS - 1)
 
-GC_SIZE_BITS = 29  # Maximum object size 2^29-1 = 0x1fffffff slots (4 GB)
-GC_SIZE_MASK = (1 << GC_SIZE_BITS) - 1
-GC_FLAG_PRESENT = 1
-NUM_GC_HEADER_FLAGS = 1
-MAX_SMALL_OBJECT_SIZE = 255
-MAX_LARGE_OBJECT_SIZE = (1 << GC_SIZE_BITS) - 1
+HEAP_ALIGNMENT_SHIFT = 4
+HEAP_ALIGNMENT = 1 << HEAP_ALIGNMENT_SHIFT
+HEAP_SIZE_BITS = 10  # 2^10-1 = 1024 slots (8 KB)
+MAX_HEAP_OBJECT_SIZE = 2**HEAP_SIZE_BITS
 
 # Tag with all 1 bits is reserved (for untagged negative integers)
 MAX_TAG = 2**(NUM_TAG_BITS-1) - 2  # Highest bit of tag is error bit
 MIN_CONSTANT_TAG = 2**NUM_TAG_BITS
 MAX_CONSTANT_TAG = 2**32 - MIN_CONSTANT_TAG - 1
 
-MIN_INT = -2**(NUM_DATA_BITS-1)
-MAX_INT = 2**(NUM_DATA_BITS-1) - 1
+MIN_SMALL_INTEGER = -2**(NUM_DATA_BITS-1)
+MAX_SMALL_INTEGER = 2**(NUM_DATA_BITS-1) - 1
 MIN_EXPONENT = -2**(NUM_EXPONENT_BITS-1)
 MAX_EXPONENT = 2**(NUM_EXPONENT_BITS-1) - 1
 MIN_SIGNIFICAND = -2**(NUM_SIGNIFICAND_BITS-1)
 MAX_SIGNIFICAND = 2**(NUM_SIGNIFICAND_BITS-1) - 1
-MAX_ARRAY_SIZE = 2**GC_SIZE_BITS - 1
 
 MASK_TAG = (1 << NUM_TAG_BITS) - 1
 MASK_DATA = (1 << NUM_DATA_BITS) - 1
-MASK_INT = (1 << NUM_DATA_BITS) - 1
 MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
-# Tags up to 255 are reserved for non-pointer data types
+# Tags < 256 are reserved for non-heap data types
 Tag_Boolean = 0
 Tag_Constant = 1
 Tag_Small_Integer = 2
 Tag_Small_Decimal = 3
+
+# Tags >= 256 are reserved for heap data types
 Tag_String = 256
 Tag_Array = 257
 Tag_String_Buffer = 258
 Tag_User = 259          # First ID for user-defined blocks
+
 Constant_Empty = 0      # The empty block
 Constant_BuiltIn = 1    # Block for built-in methods
-Constant_NotUnderstoodError = 2
-Constant_TypeError = 3
-Constant_IndexError = 4
-Constant_OverflowError = 5
-Constant_DivideByZeroError = 6
-Constant_User = 7       # First ID for user-defined constant blocks
+Constant_Stack_Overflow = 2
+Constant_Not_Understood = 3
+Constant_Type_Error = 4
+Constant_Index_Error = 5
+Constant_Overflow = 6
+Constant_Divide_By_Zero = 7
+Constant_User = 8       # First ID for user-defined constant blocks
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
-
-def encode_tagged_value(value, tag):
-    assert (value & MASK_DATA) == value
-    assert (tag & MASK_TAG) == tag
-    return (tag << NUM_DATA_BITS) | value
-
-def error_tag(tag):
-    return tag | (1 << (NUM_TAG_BITS - 1))
-
-def encode_constant(constant):
-    return encode_tagged_value(constant, Tag_Constant)
-
-def encode_error_constant(constant):
-    return encode_tagged_value(constant, error_tag(Tag_Constant))
-
-def encode_gc_header(num_slots, num_scan_slots):
-    assert (num_slots & GC_SIZE_MASK) == num_slots
-    assert (num_scan_slots & GC_SIZE_MASK) == num_slots
-    return (num_scan_slots << (GC_SIZE_BITS + 1)) | (num_slots << 1) | 1
 
 class OmeError(Exception):
     _format = '\x1b[1m{0}: \x1b[31merror:\x1b[0m {1}'

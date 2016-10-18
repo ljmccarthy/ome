@@ -1,25 +1,44 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 from .constants import *
 from .emit import ProcedureCodeEmitter
 from .labels import *
 
-def split_tag_range(target, label_format, tags, exit_label, min_tag, max_tag):
-    target.emit.comment('[0x%x..0x%x]', min_tag, max_tag)
-    if len(tags) == 1:
-        tag = tags[0]
-        if min_tag == tag and max_tag == tag:
-            target.emit_jump(label_format % tag)
+class DispatcherGenerator(object):
+    def __init__(self, symbol, tags, target_type):
+        tags = sorted(tags)
+        self.num_args = symbol_arity(symbol)
+        self.target_type = target_type
+        self.emit = ProcedureCodeEmitter(target_type)
+        self.codegen = target_type.DispatchCodegen(self.emit)
+        self.codegen.begin(make_send_label(symbol), self.num_args)
+        if tags:
+            any_constant_tags = any(tag > MIN_CONSTANT_TAG for tag in tags)
+            self.codegen.emit_dispatch(any_constant_tags)
+            self.split_tag_range(make_call_label_format(symbol), tags, 0, 1 << NUM_DATA_BITS)
+            self.codegen.end()
         else:
-            target.emit_dispatch_compare_eq(tag, label_format % tag, target.label_format.format(exit_label))
-    else:
-        middle = len(tags) // 2
-        middle_label = 'tag_ge_%X' % tags[middle]
-        target.emit_dispatch_compare_gte(tags[middle], target.label_format.format(middle_label))
-        split_tag_range(target, label_format, tags[:middle], exit_label, min_tag, tags[middle] - 1)
-        target.emit.label(middle_label)
-        split_tag_range(target, label_format, tags[middle:], exit_label, tags[middle], max_tag)
+            self.codegen.end_empty_dispatch()
+
+    def format_label(self, label):
+        return self.target_type.label_format.format(label)
+
+    def split_tag_range(self, label_format, tags, min_tag, max_tag):
+        #self.emit.comment('[0x{:x}..0x{:x}]'.format(min_tag, max_tag))
+        if len(tags) == 1:
+            tag = tags[0]
+            if min_tag == tag and max_tag == tag:
+                self.codegen.emit_call_method(label_format.format(tag), self.num_args)
+            else:
+                self.codegen.emit_maybe_call_method(label_format.format(tag), self.num_args, tag)
+        else:
+            middle = len(tags) // 2
+            middle_label = 'tag_{}'.format(tags[middle])
+            self.codegen.emit_compare_gte(tags[middle], self.format_label(middle_label))
+            self.split_tag_range(label_format, tags[:middle], min_tag, tags[middle] - 1)
+            self.emit.label(middle_label)
+            self.split_tag_range(label_format, tags[middle:], tags[middle], max_tag)
 
 def generate_dispatcher(symbol, tags, target_type):
     """
@@ -27,13 +46,5 @@ def generate_dispatcher(symbol, tags, target_type):
     a binary search with compare and conditional jump instructions until the
     method for the tag is found.
     """
-    tags = sorted(tags)
-    any_constant_tags = any(tag > MIN_CONSTANT_TAG for tag in tags)
-    emit = ProcedureCodeEmitter(make_send_label(symbol), target_type)
-    target = target_type(emit)
-    if tags:
-        target.emit_dispatch(any_constant_tags)
-        split_tag_range(target, make_call_label_format(symbol), tags, 'not_understood', 0, 1 << NUM_DATA_BITS)
-    else:
-        target.emit_empty_dispatch()
-    return emit.get_output()
+    gen = DispatcherGenerator(symbol, tags, target_type)
+    return gen.emit.get_output()

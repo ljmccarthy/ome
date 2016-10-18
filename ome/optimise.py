@@ -1,5 +1,5 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 from .instructions import *
 
@@ -16,6 +16,26 @@ def eliminate_aliases(instructions):
             for i, arg in enumerate(ins.args):
                 if arg in aliases:
                     ins.args[i] = aliases[arg]
+            instructions_out.append(ins)
+
+    return instructions_out
+
+def eliminate_load_values(instructions, value_format):
+    """
+    Eliminate all LOAD_VALUE instructions by replacing references to
+    the variable with the actual value in.
+    """
+    instructions_out = []
+    values = {}
+
+    for ins in instructions:
+        if isinstance(ins, LOAD_VALUE):
+            values[ins.dest] = ins
+        else:
+            for i, arg in enumerate(ins.args):
+                if arg in values:
+                    load_ins = values[arg]
+                    ins.args[i] = value_format.format(tag=load_ins.tag, value=load_ins.value)
             instructions_out.append(ins)
 
     return instructions_out
@@ -81,7 +101,7 @@ def renumber_locals(instructions, num_args):
 
     for ins in instructions:
         for i, arg in enumerate(ins.args):
-            ins.args[i] = locals_map[arg]
+            ins.args[i] = locals_map.get(arg, arg)
         if hasattr(ins, 'dest'):
             assert ins.dest not in locals_map
             new_dest = len(locals_map)
@@ -89,6 +109,32 @@ def renumber_locals(instructions, num_args):
             ins.dest = new_dest
 
     return len(locals_map)
+
+def find_live_sets(instructions):
+    """
+    Compute the live set for each instruction.
+    """
+    created_at = {}
+    last_used_at = [set() for _ in range(len(instructions))]
+
+    seen = set()
+    for loc, ins in reversed(list(enumerate(instructions))):
+        if hasattr(ins, 'dest') and isinstance(ins.dest, int):
+            created_at[loc] = ins.dest
+            if ins.dest not in seen:
+                last_used_at[loc].add(ins.dest)
+        for arg in ins.args:
+            if arg not in seen and isinstance(arg, int):
+                seen.add(arg)
+                last_used_at[loc].add(arg)
+
+    live_set = seen - set(created_at.values())
+    for loc, ins in enumerate(instructions):
+        ins.live_set = frozenset(live_set)
+        if loc in created_at:
+            live_set.add(created_at[loc])
+        live_set.difference_update(last_used_at[loc])
+        ins.live_set_after = frozenset(live_set)
 
 def find_local_usage_points(instructions, num_args):
     usage_points = {i: [] for i in range(num_args)}

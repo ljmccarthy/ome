@@ -1,5 +1,5 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import re
 import math
@@ -101,7 +101,7 @@ class ParserState(object):
         line_unstripped = self.current_line.rstrip()
         line = line_unstripped.lstrip()
         arrow = ' ' * (self.column - (len(line_unstripped) - len(line))) + '\x1b[1;32m^\x1b[0m'
-        return ('\x1b[1m{0.stream_name}:{0.line_number}:{0.column}: \x1b[31merror:\x1b[0m {1}\n'
+        return ('\x1b[1m{0.stream_name}:{0.line_number}:{0.column}:\x1b[0m {1}\n'
               + '    {2}\n    {3}').format(self, message, line, arrow)
 
     def error(self, message):
@@ -349,8 +349,6 @@ class Parser(ParserState):
         for _ in self.statement_lines():
             elems.append(self.expr())
         self.pop_indent()
-        if len(elems) > MAX_ARRAY_SIZE:
-            self.error('array size too big')
         return ast.Array(elems)
 
     def keywordexpr(self):
@@ -482,13 +480,10 @@ class Parser(ParserState):
         if m:
             s = m.group()
             exprs = []
-            bufsize = 0
             while s[-1] == '$':
                 s = parse_string_escapes(m.group(1), parse_state)
                 if len(s) > 0:
-                    bufsize += len(s)
                     exprs.append(ast.String(s))
-                bufsize += 16
                 if self.match('('):
                     exprs.append(self.statements())
                     self.expect_token(')', "expected ')'")
@@ -511,14 +506,6 @@ class Parser(ParserState):
             if not exprs:
                 return ast.String(s)
             if len(s) > 0:
-                bufsize += len(s)
                 exprs.append(ast.String(s))
-            bufsize = int(2**math.ceil(math.log(bufsize, 2)))
-            bufvar = self.gensym('buf')
-            statements = [ast.LocalVariable(bufvar,
-                ast.Send(None, '?make-string-buffer:', [ast.Number(bufsize, 0, None)], str_state))]
-            for expr in exprs:
-                statements.append(ast.Send(ast.Send(None, bufvar, [], str_state), 'write:', [expr], str_state))
-            statements.append(ast.Send(ast.Send(None, bufvar, [], str_state), 'string', [], str_state))
-            return ast.Sequence(statements)
+            return ast.Concat(exprs, parse_state)
         self.error('expected expression')

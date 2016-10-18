@@ -2,15 +2,13 @@
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import platform
+from .lang_c import platforms as c_platforms
 
-from .linux_x86_64 import Target_Linux_x86_64
-
-target_types = [
-    Target_Linux_x86_64,
-]
+target_types = c_platforms
 
 target_platform_map = {
     target_type.platform: target_type for target_type in target_types
 }
 
-default_target_platform = (platform.system(), platform.machine())
+#default_target_platform = (platform.machine(), platform.system())
+default_target_platform = ('C', platform.system())

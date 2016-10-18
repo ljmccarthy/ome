@@ -1,5 +1,5 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 from .builder import MethodCodeBuilder
 from .constants import *
@@ -39,9 +39,10 @@ class Send(object):
                 ref = parent.lookup_var(self.symbol)
                 if ref:
                     return ref
-            self.receiver_block = parent.lookup_receiver(self.symbol)
-            if not self.receiver_block:
-                self.error("receiver could not be resolved for '%s'" % self.symbol)
+            if self.symbol:
+                self.receiver_block = parent.lookup_receiver(self.symbol)
+                if not self.receiver_block:
+                    self.error("receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
@@ -49,7 +50,7 @@ class Send(object):
             self.args[i] = arg.resolve_block_refs(parent)
         if self.receiver:
             self.receiver = self.receiver.resolve_block_refs(parent)
-        else:
+        elif self.receiver_block:
             block = self.receiver_block
             if block.is_constant and block != parent.find_block():
                 # No need to get block ref for constant blocks
@@ -67,7 +68,8 @@ class Send(object):
 
     def walk(self, visitor):
         visitor(self)
-        self.receiver.walk(visitor)
+        if self.receiver:
+            self.receiver.walk(visitor)
         for arg in self.args:
             arg.walk(visitor)
 
@@ -84,7 +86,15 @@ class Send(object):
         code.add_instruction(CALL(dest, [receiver] + args, call_label, self.traceback_info))
         return dest
 
-    check_error = True
+class Concat(Send):
+    def __init__(self, args, parse_state=None):
+        super(Concat, self).__init__(None, '', args, parse_state)
+
+    def generate_code(self, code):
+        args = [arg.generate_code(code) for arg in self.args]
+        dest = code.add_temp()
+        code.add_instruction(CONCAT(dest, args, self.traceback_info))
+        return dest
 
 class BlockVariable(object):
     def __init__(self, name, mutable, index, init_ref=None):
@@ -185,17 +195,11 @@ class Block(object):
         if self.is_constant:
             code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
         else:
-            num_slots = code.add_temp()
-            object = code.add_temp()
-            code.add_instruction(LOAD_VALUE(num_slots, 0, len(self.slots)))
-            code.add_instruction(CALL(object, [num_slots], 'OME_allocate_slots', None, check_error=False))
-            for slot_index, var in enumerate(self.slots):
-                arg = var.generate_code(code)
-                code.add_instruction(SET_SLOT(object, slot_index, arg))
-            code.add_instruction(TAG(dest, object, self.tag))
+            code.add_instruction(ALLOC(dest, len(self.slots), self.tag))
+            for index, slot in enumerate(self.slots):
+                value = slot.generate_code(code)
+                code.add_instruction(SET_SLOT(dest, index, value))
         return dest
-
-    check_error = False
 
 class LocalVariable(object):
     def __init__(self, name, expr):
@@ -223,8 +227,6 @@ class LocalVariable(object):
         expr = self.expr.generate_code(code)
         code.add_instruction(ALIAS(local, expr))
         return local
-
-    check_error = False
 
 class Method(object):
     def __init__(self, symbol, args, expr):
@@ -279,7 +281,7 @@ class Method(object):
     def generate_code(self, data_table):
         code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args), data_table)
         code.add_instruction(RETURN(self.expr.generate_code(code)))
-        return code
+        return code.get_code()
 
 class Sequence(object):
     def __init__(self, statements):
@@ -333,10 +335,6 @@ class Sequence(object):
             statement.generate_code(code)
         return self.statements[-1].generate_code(code)
 
-    @property
-    def check_error(self):
-        return any(statement.check_error for statement in self.statements)
-
 class Array(object):
     def __init__(self, elems):
         self.elems = elems
@@ -360,18 +358,12 @@ class Array(object):
             elem.walk(visitor)
 
     def generate_code(self, code):
-        num_elems = code.add_temp()
-        array = code.add_temp()
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(num_elems, 0, len(self.elems)))
-        code.add_instruction(CALL(array, [num_elems], 'OME_allocate_slots', None, check_error=False))
-        for i, elem in enumerate(self.elems):
-            elem = elem.generate_code(code)
-            code.add_instruction(SET_SLOT(array, i, elem))
-        code.add_instruction(TAG(dest, array, Tag_Array))
+        code.add_instruction(ALLOC(len(self.slots), Tag_Array))
+        for index, elem in enumerate(self.elems):
+            value = elem.generate_code(code)
+            code.add_instruction(SET_SLOT(dest, index, value))
         return dest
-
-    check_error = False
 
 class TerminalNode(object):
     def resolve_free_vars(self, parent):
@@ -382,8 +374,6 @@ class TerminalNode(object):
 
     def walk(self, visitor):
         visitor(self)
-
-    check_error = False
 
 class Value(TerminalNode):
     def __init__(self, tag, value):
@@ -422,6 +412,9 @@ class BuiltInMethod(object):
         self.tag = tag
         self.sent_messages = sent_messages
         self.code = code
+
+    def generate_target_code(self, label, target_type):
+        return target_type.generate_builtin_method(label, symbol_arity(self.symbol), self.code)
 
 class BuiltInBlock(object):
     is_constant = True
@@ -493,13 +486,9 @@ class SlotGet(object):
 
     def generate_code(self, code):
         object = self.obj_expr.generate_code(code)
-        untagged_object = code.add_temp()
         dest = code.add_temp()
-        code.add_instruction(UNTAG(untagged_object, object))
-        code.add_instruction(GET_SLOT(dest, untagged_object, self.slot_index))
+        code.add_instruction(GET_SLOT(dest, object, self.slot_index))
         return dest
-
-    check_error = True
 
 class SlotSet(object):
     def __init__(self, obj_expr, slot_index, set_expr):
@@ -528,12 +517,8 @@ class SlotSet(object):
     def generate_code(self, code):
         object = self.obj_expr.generate_code(code)
         value = self.set_expr.generate_code(code)
-        untagged_object = code.add_temp()
-        code.add_instruction(UNTAG(untagged_object, object))
-        code.add_instruction(SET_SLOT(untagged_object, self.slot_index, value))
+        code.add_instruction(SET_SLOT(object, self.slot_index, value))
         return value
-
-    check_error = True
 
 class Number(TerminalNode):
     def __init__(self, significand, exponent, parse_state):
@@ -547,8 +532,8 @@ class Number(TerminalNode):
     def encode_value(self):
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
-            if MIN_INT <= value <= MAX_INT:
-                return (Tag_Small_Integer, value & MASK_INT)
+            if MIN_SMALL_INTEGER <= value <= MAX_SMALL_INTEGER:
+                return (Tag_Small_Integer, value & MASK_DATA)
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):

@@ -1,10 +1,9 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import io
 import os
 import re
-import struct
 import subprocess
 import sys
 
@@ -17,46 +16,14 @@ from .parser import Parser
 from .target import target_platform_map, default_target_platform
 
 class TraceBackInfo(object):
-    def __init__(self, id, file_info, source_line, column, underline):
-        self.id = id
-        self.file_info = file_info
+    def __init__(self, index, method_name, stream_name, source_line, line_number, column, underline):
+        self.index = index
+        self.method_name = method_name
+        self.stream_name = stream_name
         self.source_line = source_line
+        self.line_number = line_number
         self.column = column
         self.underline = underline
-
-def encode_string_data(string):
-    """Add 32-bit length header and nul termination/alignment padding."""
-    string = string.encode('utf8')
-    string = struct.pack('I', len(string)) + string
-    padding = b'\0' * (8 - (len(string) & 7))
-    return string + padding
-
-class DataTable(object):
-    def __init__(self):
-        self.size = 0
-        self.data = []
-        self.string_offsets = {}
-
-    def append_data(self, data):
-        offset = self.size
-        self.data.append(data)
-        self.size += len(data)
-        return offset
-
-    def allocate_string_offset(self, string):
-        if string not in self.string_offsets:
-            data = encode_string_data(string)
-            self.string_offsets[string] = self.append_data(data)
-        return self.string_offsets[string]
-
-    def allocate_string(self, string):
-        return '(OME_data+%s)' % self.allocate_string_offset(string)
-
-    def generate_assembly(self, out):
-        out.write('\nalign 8\nOME_data:\n')
-        for data in self.data:
-             out.write('\tdb ' + ','.join('%d' % byte for byte in data) + '\n')
-        out.write('.end:\n')
 
 def collect_nodes_of_type(ast, node_type):
     nodes = []
@@ -67,9 +34,10 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class Program(object):
-    def __init__(self, filename, ast, builtin, target_type):
+    def __init__(self, filename, ast, builtin, target_type, debug=True):
         self.filename = filename
         self.builtin = builtin
+        self.debug = debug
         self.toplevel_method = ast
         self.toplevel_block = ast.expr
 
@@ -81,7 +49,8 @@ class Program(object):
 
         self.target_type = target_type
         self.code_table = []  # list of (symbol, [list of (tag, method)])
-        self.data_table = DataTable()
+        self.data_table = target_type.DataTable()
+        self.traceback_table = {}
 
         self.block_list = collect_nodes_of_type(ast, Block)
         self.allocate_tag_ids()
@@ -119,9 +88,9 @@ class Program(object):
             self.error('exhausted all constant tag IDs')
 
     def find_used_methods(self):
-        self.sent_messages = set(['string'])
+        self.sent_messages = set(['main', 'string'])
         self.sent_messages.update(
-            send.symbol for send in self.send_list if not send.receiver_block)
+            send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
 
         self.called_methods = set([
             (self.toplevel_block.tag, 'main'),
@@ -138,31 +107,29 @@ class Program(object):
         for send in self.send_list:
             if send.parse_state:
                 ps = send.parse_state
-                file_info = '\n  File "%s", line %s, in |%s|\n    ' % (
-                    ps.stream_name, ps.line_number, send.method.symbol)
+                key = (ps.stream_name, ps.line_number, ps.column)
+                if key in self.traceback_table:
+                    tbinfo = self.traceback_table[key]
+                else:
+                    line_unstripped = ps.current_line.rstrip()
+                    line = line_unstripped.lstrip()
+                    column = 4 + (ps.column - (len(line_unstripped) - len(line)))
+                    underline = send.symbol.find(':') + 1
+                    if underline < 1:
+                        underline = len(send.symbol)
+                    tbinfo = TraceBackInfo(
+                        index = len(self.traceback_table),
+                        method_name = send.method.symbol,
+                        stream_name = ps.stream_name,
+                        source_line = line,
+                        line_number = ps.line_number,
+                        column = column,
+                        underline = underline)
+                    self.traceback_table[key] = tbinfo
+                send.traceback_info = tbinfo
 
-                line_unstripped = ps.current_line.rstrip()
-                line = line_unstripped.lstrip()
-                column = 4 + (ps.column - (len(line_unstripped) - len(line)))
-
-                underline = send.symbol.find(':') + 1
-                if underline < 1:
-                    underline = len(send.symbol)
-
-                send.traceback_info = TraceBackInfo(
-                    id = (ps.stream_name, ps.line_number, ps.column),
-                    file_info = self.data_table.allocate_string(file_info),
-                    source_line = self.data_table.allocate_string(line),
-                    column = column,
-                    underline = underline)
-
-    def compile_method_with_label(self, method, label):
-        code = method.generate_code(self.data_table)
-        code.optimise(self.target_type)
-        return code.generate_assembly(label, self.target_type)
-
-    def compile_method(self, method, tag):
-        return self.compile_method_with_label(method, make_call_label(tag, method.symbol))
+    def compile_method(self, method):
+        return method.generate_code(self.data_table)
 
     def should_include_method(self, method, tag):
         return method.symbol in self.sent_messages or (tag, method.symbol) in self.called_methods
@@ -174,16 +141,14 @@ class Program(object):
             if self.should_include_method(method, self.builtin.tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
-                label = make_call_label(method.tag, method.symbol)
-                code = '%s:\n%s' % (label, method.code)
-                methods[method.symbol].append((method.tag, code))
+                methods[method.symbol].append((method.tag, method))
 
         for block in self.block_list:
             for method in block.methods:
                 if self.should_include_method(method, block.tag):
                     if method.symbol not in methods:
                         methods[method.symbol] = []
-                    code = self.compile_method(method, block.tag)
+                    code = self.compile_method(method)
                     methods[method.symbol].append((block.tag, code))
 
         for symbol in sorted(methods.keys()):
@@ -191,38 +156,69 @@ class Program(object):
 
         methods.clear()
 
-    def generate_assembly(self, out):
+    def emit_constants(self, out):
         define_format = self.target_type.define_constant_format
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int):
-                out.write(define_format.format(name, value))
-
-        out.write(define_format.format('OME_main', make_call_label(self.toplevel_block.tag, 'main')))
-        out.write(self.target_type.builtin_macros)
-        out.write(self.target_type.builtin_code)
+                out.write(define_format.format('OME_' + name, value))
         out.write('\n')
-        out.write(self.compile_method_with_label(self.toplevel_method, 'OME_toplevel'))
+        out.write(self.target_type.builtin_macros)
+
+    def emit_data(self, out):
+        out.write(self.target_type.builtin_data)
+        out.write('\n')
+        self.data_table.emit(out)
+        out.write('\n')
+        traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
+        self.target_type.emit_traceback_table(out, traceback_entries)
+        out.write('\n')
+
+    def emit_code_declarations(self, out):
+        method_decls = set()
+        message_decls = set(self.sent_messages)
+        for symbol, methods in self.code_table:
+            message_decls.add(symbol)
+            for tag, code in methods:
+                method_decls.add((symbol, tag))
+        for symbol, tag in sorted(method_decls):
+            self.target_type.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
+        for symbol in sorted(message_decls):
+            self.target_type.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
+        out.write('\n')
+
+    def emit_code_definitions(self, out):
+        out.write(self.target_type.builtin_code)
         out.write('\n')
 
         dispatchers = set()
         for symbol, methods in self.code_table:
+            for tag, code in methods:
+                out.write(code.generate_target_code(make_call_label(tag, symbol), self.target_type))
+                out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
                 out.write(generate_dispatcher(symbol, tags, self.target_type))
                 out.write('\n')
                 dispatchers.add(symbol)
-            for tag, code in methods:
-                out.write(code)
-                out.write('\n')
 
-        for symbol in self.sent_messages:
+        for symbol in sorted(self.sent_messages):
             if symbol not in dispatchers:
                 self.warning("no methods defined for message '%s'" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target_type))
                 out.write('\n')
 
-        out.write(self.target_type.builtin_data)
-        self.data_table.generate_assembly(out)
+    def emit_toplevel(self, out):
+        code = self.compile_method(self.toplevel_method)
+        out.write(code.generate_target_code('OME_toplevel', self.target_type))
+        out.write('\n')
+        out.write(self.target_type.builtin_code_main)
+
+    def emit_program_text(self, out):
+        self.emit_constants(out)
+        self.emit_data(out)
+        self.emit_code_declarations(out)
+        self.emit_code_definitions(out)
+        self.emit_toplevel(out)
 
 def parse_file(filename):
     try:
@@ -236,7 +232,7 @@ def parse_file(filename):
         raise OmeError(str(e), filename)
     return Parser(source, filename).toplevel()
 
-def compile_file_to_assembly(filename, target_type):
+def compile_file_to_code(filename, target_type):
     builtin = BuiltInBlock(target_type)
     ast = parse_file(filename)
     ast = Method('', [], ast)
@@ -244,9 +240,8 @@ def compile_file_to_assembly(filename, target_type):
     ast = ast.resolve_block_refs(builtin)
     program = Program(filename, ast, builtin, target_type)
     out = io.StringIO()
-    program.generate_assembly(out)
+    program.emit_program_text(out)
     asm = out.getvalue()
-    #print(asm)
     return asm.encode('utf8')
 
 def run_assembler(target_type, input, outfile):
@@ -265,7 +260,7 @@ def compile_file(filename, target_platform=default_target_platform):
     if target_platform not in target_platform_map:
         raise OmeError('unsupported target platform: {0}-{1}'.format(*target_platform))
     target_type = target_platform_map[target_platform]
-    asm = compile_file_to_assembly(filename, target_type)
+    asm = compile_file_to_code(filename, target_type)
     exe_file = os.path.splitext(filename)[0]
     obj_file = exe_file + '.o'
     run_assembler(target_type, asm, obj_file)

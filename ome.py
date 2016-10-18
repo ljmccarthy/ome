@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # ome - Object Message Expressions
-# Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import sys
 from ome.compiler import compile_file, OmeError
