@@ -43,9 +43,6 @@ def format_function_defn(name, num_args):
 def format_function_decl(name, num_args):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value' for n in range(num_args)))
 
-def format_set(s):
-    return '{' + ','.join(str(x) for x in sorted(s)) + '}'
-
 def format_dispatch_call(name, num_args):
     return '{}({})'.format(name, ', '.join('_{}'.format(n) for n in range(num_args)))
 
@@ -110,21 +107,18 @@ class ProcedureCodegen(object):
     def CALL(self, ins):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
-        self.emit('OME_Value _{}{} = {}({});'.format(
-            '*' if ins.untagged_return_value else '',
+        self.emit('OME_Value _{} = {}({});'.format(
             ins.dest,
             ins.call_label,
             ', '.join('_{}'.format(x) for x in ins.args)))
 
         if ins.check_error:
-            if ins.traceback_info:
-                self.emit('if (OME_is_error(_{})) {{'.format(ins.dest))
-                with self.emit.indented():
+            self.emit('if (OME_is_error(_{})) {{'.format(ins.dest))
+            with self.emit.indented():
+                if ins.traceback_info:
                     self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(ins.traceback_info.index))
-                    self.emit_return('_{}'.format(ins.dest))
-                self.emit('}')
-            else:
-                self.emit('if (OME_is_error(_{})) return _{};'.format(ins.dest, ins.dest))
+                self.emit_return('_{}'.format(ins.dest))
+            self.emit('}')
 
     def CONCAT(self, ins):
         self.emit_save_list(ins)

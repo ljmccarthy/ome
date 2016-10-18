@@ -17,9 +17,7 @@ class StackAllocator(object):
             self.forget_locals(ins.live_set)
             ins.load_list = self.load_locals(ins.args)
 
-            if ins.is_leaf:
-                ins.save_list, ins.clear_list = [], []
-            else:
+            if not ins.is_leaf:
                 ins.save_list, ins.clear_list = self.save_locals(ins.live_set_after - {ins.dest})
 
             if hasattr(ins, 'dest'):

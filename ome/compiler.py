@@ -113,7 +113,7 @@ class Program(object):
                 else:
                     line_unstripped = ps.current_line.rstrip()
                     line = line_unstripped.lstrip()
-                    column = 4 + (ps.column - (len(line_unstripped) - len(line)))
+                    column = ps.column - (len(line_unstripped) - len(line))
                     underline = send.symbol.find(':') + 1
                     if underline < 1:
                         underline = len(send.symbol)

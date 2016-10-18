@@ -8,7 +8,7 @@ from .codegen import *
 platform = ('C', 'Linux')
 
 def get_assembler_args(outfile):
-    return ['gcc', '-c', '-x', 'c', '-std=c99', '-Wall', '-Wno-unused', '-', '-o', outfile]
+    return ['gcc', '-c', '-x', 'c', '-std=c99', '-Wall', '-Wno-unused', '-O3', '-', '-o', outfile]
 
 def get_linker_args(infile, outfile):
     return ['gcc', '-Wl,--strip-all', '-Wl,--gc-sections', '-o', outfile, infile]

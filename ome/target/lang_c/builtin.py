@@ -154,7 +154,7 @@ static size_t OME_heap_alignment(size_t size)
         OME_Value * const _stack_next = &_OME_stack[stack_size];\\
         if (_stack_next >= OME_context->stack_limit) {\\
             return (retval);\\
-        }\
+        }\\
         OME_context->stack_pointer = _stack_next;\\
     } while (0)
 
@@ -215,7 +215,7 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     OME_Traceback_Entry const **end = (OME_Traceback_Entry const **) OME_context->stack_limit;
     for (OME_Traceback_Entry const **cur = OME_context->traceback; cur < end; cur++) {
         OME_Traceback_Entry const *tb = *cur;
-        fprintf(out, "\\n  File \\"%s\\", line %d, in |%s|\\n    %s\\n",
+        fprintf(out, "\\n  File \\"%s\\", line %d, in |%s|\\n    %s\\n    ",
                 tb->stream_name, tb->line_number, tb->method_name, tb->source_line);
         for (int i = 0; i < tb->column; i++) {
             fputc(' ', out);
@@ -224,9 +224,10 @@ static void OME_print_traceback(FILE *out, OME_Value error)
             fputc('^', out);
         }
     }
-    fputs("\\nError: ", stderr);
-    OME_print_value(stderr, OME_strip_error(error));
-    fputc('\\n', stderr);
+    fputs("\\nError: ", out);
+    OME_print_value(out, OME_strip_error(error));
+    fputc('\\n', out);
+    fflush(out);
 }
 
 static OME_Value OME_allocate_slots(uint32_t num_slots, OME_Tag tag)
