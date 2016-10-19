@@ -49,26 +49,17 @@ def move_constants_to_usage_points(instructions, num_locals):
     """
 
     instructions_out = []
-    constant_values = {}
-    constant_labels = {}
+    constant_instructions = {}
 
     for ins in instructions:
-        if isinstance(ins, LOAD_VALUE):
-            constant_values[ins.dest] = ins
-        elif isinstance(ins, LOAD_LABEL):
-            constant_labels[ins.dest] = ins
+        if isinstance(ins, (LOAD_VALUE, LOAD_LABEL)):
+            constant_instructions[ins.dest] = ins
         else:
             for i, arg in enumerate(ins.args):
-                if arg in constant_values:
-                    cins = constant_values[arg]
-                    instructions_out.append(LOAD_VALUE(num_locals, cins.tag, cins.value))
-                    ins.args[i] = num_locals
-                    num_locals += 1
-                elif arg in constant_labels:
-                    cins = constant_labels[arg]
-                    instructions_out.append(LOAD_LABEL(num_locals, cins.tag, cins.label))
-                    ins.args[i] = num_locals
-                    num_locals += 1
+                if arg in constant_instructions:
+                    cins = constant_instructions[arg]
+                    del constant_instructions[arg]
+                    instructions_out.append(cins)
             instructions_out.append(ins)
 
     return instructions_out

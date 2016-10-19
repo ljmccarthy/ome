@@ -29,6 +29,7 @@ class ProcedureCodegen(object):
 
     def optimise(self, code):
         code.instructions = optimise.eliminate_aliases(code.instructions)
+        code.instructions = optimise.move_constants_to_usage_points(code.instructions, code.num_args)
         optimise.renumber_locals(code.instructions, code.num_args)
         optimise.find_live_sets(code.instructions)
         self.is_leaf = all(ins.is_leaf for ins in code.instructions)
