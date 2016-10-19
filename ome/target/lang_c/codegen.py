@@ -36,18 +36,20 @@ class ProcedureCodegen(object):
             self.stack_size = allocate_stack_slots(code.instructions, code.num_args)
         else:
             self.stack_size = 0
+        self.has_stack = self.stack_size > 0 or any(isinstance(ins, CONCAT) for ins in code.instructions)
 
     def begin(self, name, num_args, instructions):
         self.emit(format_function_defn(name, num_args))
         self.emit('{')
         self.emit.indent()
-        if not self.is_leaf and self.stack_size > 0:
+        if self.has_stack:
             self.emit('OME_Value * const _stack = OME_context->stack_pointer;')
-            self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(self.stack_size))
-            with self.emit.indented():
-                self.emit('return OME_error_constant(OME_Constant_Stack_Overflow);')
-            self.emit('}')
-            self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
+            if self.stack_size > 0:
+                self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(self.stack_size))
+                with self.emit.indented():
+                    self.emit('return OME_error_constant(OME_Constant_Stack_Overflow);')
+                self.emit('}')
+                self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
 
     def end(self):
         self.emit.dedent()
@@ -63,6 +65,19 @@ class ProcedureCodegen(object):
         for slot in ins.clear_list:
             self.emit('_stack[{}] = OME_False;'.format(slot))
 
+    def emit_return(self, ret):
+        if self.stack_size > 0:
+            self.emit('OME_context->stack_pointer = _stack;')
+        self.emit('return {};'.format(ret))
+
+    def emit_error_check(self, error, traceback_info=None):
+        self.emit('if (OME_is_error(_{})) {{'.format(error))
+        with self.emit.indented():
+            if traceback_info:
+                self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(traceback_info.index))
+            self.emit_return('_{}'.format(error))
+        self.emit('}')
+
     def LOAD_VALUE(self, ins):
         self.emit('const OME_Value _{} = OME_tag_unsigned({}, {});'.format(ins.dest, ins.tag, ins.value))
 
@@ -74,13 +89,6 @@ class ProcedureCodegen(object):
         self.emit_load_list(ins)
         self.emit('OME_Value _{} = OME_allocate_slots({}, {});'.format(ins.dest, ins.size, ins.tag))
 
-    def emit_return(self, ret):
-        if self.stack_size > 0:
-            self.emit('OME_context->stack_pointer = _stack;')
-            self.emit('return {};'.format(ret))
-        else:
-            self.emit('return {};'.format(ret))
-
     def CALL(self, ins):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
@@ -88,37 +96,23 @@ class ProcedureCodegen(object):
             ins.dest,
             ins.call_label,
             ', '.join('_{}'.format(x) for x in ins.args)))
-
         if ins.check_error:
-            self.emit('if (OME_is_error(_{})) {{'.format(ins.dest))
-            with self.emit.indented():
-                if ins.traceback_info:
-                    self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(ins.traceback_info.index))
-                self.emit_return('_{}'.format(ins.dest))
-            self.emit('}')
+            self.emit_error_check(ins.dest, ins.traceback_info)
 
     def CONCAT(self, ins):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
-        if self.stack_size == 0:
-            self.emit('OME_Value * const _stack = OME_context->stack_pointer;')
         stack_size = self.stack_size + len(ins.args)
         self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(stack_size))
         with self.emit.indented():
-            self.emit('OME_context->stack_pointer = _stack;')
-            self.emit('return OME_error_constant(OME_Constant_Stack_Overflow);')
+            self.emit_return('OME_error_constant(OME_Constant_Stack_Overflow)')
         self.emit('}')
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(stack_size))
         for index, arg in enumerate(ins.args):
             self.emit('_stack[{}] = _{};'.format(index + self.stack_size, arg))
         self.emit('OME_Value _{} = OME_concat(&_stack[{}], {});'.format(ins.dest, self.stack_size, len(ins.args)))
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
-        self.emit('if (OME_is_error(_{})) {{'.format(ins.dest))
-        with self.emit.indented():
-            if ins.traceback_info:
-                self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(ins.traceback_info.index))
-            self.emit_return('_{}'.format(ins.dest))
-        self.emit('}')
+        self.emit_error_check(ins.dest, ins.traceback_info)
 
     def GET_SLOT(self, ins):
         self.emit_load_list(ins)
@@ -130,9 +124,7 @@ class ProcedureCodegen(object):
 
     def RETURN(self, ins):
         self.emit_load_list(ins)
-        if self.stack_size > 0:
-            self.emit('OME_context->stack_pointer -= {};'.format(self.stack_size))
-        self.emit('return _{};'.format(ins.source))
+        self.emit_return('_{}'.format(ins.source))
 
 class DispatchCodegen(object):
     def __init__(self, emitter):
