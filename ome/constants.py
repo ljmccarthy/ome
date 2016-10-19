@@ -31,16 +31,20 @@ MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
 # Tags < 256 are reserved for non-heap data types
-Tag_Boolean = 0
-Tag_Constant = 1
-Tag_Small_Integer = 2
-Tag_Small_Decimal = 3
+integer_type_names = [
+    'Boolean',
+    'Constant',
+    'Small-Integer',
+    'Small-Decimal',
+]
 
 # Tags >= 256 are reserved for heap data types
-Tag_String = 256
-Tag_Array = 257
-Tag_String_Buffer = 258
-Tag_User = 259          # First ID for user-defined blocks
+pointer_type_names = [
+    'String',
+    'Array',
+    'String-Buffer',
+    'User',
+]
 
 constant_names = [
     'Empty',                # The empty block
@@ -55,9 +59,16 @@ constant_names = [
 ]
 
 constant_value = {}
+type_tag = {}
 
 def build_constants():
     g = globals()
+    for tag, name in enumerate(integer_type_names):
+        type_tag[name] = tag
+        g['Tag_' + name.replace('-', '_')] = tag
+    for tag, name in enumerate(pointer_type_names, 256):
+        type_tag[name] = tag
+        g['Tag_' + name.replace('-', '_')] = tag
     for value, name in enumerate(constant_names):
         constant_value[name] = value
         g['Constant_' + name.replace('-', '_')] = value
@@ -67,3 +78,9 @@ del build_constants
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
+
+if __name__ == '__main__':
+    for name in integer_type_names + pointer_type_names:
+        print('Tag_{} = {}'.format(name.replace('-', '_'), type_tag[name]))
+    for name in constant_names:
+        print('Constant_{} = {}'.format(name.replace('-', '_'), constant_value[name]))
