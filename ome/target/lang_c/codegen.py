@@ -190,13 +190,6 @@ class DispatchCodegen(object):
         self.emit('if (_tag == {}) return {};'.format(tag, format_dispatch_call(method_name, num_args)))
         self.emit('goto not_understood;')
 
-def encode_string_data(string):
-    """Add 32-bit length header and nul termination/alignment padding."""
-    string = string.encode('utf8')
-    string = struct.pack('I', len(string)) + string
-    padding = b'\0' * (HEAP_ALIGNMENT - (len(string) % HEAP_ALIGNMENT))
-    return string + padding
-
 class DataTable(object):
     def __init__(self):
         self.strings = {}

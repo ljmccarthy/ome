@@ -3,11 +3,6 @@
 
 from .emit import ProcedureCodeEmitter
 
-class Label(object):
-    def __init__(self, name, location):
-        self.name = name
-        self.location = location
-
 class MethodCodeBuilder(object):
     def __init__(self, num_args, num_locals, data_table):
         self.num_args = num_args + 1  # self is arg 0
