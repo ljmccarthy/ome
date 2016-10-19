@@ -4,6 +4,8 @@
 import struct
 from ... import optimise
 from ...constants import *
+from ...instructions import CONCAT
+from .cstring import literal_c_string
 from .stackalloc import allocate_stack_slots
 
 define_constant_format = '#define {} {}\n'
@@ -11,31 +13,6 @@ comment_format = '// {}'
 define_label_format = '{}:'
 label_format = '{}'
 indent = '    '
-
-c_escape_chars = {
-    7: '\\a',
-    8: '\\b',
-    9: '\\t',
-    10: '\\n',
-    11: '\\v',
-    12: '\\f',
-    13: '\\r',
-    34: '\\"',
-    92: '\\\\',
-}
-
-def c_char_sequence(c):
-    if c in c_escape_chars:
-        return c_escape_chars[c]
-    if 32 <= c < 127:
-        return chr(c)
-    else:
-        return '\\x%02X' % c
-
-def literal_c_string(s):
-    if isinstance(s, str):
-        s = s.encode('utf8')
-    return '"' + ''.join(c_char_sequence(c) for c in s) + '"'
 
 def format_function_defn(name, num_args):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value _{}'.format(n) for n in range(num_args)))
