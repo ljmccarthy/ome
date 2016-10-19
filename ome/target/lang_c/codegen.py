@@ -138,7 +138,8 @@ class ProcedureCodegen(object):
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
         self.emit('if (OME_is_error(_{})) {{'.format(ins.dest))
         with self.emit.indented():
-            self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(ins.traceback_info.index))
+            if ins.traceback_info:
+                self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(ins.traceback_info.index))
             self.emit_return('_{}'.format(ins.dest))
         self.emit('}')
 
