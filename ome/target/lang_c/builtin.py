@@ -4,7 +4,7 @@
 from ...ast import BuiltInMethod
 from ...constants import *
 
-builtin_macros = '''\
+builtin_macros = r'''\
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
@@ -144,36 +144,35 @@ static size_t OME_heap_alignment(size_t size)
 
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
 
-#define OME_ENTER_OR_RETURN(stack_size, retval)\\
-    OME_Value * const _OME_stack = OME_context->stack_pointer;\\
-    OME_Value * const stack = _OME_stack;\\
-    do {\\
-        OME_Value * const _stack_next = &_OME_stack[stack_size];\\
-        if (_stack_next >= OME_context->stack_limit) {\\
-            return (retval);\\
-        }\\
-        OME_context->stack_pointer = _stack_next;\\
+#define OME_ENTER_OR_RETURN(stack_size, retval)\
+    OME_Value * const _OME_stack = OME_context->stack_pointer;\
+    OME_Value * const stack = _OME_stack;\
+    do {\
+        OME_Value * const _stack_next = &_OME_stack[stack_size];\
+        if (_stack_next >= OME_context->stack_limit) {\
+            return (retval);\
+        }\
+        OME_context->stack_pointer = _stack_next;\
     } while (0)
 
-#define OME_ENTER(stack_size)\\
+#define OME_ENTER(stack_size)\
     OME_ENTER_OR_RETURN(stack_size, OME_error_constant(OME_Constant_Stack_Overflow))
 
-#define OME_RETURN(retval)\\
+#define OME_RETURN(retval)\
     do { OME_context->stack_pointer = _OME_stack; return (retval); } while (0)
 
-#define OME_ERROR(error)\\
+#define OME_ERROR(error)\
     OME_RETURN(OME_error_constant(OME_Constant_##error))
 
-#define OME_RETURN_ERROR(value)\\
-    do {\\
-        OME_Value _OME_maybe_error = (value);\\
-        if (OME_is_error(_OME_maybe_error)) {\\
-            OME_RETURN(_OME_maybe_error);\\
-        }\\
-    }\\
-    while (0)
+#define OME_RETURN_ERROR(value)\
+    do {\
+        OME_Value _OME_maybe_error = (value);\
+        if (OME_is_error(_OME_maybe_error)) {\
+            OME_RETURN(_OME_maybe_error);\
+        }\
+    } while (0)
 
-#define OME_STATIC_STRING(name, string)\\
+#define OME_STATIC_STRING(name, string)\
     static const OME_String name OME_ALIGNED = {sizeof(string), string}
 
 static __thread OME_Context *OME_context;
@@ -183,7 +182,7 @@ static const OME_Value OME_True = {._udata = 1, ._utag = OME_Tag_Boolean};
 static const OME_Value OME_Empty = {._udata = OME_Constant_Empty, ._utag = OME_Tag_Constant};
 '''
 
-builtin_code = '''\
+builtin_code = r'''\
 static void OME_print_value(FILE *out, OME_Value value)
 {
     if (OME_get_tag(value) != OME_Tag_String) {
@@ -219,7 +218,7 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     OME_Traceback_Entry const **end = (OME_Traceback_Entry const **) OME_context->stack_limit;
     for (OME_Traceback_Entry const **cur = OME_context->traceback; cur < end; cur++) {
         OME_Traceback_Entry const *tb = *cur;
-        fprintf(out, "\\n  File \\"%s\\", line %d, in |%s|\\n    %s\\n    ",
+        fprintf(out, "\n  File \"%s\", line %d, in |%s|\n    %s\n    ",
                 tb->stream_name, tb->line_number, tb->method_name, tb->source_line);
         for (int i = 0; i < tb->column; i++) {
             fputc(' ', out);
@@ -228,9 +227,9 @@ static void OME_print_traceback(FILE *out, OME_Value error)
             fputc('^', out);
         }
     }
-    fputs("\\nError: ", out);
+    fputs("\nError: ", out);
     OME_print_value(out, OME_strip_error(error));
-    fputc('\\n', out);
+    fputc('\n', out);
     fflush(out);
 }
 
@@ -279,7 +278,7 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 }
 '''
 
-builtin_code_main = '''\
+builtin_code_main = r'''\
 int main(const int argc, const char *const *argv)
 {
     const unsigned int stack_size = 256;
