@@ -62,12 +62,6 @@ struct OME_String {
     char data[];
 };
 
-static __thread OME_Context *OME_context;
-
-static const OME_Value OME_False = {._udata = 0, ._utag = OME_Tag_Boolean};
-static const OME_Value OME_True = {._udata = 1, ._utag = OME_Tag_Boolean};
-static const OME_Value OME_Empty = {._udata = OME_Constant_Empty, ._utag = OME_Tag_Constant};
-
 static OME_Value OME_tag_unsigned(OME_Tag tag, uintptr_t udata)
 {
     return (OME_Value) {._udata = udata, ._utag = tag};
@@ -148,6 +142,8 @@ static size_t OME_heap_alignment(size_t size)
     return (size + OME_HEAP_ALIGNMENT - 1) & ~(OME_HEAP_ALIGNMENT - 1);
 }
 
+#define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
+
 #define OME_ENTER_OR_RETURN(stack_size, retval)\\
     OME_Value * const _OME_stack = OME_context->stack_pointer;\\
     OME_Value * const stack = _OME_stack;\\
@@ -178,7 +174,13 @@ static size_t OME_heap_alignment(size_t size)
     while (0)
 
 #define OME_STATIC_STRING(name, string)\\
-    static const OME_String name __attribute__((aligned(OME_HEAP_ALIGNMENT))) = {sizeof(string), string}
+    static const OME_String name OME_ALIGNED = {sizeof(string), string}
+
+static __thread OME_Context *OME_context;
+
+static const OME_Value OME_False = {._udata = 0, ._utag = OME_Tag_Boolean};
+static const OME_Value OME_True = {._udata = 1, ._utag = OME_Tag_Boolean};
+static const OME_Value OME_Empty = {._udata = OME_Constant_Empty, ._utag = OME_Tag_Constant};
 '''
 
 builtin_code = '''\

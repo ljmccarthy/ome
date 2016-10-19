@@ -198,31 +198,24 @@ def encode_string_data(string):
 
 class DataTable(object):
     def __init__(self):
-        self.size = 0
-        self.data = []
-        self.string_offsets = {}
-
-    def append_data(self, data):
-        offset = self.size
-        self.data.append(data)
-        self.size += len(data)
-        return offset
-
-    def allocate_string_offset(self, string):
-        if string not in self.string_offsets:
-            data = encode_string_data(string)
-            self.string_offsets[string] = self.append_data(data)
-        return self.string_offsets[string]
+        self.strings = {}
 
     def allocate_string(self, string):
-        return '&OME_data_table[{}]'.format(self.allocate_string_offset(string))
+        if isinstance(string, str):
+            string = string.encode('utf8')
+
+        if string in self.strings:
+            index = self.strings[string]
+        else:
+            index = len(self.strings)
+            self.strings[string] = index
+
+        return '&OME_static_string_{}'.format(index)
 
     def emit(self, out):
-        out.write('static const uint8_t OME_data_table[] __attribute__((aligned(OME_HEAP_ALIGNMENT))) = {\n')
-        for index, string in enumerate(self.data):
-            out.write(','.join(str(c) for c in string))
-            out.write(',\n')
-        out.write('}; /* end of OME_data_table */\n')
+        for string, index in sorted(self.strings.items(), key=lambda x: x[1]):
+            out.write('static const OME_String OME_static_string_{} OME_ALIGNED = {{{}, {}}};\n'.format(
+                index, len(string), literal_c_string(string)))
 
 def emit_traceback_table(out, traceback_entries):
     out.write('static const OME_Traceback_Entry OME_traceback_table[] = {\n')
