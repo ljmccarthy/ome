@@ -162,7 +162,6 @@ class Program(object):
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int):
                 out.write(define_format.format('OME_' + name, value))
-        out.write('\n')
         out.write(self.target_type.builtin_macros)
 
     def emit_data(self, out):
@@ -172,7 +171,6 @@ class Program(object):
         out.write('\n')
         traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
         self.target_type.emit_traceback_table(out, traceback_entries)
-        out.write('\n')
 
     def emit_code_declarations(self, out):
         method_decls = set()
@@ -185,7 +183,6 @@ class Program(object):
             self.target_type.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
             self.target_type.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
-        out.write('\n')
 
     def emit_code_definitions(self, out):
         out.write(self.target_type.builtin_code)
@@ -213,7 +210,6 @@ class Program(object):
     def emit_toplevel(self, out):
         code = self.compile_method(self.toplevel_method)
         out.write(code.generate_target_code('OME_toplevel', self.target_type))
-        out.write('\n')
         out.write(self.target_type.builtin_code_main)
 
     def emit_program_text(self, out):

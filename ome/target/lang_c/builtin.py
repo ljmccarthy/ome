@@ -4,7 +4,7 @@
 from ...ast import BuiltInMethod
 from ...constants import *
 
-builtin_macros = r'''\
+builtin_macros = r'''
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
@@ -179,10 +179,9 @@ static __thread OME_Context *OME_context;
 
 static const OME_Value OME_False = {._udata = 0, ._utag = OME_Tag_Boolean};
 static const OME_Value OME_True = {._udata = 1, ._utag = OME_Tag_Boolean};
-static const OME_Value OME_Empty = {._udata = OME_Constant_Empty, ._utag = OME_Tag_Constant};
 '''
 
-builtin_code = r'''\
+builtin_code = r'''
 static void OME_print_value(FILE *out, OME_Value value)
 {
     if (OME_get_tag(value) != OME_Tag_String) {
@@ -278,7 +277,7 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 }
 '''
 
-builtin_code_main = r'''\
+builtin_code_main = r'''
 int main(const int argc, const char *const *argv)
 {
     const unsigned int stack_size = 256;
@@ -301,8 +300,6 @@ int main(const int argc, const char *const *argv)
     return OME_is_error(value) ? 1 : 0;
 }
 '''
-
-builtin_data = ''
 
 builtin_methods = [
 
@@ -445,13 +442,19 @@ BuiltInMethod('≤', Tag_Small_Integer, [], '''
 
 ] # end of builtin_methods
 
-def build_builtin_methods():
-    for name in constant_names:
+def build_builtins():
+    data = []
+    for name in constant_names[:-1]:
         value = constant_value[name]
+        data.append('static const OME_Value OME_{} = {{._udata = {}, ._utag = OME_Tag_Constant}};\n'.format(
+            name.replace('-', '_'), value))
         builtin_methods.append(BuiltInMethod('string', constant_to_tag(value), [], '''
     OME_STATIC_STRING(s, "{}");
     return OME_tag_pointer(OME_Tag_String, &s);
 '''.format(name)))
 
-build_builtin_methods()
-del build_builtin_methods
+    global builtin_data
+    builtin_data = ''.join(data)
+
+build_builtins()
+del build_builtins
