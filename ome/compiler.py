@@ -93,10 +93,7 @@ class Program(object):
         self.sent_messages.update(
             send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
 
-        self.called_methods = set([
-            (self.toplevel_block.tag, 'main'),
-        ])
-        self.called_methods.update(
+        self.called_methods = set(
             (send.receiver_block.tag, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
