@@ -11,4 +11,4 @@ target_platform_map = {
 }
 
 #default_target_platform = (platform.machine(), platform.system())
-default_target_platform = ('C', platform.system())
+default_target_platform = ('c', platform.system().lower())

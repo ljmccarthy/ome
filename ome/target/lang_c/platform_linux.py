@@ -5,7 +5,7 @@ from ...ast import BuiltInMethod
 from .builtin import *
 from .codegen import *
 
-platform = ('C', 'Linux')
+platform = ('c', 'linux')
 
 def get_assembler_args(outfile):
     return ['gcc', '-c', '-x', 'c', '-std=c99', '-Wall', '-Wno-unused', '-O3', '-', '-o', outfile]
