@@ -360,7 +360,7 @@ class Array(object):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(ALLOC(len(self.slots), Tag_Array))
+        code.add_instruction(ALLOC(dest, len(self.elems), Tag_Array))
         for index, elem in enumerate(self.elems):
             value = elem.generate_code(code)
             code.add_instruction(SET_SLOT(dest, index, value))
