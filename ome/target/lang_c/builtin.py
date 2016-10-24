@@ -17,6 +17,8 @@ typedef struct OME_Heap_Header OME_Heap_Header;
 typedef struct OME_Traceback_Entry OME_Traceback_Entry;
 typedef struct OME_Context OME_Context;
 typedef struct OME_String OME_String;
+typedef struct OME_Array OME_Array;
+typedef struct OME_Buffer OME_Buffer;
 
 union OME_Value {
     uintptr_t _bits;
@@ -53,13 +55,26 @@ struct OME_Context {
     OME_Value *const stack_base;
     OME_Traceback_Entry const **traceback;
     void *const callstack_base;
-    const int argc;
-    const char *const *argv;
+    OME_Value argv;
+    FILE *stdin;
+    FILE *stdout;
+    FILE *stderr;
 };
 
 struct OME_String {
     uint32_t size;
     char data[];
+};
+
+struct OME_Array {
+    uint32_t size;
+    OME_Value elems[];
+};
+
+struct OME_Buffer {
+    uint32_t size;
+    uint32_t allocated;
+    OME_Value elems;
 };
 
 static OME_Value OME_tag_unsigned(OME_Tag tag, uintptr_t udata)
@@ -97,7 +112,7 @@ static void *OME_untag_pointer(OME_Value value)
     return (void *) (uintptr_t) (value._udata << OME_HEAP_ALIGNMENT_SHIFT);
 }
 
-static OME_Value *OME_untag_object(OME_Value value)
+static OME_Value *OME_untag_slots(OME_Value value)
 {
     return (OME_Value *) OME_untag_pointer(value);
 }
@@ -232,12 +247,20 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     fflush(out);
 }
 
-static OME_Value OME_allocate_slots(uint32_t num_slots, OME_Tag tag)
+static void *OME_allocate_slots(uint32_t num_slots)
 {
     // temporary until GC is implemented
     size_t size = OME_heap_alignment(sizeof(OME_Value[num_slots]));
     void *slots = calloc(1, size);
-    return OME_tag_pointer(tag, slots);
+    return slots;
+}
+
+static OME_Array *OME_allocate_array(uint32_t num_elems)
+{
+    size_t size = OME_heap_alignment(sizeof(OME_Array) + sizeof(OME_Value[num_elems]));
+    OME_Array *array = calloc(1, size);
+    array->size = num_elems;
+    return array;
 }
 
 static void *OME_allocate_data(size_t size)
@@ -280,6 +303,16 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 builtin_code_main = r'''
 int main(const int argc, const char *const *argv)
 {
+    OME_Array *args = malloc(sizeof(OME_Array) + sizeof(OME_Value[argc]));
+    args->size = argc;
+    for (int i = 0; i < argc; i++) {
+        size_t len = strlen(argv[i]);
+        OME_String *arg = malloc(sizeof(OME_String) + len + 1);
+        arg->size = len;
+        memcpy(arg->data, argv[i], len + 1);
+        args->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
+    }
+
     const unsigned int stack_size = 256;
     OME_Value stack[stack_size];
     OME_Context main_context = {
@@ -288,9 +321,12 @@ int main(const int argc, const char *const *argv)
         .stack_base = &stack[0],
         .callstack_base = NULL,
         .traceback = (OME_Traceback_Entry const **) &stack[stack_size],
-        .argc = argc,
-        .argv = argv,
+        .argv = OME_tag_pointer(OME_Tag_Array, args),
+        .stdin = stdin,
+        .stdout = stdout,
+        .stderr = stderr,
     };
+
     OME_context = &main_context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
     if (OME_is_error(value)) {
@@ -304,7 +340,7 @@ int main(const int argc, const char *const *argv)
 builtin_methods = [
 
 BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), [], '''
-    OME_print_value(stdout, _1);
+    OME_print_value(OME_context->stdout, _1);
     return OME_Empty;
 '''),
 
@@ -329,6 +365,10 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return
         OME_RETURN_ERROR(OME_message_do__0(_1));
         _1 = stack[0];
     }
+'''),
+
+BuiltInMethod('argv', constant_to_tag(Constant_BuiltIn), [], '''
+    return OME_context->argv;
 '''),
 
 BuiltInMethod('string', Tag_Boolean, [], '''
@@ -438,6 +478,54 @@ BuiltInMethod('≤', Tag_Small_Integer, [], '''
         return OME_error_constant(OME_Constant_Type_Error);
     }
     return OME_tag_unsigned(OME_Tag_Boolean, result);
+'''),
+
+BuiltInMethod('at:', Tag_Array, [], '''
+    OME_Array *self = OME_untag_pointer(_0);
+    intptr_t index = OME_untag_signed(_1);
+    if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
+        return OME_error(OME_Type_Error);
+    }
+    if (index < 0 || index >= self->size) {
+        return OME_error(OME_Index_Error);
+    }
+    return self->elems[index];
+'''),
+
+BuiltInMethod('size', Tag_Array, [], '''
+    OME_Array *self = OME_untag_pointer(_0);
+    return OME_tag_signed(OME_Tag_Small_Integer, self->size);
+'''),
+
+BuiltInMethod('each:', Tag_Array, ['item:'], '''
+    OME_ENTER(2);
+    stack[0] = _0;
+    stack[1] = _1;
+    OME_Array *self = OME_untag_pointer(_0);
+    size_t size = self->size;
+    for (size_t index = 0; index < size; index++) {
+        OME_RETURN_ERROR(OME_message_item__1(_1, self->elems[index]));
+        _0 = stack[0];
+        _1 = stack[1];
+        self = OME_untag_pointer(_0);
+    }
+    OME_RETURN(OME_Empty);
+'''),
+
+BuiltInMethod('enumerate:', Tag_Array, ['item:index:'], '''
+    OME_ENTER(2);
+    stack[0] = _0;
+    stack[1] = _1;
+    OME_Array *self = OME_untag_pointer(_0);
+    size_t size = self->size;
+    for (size_t index = 0; index < size; index++) {
+        OME_Value t_index = OME_tag_signed(OME_Tag_Small_Integer, index);
+        OME_RETURN_ERROR(OME_message_item__1index__1(_1, self->elems[index], t_index));
+        _0 = stack[0];
+        _1 = stack[1];
+        self = OME_untag_pointer(_0);
+    }
+    OME_RETURN(OME_Empty);
 '''),
 
 ] # end of builtin_methods

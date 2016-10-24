@@ -28,6 +28,18 @@ class ALLOC(Instruction):
     def __str__(self):
         return '{} = ALLOC size:{} tag:{}'.format(self.dest, self.size, self.tag)
 
+class ARRAY(Instruction):
+    is_leaf = False
+    dest_from_heap = True
+
+    def __init__(self, dest, size, tag):
+        self.dest = dest
+        self.size = size
+        self.tag = tag
+
+    def __str__(self):
+        return '{} = ARRAY size:{} tag:{}'.format(self.dest, self.size, self.tag)
+
 class CALL(Instruction):
     is_leaf = False
     dest_from_heap = True
@@ -103,6 +115,22 @@ class SET_SLOT(Instruction):
 
     def __str__(self):
         return '%{}[{}] := %{}'.format(self.object, self.slot_index, self.value)
+
+class SET_ELEM(Instruction):
+    def __init__(self, array, elem_index, value):
+        self.args = [array, value]
+        self.elem_index = elem_index
+
+    @property
+    def array(self):
+        return self.args[0]
+
+    @property
+    def value(self):
+        return self.args[1]
+
+    def __str__(self):
+        return '%{}[{}] := %{}'.format(self.array, self.elem_index, self.value)
 
 class RETURN(Instruction):
     def __init__(self, source):

@@ -360,10 +360,10 @@ class Array(object):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(ALLOC(dest, len(self.elems), Tag_Array))
+        code.add_instruction(ARRAY(dest, len(self.elems), Tag_Array))
         for index, elem in enumerate(self.elems):
             value = elem.generate_code(code)
-            code.add_instruction(SET_SLOT(dest, index, value))
+            code.add_instruction(SET_ELEM(dest, index, value))
         return dest
 
 class TerminalNode(object):

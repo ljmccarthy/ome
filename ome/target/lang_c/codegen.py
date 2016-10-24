@@ -88,7 +88,12 @@ class ProcedureCodegen(object):
     def ALLOC(self, ins):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
-        self.emit('OME_Value _{} = OME_allocate_slots({}, {});'.format(ins.dest, ins.size, ins.tag))
+        self.emit('OME_Value _{} = OME_tag_pointer({}, OME_allocate_slots({}));'.format(ins.dest, ins.tag, ins.size))
+
+    def ARRAY(self, ins):
+        self.emit_save_list(ins)
+        self.emit_load_list(ins)
+        self.emit('OME_Value _{} = OME_tag_pointer({}, OME_allocate_array({}));'.format(ins.dest, ins.tag, ins.size));
 
     def CALL(self, ins):
         self.emit_save_list(ins)
@@ -117,11 +122,15 @@ class ProcedureCodegen(object):
 
     def GET_SLOT(self, ins):
         self.emit_load_list(ins)
-        self.emit('OME_Value _{} = OME_untag_object(_{})[{}];'.format(ins.dest, ins.object, ins.slot_index))
+        self.emit('OME_Value _{} = OME_untag_slots(_{})[{}];'.format(ins.dest, ins.object, ins.slot_index))
 
     def SET_SLOT(self, ins):
         self.emit_load_list(ins)
-        self.emit('OME_untag_object(_{})[{}] = _{};'.format(ins.object, ins.slot_index, ins.value))
+        self.emit('OME_untag_slots(_{})[{}] = _{};'.format(ins.object, ins.slot_index, ins.value))
+
+    def SET_ELEM(self, ins):
+        self.emit_load_list(ins)
+        self.emit('((OME_Array *) OME_untag_pointer(_{}))->elems[{}] = _{};'.format(ins.array, ins.elem_index, ins.value))
 
     def RETURN(self, ins):
         self.emit_load_list(ins)

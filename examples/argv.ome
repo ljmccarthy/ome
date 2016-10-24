@@ -1,0 +1,7 @@
+-- Print the contents of the process argument vector (argv)
+
+|main|
+    print: 'argc = $(argv size)\n'
+    argv enumerate: {|item: arg index: i|
+        print: 'argv[$i] = $arg\n'
+    }

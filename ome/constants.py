@@ -41,8 +41,11 @@ integer_type_names = [
 # Tags >= 256 are reserved for heap data types
 pointer_type_names = [
     'String',
-    'Array',
+    'String-Mutable',
     'String-Buffer',
+    'Array',            # immutable
+    'Array-Mutable',    # mutable, fixed-size
+    'Array-Buffer',     # mutable, resizable
     'User',
 ]
 
