@@ -11,7 +11,6 @@ from .stackalloc import allocate_stack_slots
 define_constant_format = '#define {} {}\n'
 comment_format = '// {}'
 define_label_format = '{}:'
-label_format = '{}'
 indent = '    '
 
 def format_function_defn(name, num_args):
@@ -169,6 +168,24 @@ class DispatchCodegen(object):
         self.emit('if (_tag == {}) return {};'.format(tag, format_dispatch_call(method_name, num_args)))
         self.emit('goto not_understood;')
 
+class LookupDispatchCodegen(DispatchCodegen):
+    def begin(self, name, num_args):
+        self.emit('static OME_Message_{} {}(OME_Value _0)'.format(num_args - 1, name))
+        self.emit('{')
+        self.emit.indent()
+
+    def end_empty_dispatch(self):
+        self.emit('return NULL;')
+        self.emit.dedent()
+        self.emit.end('}')
+
+    def emit_call_method(self, method_name, num_args):
+        self.emit('return {};'.format(method_name))
+
+    def emit_maybe_call_method(self, method_name, num_args, tag):
+        self.emit('if (_tag == {}) return {};'.format(tag, method_name))
+        self.emit('goto not_understood;')
+
 class DataTable(object):
     def __init__(self):
         self.strings = {}
@@ -205,6 +222,9 @@ def emit_traceback_table(out, traceback_entries):
 def emit_declaration(out, name, num_args):
     out.write(format_function_decl(name, num_args))
     out.write(';\n')
+
+def emit_lookup_declaration(out, name, num_args):
+    out.write('static OME_Message_{} {}(OME_Value);\n'.format(num_args - 1, name))
 
 def generate_builtin_method(label, num_args, code):
     return '{}\n{{{}}}\n'.format(format_function_defn(label, num_args), code)

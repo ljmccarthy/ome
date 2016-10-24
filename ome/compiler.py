@@ -10,7 +10,7 @@ import sys
 from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .constants import *
-from .dispatcher import generate_dispatcher
+from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .labels import *
 from .parser import Parser
@@ -168,6 +168,7 @@ class Program(object):
         out.write('\n')
         traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
         self.target_type.emit_traceback_table(out, traceback_entries)
+        out.write('\n')
 
     def emit_code_declarations(self, out):
         method_decls = set()
@@ -180,6 +181,8 @@ class Program(object):
             self.target_type.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
             self.target_type.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
+        for symbol in sorted(message_decls):
+            self.target_type.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
 
     def emit_code_definitions(self, out):
         out.write(self.target_type.builtin_code)
@@ -194,6 +197,8 @@ class Program(object):
                 tags = [tag for tag, code in methods]
                 out.write(generate_dispatcher(symbol, tags, self.target_type))
                 out.write('\n')
+                out.write(generate_lookup_dispatcher(symbol, tags, self.target_type))
+                out.write('\n')
                 dispatchers.add(symbol)
 
         optional_messages = ['return']
@@ -202,6 +207,8 @@ class Program(object):
                 if symbol not in optional_messages:
                     self.warning("no methods defined for message '%s'" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target_type))
+                out.write('\n')
+                out.write(generate_lookup_dispatcher(symbol, tags, self.target_type))
                 out.write('\n')
 
     def emit_toplevel(self, out):

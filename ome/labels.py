@@ -41,6 +41,9 @@ def symbol_to_label(symbol):
 def make_send_label(symbol):
     return 'OME_message_' + symbol_to_label(symbol)
 
+def make_lookup_label(symbol):
+    return 'OME_lookup_' + symbol_to_label(symbol)
+
 def make_call_label_format(symbol):
     return 'OME_method_{}_' + symbol_to_label(symbol)
 
@@ -55,6 +58,7 @@ def symbol_arity(symbol):
 __all__ = [
     'symbol_to_label',
     'make_send_label',
+    'make_lookup_label',
     'make_call_label_format',
     'make_call_label',
     'symbol_arity',

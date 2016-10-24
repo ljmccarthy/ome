@@ -347,22 +347,26 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), [], '''
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return'], '''
     OME_ENTER(1);
     stack[0] = _1;
+    OME_Message_0 while_method = OME_lookup_while__0(_1);
+    OME_Message_0 do_method = OME_lookup_do__0(_1);
+    if (!while_method || !do_method) {
+        OME_ERROR(Not_Understood);
+    }
     while (1) {
-        OME_Value cond = OME_message_while__0(_1);
+        OME_Value cond = while_method(_1);
         OME_RETURN_ERROR(cond);
         if (OME_get_tag(cond) != OME_Tag_Boolean) {
             OME_ERROR(Type_Error);
         }
         _1 = stack[0];
         if (!OME_untag_unsigned(cond)) {
-            OME_Value ret = OME_message_return__0(_1);
-            if (OME_not_understood(ret)) {
-                OME_reset_traceback();
-                OME_RETURN(OME_Empty);
+            OME_Message_0 return_method = OME_lookup_return__0(_1);
+            if (return_method) {
+                OME_RETURN(return_method(_1));
             }
-            OME_RETURN(ret);
+            OME_RETURN(OME_Empty);
         }
-        OME_RETURN_ERROR(OME_message_do__0(_1));
+        OME_RETURN_ERROR(do_method(_1));
         _1 = stack[0];
     }
 '''),
@@ -501,10 +505,14 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
+    OME_Message_1 item_method = OME_lookup_item__1(_1);
+    if (!item_method) {
+        OME_ERROR(Not_Understood);
+    }
     OME_Array *self = OME_untag_pointer(_0);
     size_t size = self->size;
     for (size_t index = 0; index < size; index++) {
-        OME_RETURN_ERROR(OME_message_item__1(_1, self->elems[index]));
+        OME_RETURN_ERROR(item_method(_1, self->elems[index]));
         _0 = stack[0];
         _1 = stack[1];
         self = OME_untag_pointer(_0);
@@ -516,11 +524,15 @@ BuiltInMethod('enumerate:', Tag_Array, ['item:index:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
+    OME_Message_2 item_index_method = OME_lookup_item__1index__1(_1);
+    if (!item_index_method) {
+        OME_ERROR(Not_Understood);
+    }
     OME_Array *self = OME_untag_pointer(_0);
     size_t size = self->size;
     for (size_t index = 0; index < size; index++) {
         OME_Value t_index = OME_tag_signed(OME_Tag_Small_Integer, index);
-        OME_RETURN_ERROR(OME_message_item__1index__1(_1, self->elems[index], t_index));
+        OME_RETURN_ERROR(item_index_method(_1, self->elems[index], t_index));
         _0 = stack[0];
         _1 = stack[1];
         self = OME_untag_pointer(_0);
@@ -531,18 +543,23 @@ BuiltInMethod('enumerate:', Tag_Array, ['item:index:'], '''
 ] # end of builtin_methods
 
 def build_builtins():
-    data = []
+    data_defs = []
+
     for name in constant_names[:-1]:
         value = constant_value[name]
-        data.append('static const OME_Value OME_{} = {{._udata = {}, ._utag = OME_Tag_Constant}};\n'.format(
+        data_defs.append('static const OME_Value OME_{} = {{._udata = {}, ._utag = OME_Tag_Constant}};\n'.format(
             name.replace('-', '_'), value))
         builtin_methods.append(BuiltInMethod('string', constant_to_tag(value), [], '''
     OME_STATIC_STRING(s, "{}");
     return OME_tag_pointer(OME_Tag_String, &s);
 '''.format(name)))
 
+    data_defs.append('\n')
+    for n in range(17):
+        data_defs.append('typedef OME_Value (*OME_Message_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
+
     global builtin_data
-    builtin_data = ''.join(data)
+    builtin_data = ''.join(data_defs)
 
 build_builtins()
 del build_builtins
