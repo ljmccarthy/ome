@@ -15,7 +15,7 @@ class DispatcherGenerator(object):
         if tags:
             any_constant_tags = any(tag > MIN_CONSTANT_TAG for tag in tags)
             self.codegen.emit_dispatch(any_constant_tags)
-            self.split_tag_range(make_call_label_format(symbol), tags, 0, 1 << NUM_DATA_BITS)
+            self.split_tag_range(make_method_label_format(symbol), tags, 0, 1 << NUM_DATA_BITS)
             self.codegen.end()
         else:
             self.codegen.end_empty_dispatch()
@@ -42,7 +42,7 @@ def generate_dispatcher(symbol, tags, target):
     a binary search with compare and conditional jump instructions until the
     method for the tag is found.
     """
-    gen = DispatcherGenerator(make_send_label(symbol), symbol, tags, target, target.DispatchCodegen)
+    gen = DispatcherGenerator(make_message_label(symbol), symbol, tags, target, target.DispatchCodegen)
     return gen.emit.get_output()
 
 def generate_lookup_dispatcher(symbol, tags, target):

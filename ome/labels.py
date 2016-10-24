@@ -38,17 +38,17 @@ def symbol_to_label(symbol):
         re_hyphen_or_tilde.sub('_', name) + '__' + str(len(args))
         for name, args in re_symbol_part.findall(symbol))
 
-def make_send_label(symbol):
+def make_message_label(symbol):
     return 'OME_message_' + symbol_to_label(symbol)
 
 def make_lookup_label(symbol):
     return 'OME_lookup_' + symbol_to_label(symbol)
 
-def make_call_label_format(symbol):
+def make_method_label_format(symbol):
     return 'OME_method_{}_' + symbol_to_label(symbol)
 
-def make_call_label(tag, symbol):
-    return make_call_label_format(symbol).format(tag)
+def make_method_label(tag, symbol):
+    return make_method_label_format(symbol).format(tag)
 
 def symbol_arity(symbol):
     if symbol in operator_labels:
@@ -57,9 +57,9 @@ def symbol_arity(symbol):
 
 __all__ = [
     'symbol_to_label',
-    'make_send_label',
+    'make_message_label',
     'make_lookup_label',
-    'make_call_label_format',
-    'make_call_label',
+    'make_method_label_format',
+    'make_method_label',
     'symbol_arity',
 ]

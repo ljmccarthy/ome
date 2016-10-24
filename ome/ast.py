@@ -80,11 +80,11 @@ class Send(object):
         dest = code.add_temp()
 
         if self.receiver_block:
-            call_label = make_call_label(self.receiver_block.tag, self.symbol)
+            label = make_method_label(self.receiver_block.tag, self.symbol)
         else:
-            call_label = make_send_label(self.symbol)
+            label = make_message_label(self.symbol)
 
-        code.add_instruction(CALL(dest, [receiver] + args, call_label, self.traceback_info))
+        code.add_instruction(CALL(dest, [receiver] + args, label, self.traceback_info))
         return dest
 
 class Concat(Send):

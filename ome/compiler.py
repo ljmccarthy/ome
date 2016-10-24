@@ -178,9 +178,9 @@ class Program(object):
             for tag, code in methods:
                 method_decls.add((symbol, tag))
         for symbol, tag in sorted(method_decls):
-            self.target.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
+            self.target.emit_declaration(out, make_method_label(tag, symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
-            self.target.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
+            self.target.emit_declaration(out, make_message_label(symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
             self.target.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
 
@@ -191,7 +191,7 @@ class Program(object):
         dispatchers = set()
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                out.write(code.generate_target_code(make_call_label(tag, symbol), self.target))
+                out.write(code.generate_target_code(make_method_label(tag, symbol), self.target))
                 out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
