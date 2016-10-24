@@ -353,8 +353,8 @@ BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), [], '''
 BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return'], '''
     OME_ENTER(1);
     stack[0] = _1;
-    OME_Message_0 while_method = OME_lookup_while__0(_1);
-    OME_Message_0 do_method = OME_lookup_do__0(_1);
+    OME_Method_0 while_method = OME_lookup_while__0(_1);
+    OME_Method_0 do_method = OME_lookup_do__0(_1);
     if (!while_method || !do_method) {
         OME_ERROR(Not_Understood);
     }
@@ -366,7 +366,7 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return
         }
         _1 = stack[0];
         if (!OME_untag_unsigned(cond)) {
-            OME_Message_0 return_method = OME_lookup_return__0(_1);
+            OME_Method_0 return_method = OME_lookup_return__0(_1);
             if (return_method) {
                 OME_RETURN(return_method(_1));
             }
@@ -511,7 +511,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
-    OME_Message_1 item_method = OME_lookup_item__1(_1);
+    OME_Method_1 item_method = OME_lookup_item__1(_1);
     if (!item_method) {
         OME_ERROR(Not_Understood);
     }
@@ -530,7 +530,7 @@ BuiltInMethod('enumerate:', Tag_Array, ['item:index:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
-    OME_Message_2 item_index_method = OME_lookup_item__1index__1(_1);
+    OME_Method_2 item_index_method = OME_lookup_item__1index__1(_1);
     if (!item_index_method) {
         OME_ERROR(Not_Understood);
     }
@@ -562,7 +562,7 @@ def build_builtins():
 
     data_defs.append('\n')
     for n in range(17):
-        data_defs.append('typedef OME_Value (*OME_Message_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
+        data_defs.append('typedef OME_Value (*OME_Method_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
 
     global builtin_data
     builtin_data = ''.join(data_defs)

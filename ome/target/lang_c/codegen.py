@@ -170,7 +170,7 @@ class DispatchCodegen(object):
 
 class LookupDispatchCodegen(DispatchCodegen):
     def begin(self, name, num_args):
-        self.emit('static OME_Message_{} {}(OME_Value _0)'.format(num_args - 1, name))
+        self.emit('static OME_Method_{} {}(OME_Value _0)'.format(num_args - 1, name))
         self.emit('{')
         self.emit.indent()
 
@@ -224,7 +224,7 @@ def emit_declaration(out, name, num_args):
     out.write(';\n')
 
 def emit_lookup_declaration(out, name, num_args):
-    out.write('static OME_Message_{} {}(OME_Value);\n'.format(num_args - 1, name))
+    out.write('static OME_Method_{} {}(OME_Value);\n'.format(num_args - 1, name))
 
 def generate_builtin_method(label, num_args, code):
     return '{}\n{{{}}}\n'.format(format_function_defn(label, num_args), code)
