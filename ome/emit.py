@@ -5,19 +5,19 @@ from io import StringIO
 from contextlib import contextmanager
 
 class CodeEmitter(object):
-    def __init__(self, target_type, indent_level=0):
-        self.target_type = target_type
+    def __init__(self, target, indent_level=0):
+        self.target = target
         self.output = []
         self.indent_level = indent_level
-        self.indent_str = target_type.indent * indent_level
+        self.indent_str = target.indent * indent_level
 
     def indent(self):
         self.indent_level += 1
-        self.indent_str = self.target_type.indent * self.indent_level
+        self.indent_str = self.target.indent * self.indent_level
 
     def dedent(self):
         self.indent_level -= 1
-        self.indent_str = self.target_type.indent * self.indent_level
+        self.indent_str = self.target.indent * self.indent_level
 
     @contextmanager
     def indented(self):
@@ -31,10 +31,10 @@ class CodeEmitter(object):
         self.output.append(self.indent_str + line)
 
     def label(self, name):
-        self.output.append(self.target_type.define_label_format.format(name))
+        self.output.append(self.target.define_label_format.format(name))
 
     def comment(self, comment):
-        comment = self.target_type.comment_format.format(comment)
+        comment = self.target.comment_format.format(comment)
         self.output.append(self.indent_str + comment)
 
     def write_to(self, buf):
@@ -43,13 +43,13 @@ class CodeEmitter(object):
             buf.write('\n')
 
 class ProcedureCodeEmitter(CodeEmitter):
-    def __init__(self, target_type):
-        super(ProcedureCodeEmitter, self).__init__(target_type)
+    def __init__(self, target):
+        super(ProcedureCodeEmitter, self).__init__(target)
         self.end_output = []
         self.tail_emitters = []
 
     def tail_emitter(self, label):
-        emitter = CodeEmitter(self.target_type, self.indent_level)
+        emitter = CodeEmitter(self.target, self.indent_level)
         emitter.label(label)
         self.tail_emitters.append(emitter)
         return emitter

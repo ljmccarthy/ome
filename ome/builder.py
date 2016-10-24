@@ -27,9 +27,9 @@ class MethodCode(object):
         self.instructions = instructions
         self.num_args = num_args
 
-    def generate_target_code(self, label, target_type):
-        emit = ProcedureCodeEmitter(target_type)
-        codegen = target_type.ProcedureCodegen(emit)
+    def generate_target_code(self, label, target):
+        emit = ProcedureCodeEmitter(target)
+        codegen = target.ProcedureCodegen(emit)
         codegen.optimise(self)
         codegen.begin(label, self.num_args, self.instructions)
         for ins in self.instructions:

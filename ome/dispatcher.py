@@ -6,10 +6,10 @@ from .emit import ProcedureCodeEmitter
 from .labels import *
 
 class DispatcherGenerator(object):
-    def __init__(self, name, symbol, tags, target_type, codegen_class):
+    def __init__(self, name, symbol, tags, target, codegen_class):
         tags = sorted(tags)
         self.num_args = symbol_arity(symbol)
-        self.emit = ProcedureCodeEmitter(target_type)
+        self.emit = ProcedureCodeEmitter(target)
         self.codegen = codegen_class(self.emit)
         self.codegen.begin(name, self.num_args)
         if tags:
@@ -36,15 +36,15 @@ class DispatcherGenerator(object):
             self.emit.label(middle_label)
             self.split_tag_range(label_format, tags[middle:], tags[middle], max_tag)
 
-def generate_dispatcher(symbol, tags, target_type):
+def generate_dispatcher(symbol, tags, target):
     """
     Generate assembly code for dispatching messages. This is implemented as
     a binary search with compare and conditional jump instructions until the
     method for the tag is found.
     """
-    gen = DispatcherGenerator(make_send_label(symbol), symbol, tags, target_type, target_type.DispatchCodegen)
+    gen = DispatcherGenerator(make_send_label(symbol), symbol, tags, target, target.DispatchCodegen)
     return gen.emit.get_output()
 
-def generate_lookup_dispatcher(symbol, tags, target_type):
-    gen = DispatcherGenerator(make_lookup_label(symbol), symbol, tags, target_type, target_type.LookupDispatchCodegen)
+def generate_lookup_dispatcher(symbol, tags, target):
+    gen = DispatcherGenerator(make_lookup_label(symbol), symbol, tags, target, target.LookupDispatchCodegen)
     return gen.emit.get_output()

@@ -414,8 +414,8 @@ class BuiltInMethod(object):
         self.sent_messages = sent_messages
         self.code = code
 
-    def generate_target_code(self, label, target_type):
-        return target_type.generate_builtin_method(label, symbol_arity(self.symbol), self.code)
+    def generate_target_code(self, label, target):
+        return target.generate_builtin_method(label, symbol_arity(self.symbol), self.code)
 
 class BuiltInBlock(object):
     is_constant = True
@@ -423,8 +423,8 @@ class BuiltInBlock(object):
     tag_constant = Constant_BuiltIn
     constant_ref = Value(Tag_Constant, Constant_BuiltIn)
 
-    def __init__(self, target_type):
-        self.symbols = {method.symbol for method in target_type.builtin_methods if method.tag == self.tag}
+    def __init__(self, target):
+        self.symbols = {method.symbol for method in target.builtin_methods if method.tag == self.tag}
 
     def lookup_var(self, symbol):
         pass

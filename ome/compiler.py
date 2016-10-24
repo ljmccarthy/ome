@@ -35,7 +35,7 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class Program(object):
-    def __init__(self, filename, ast, builtin, target_type, debug=True):
+    def __init__(self, filename, ast, builtin, target, debug=True):
         self.filename = filename
         self.builtin = builtin
         self.debug = debug
@@ -48,9 +48,9 @@ class Program(object):
         if 'main' not in self.toplevel_block.symbols:
             self.error('no main method defined')
 
-        self.target_type = target_type
+        self.target = target
         self.code_table = []  # list of (symbol, [list of (tag, method)])
-        self.data_table = target_type.DataTable()
+        self.data_table = target.DataTable()
         self.traceback_table = {}
 
         self.block_list = collect_nodes_of_type(ast, Block)
@@ -97,7 +97,7 @@ class Program(object):
             (send.receiver_block.tag, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
-        for method in self.target_type.builtin_methods:
+        for method in self.target.builtin_methods:
             if method.sent_messages and self.should_include_method(method, self.builtin.tag):
                 self.sent_messages.update(method.sent_messages)
 
@@ -135,7 +135,7 @@ class Program(object):
     def build_code_table(self):
         methods = {}
 
-        for method in self.target_type.builtin_methods:
+        for method in self.target.builtin_methods:
             if self.should_include_method(method, self.builtin.tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
@@ -155,19 +155,19 @@ class Program(object):
         methods.clear()
 
     def emit_constants(self, out):
-        define_format = self.target_type.define_constant_format
+        define_format = self.target.define_constant_format
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int):
                 out.write(define_format.format('OME_' + name, value))
-        out.write(self.target_type.builtin_macros)
+        out.write(self.target.builtin_macros)
 
     def emit_data(self, out):
-        out.write(self.target_type.builtin_data)
+        out.write(self.target.builtin_data)
         out.write('\n')
         self.data_table.emit(out)
         out.write('\n')
         traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
-        self.target_type.emit_traceback_table(out, traceback_entries)
+        self.target.emit_traceback_table(out, traceback_entries)
         out.write('\n')
 
     def emit_code_declarations(self, out):
@@ -178,26 +178,26 @@ class Program(object):
             for tag, code in methods:
                 method_decls.add((symbol, tag))
         for symbol, tag in sorted(method_decls):
-            self.target_type.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
+            self.target.emit_declaration(out, make_call_label(tag, symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
-            self.target_type.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
+            self.target.emit_declaration(out, make_send_label(symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
-            self.target_type.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
+            self.target.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
 
     def emit_code_definitions(self, out):
-        out.write(self.target_type.builtin_code)
+        out.write(self.target.builtin_code)
         out.write('\n')
 
         dispatchers = set()
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                out.write(code.generate_target_code(make_call_label(tag, symbol), self.target_type))
+                out.write(code.generate_target_code(make_call_label(tag, symbol), self.target))
                 out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
-                out.write(generate_dispatcher(symbol, tags, self.target_type))
+                out.write(generate_dispatcher(symbol, tags, self.target))
                 out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, tags, self.target_type))
+                out.write(generate_lookup_dispatcher(symbol, tags, self.target))
                 out.write('\n')
                 dispatchers.add(symbol)
 
@@ -206,15 +206,15 @@ class Program(object):
             if symbol not in dispatchers:
                 if symbol not in optional_messages:
                     self.warning("no methods defined for message '%s'" % symbol)
-                out.write(generate_dispatcher(symbol, [], self.target_type))
+                out.write(generate_dispatcher(symbol, [], self.target))
                 out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, tags, self.target_type))
+                out.write(generate_lookup_dispatcher(symbol, tags, self.target))
                 out.write('\n')
 
     def emit_toplevel(self, out):
         code = self.compile_method(self.toplevel_method)
-        out.write(code.generate_target_code('OME_toplevel', self.target_type))
-        out.write(self.target_type.builtin_code_main)
+        out.write(code.generate_target_code('OME_toplevel', self.target))
+        out.write(self.target.builtin_code_main)
 
     def emit_program_text(self, out):
         self.emit_constants(out)
@@ -235,26 +235,26 @@ def parse_file(filename):
         raise OmeError(str(e), filename)
     return Parser(source, filename).toplevel()
 
-def compile_file_to_code(filename, target_type):
-    builtin = BuiltInBlock(target_type)
+def compile_file_to_code(filename, target):
+    builtin = BuiltInBlock(target)
     ast = parse_file(filename)
     ast = Method('', [], ast)
     ast = ast.resolve_free_vars(builtin)
     ast = ast.resolve_block_refs(builtin)
-    program = Program(filename, ast, builtin, target_type)
+    program = Program(filename, ast, builtin, target)
     out = io.StringIO()
     program.emit_program_text(out)
     asm = out.getvalue()
     return asm.encode('utf8')
 
-def run_assembler(target_type, input, outfile):
-    p = subprocess.Popen(target_type.get_assembler_args(outfile), stdin=subprocess.PIPE)
+def run_assembler(target, input, outfile):
+    p = subprocess.Popen(target.get_assembler_args(outfile), stdin=subprocess.PIPE)
     p.communicate(input)
     if p.returncode != 0:
         sys.exit(p.returncode)
 
-def run_linker(target_type, infile, outfile):
-    p = subprocess.Popen(target_type.get_linker_args(infile, outfile))
+def run_linker(target, infile, outfile):
+    p = subprocess.Popen(target.get_linker_args(infile, outfile))
     p.communicate()
     if p.returncode != 0:
         sys.exit(p.returncode)
@@ -262,9 +262,9 @@ def run_linker(target_type, infile, outfile):
 def compile_file(filename, target_platform=default_target_platform):
     if target_platform not in target_platform_map:
         raise OmeError('unsupported target platform: {0}-{1}'.format(*target_platform))
-    target_type = target_platform_map[target_platform]
-    asm = compile_file_to_code(filename, target_type)
+    target = target_platform_map[target_platform]
+    asm = compile_file_to_code(filename, target)
     exe_file = os.path.splitext(filename)[0]
     obj_file = exe_file + '.o'
-    run_assembler(target_type, asm, obj_file)
-    run_linker(target_type, obj_file, exe_file)
+    run_assembler(target, asm, obj_file)
+    run_linker(target, obj_file, exe_file)
