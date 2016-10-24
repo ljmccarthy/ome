@@ -93,13 +93,17 @@ class Program(object):
         self.sent_messages.update(
             send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
 
-        self.called_methods = set(
+        called_methods = set(
             (send.receiver_block.tag, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
         for method in self.target.builtin_methods:
-            if method.sent_messages and self.should_include_method(method, self.builtin.tag):
+            if method.sent_messages and (method.symbol in self.sent_messages or (method.tag, method.symbol) in called_methods):
                 self.sent_messages.update(method.sent_messages)
+
+        self.called_methods = set(
+            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            if send.receiver_block and send.symbol not in self.sent_messages)
 
     def compile_traceback_info(self):
         for send in self.send_list:
@@ -208,7 +212,7 @@ class Program(object):
                     self.warning("no methods defined for message '%s'" % symbol)
                 out.write(generate_dispatcher(symbol, [], self.target))
                 out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, tags, self.target))
+                out.write(generate_lookup_dispatcher(symbol, [], self.target))
                 out.write('\n')
 
     def emit_toplevel(self, out):
