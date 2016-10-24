@@ -222,17 +222,22 @@ static void OME_append_traceback(OME_Traceback_Entry const *entry)
 
 static void OME_reset_traceback(void)
 {
+    size_t size = (const char *) OME_context->stack_limit - (const char *) OME_context->traceback;
+    memset(OME_context->traceback, 0, size);
     OME_context->traceback = (OME_Traceback_Entry const **) OME_context->stack_limit;
 }
 
 static void OME_print_traceback(FILE *out, OME_Value error)
 {
-    fputs("Traceback (most recent call last):", out);
-
+    OME_Traceback_Entry const **cur = OME_context->traceback;
     OME_Traceback_Entry const **end = (OME_Traceback_Entry const **) OME_context->stack_limit;
-    for (OME_Traceback_Entry const **cur = OME_context->traceback; cur < end; cur++) {
+
+    if (cur < end) {
+        fputs("Traceback (most recent call last):\n", out);
+    }
+    for (; cur < end; cur++) {
         OME_Traceback_Entry const *tb = *cur;
-        fprintf(out, "\n  File \"%s\", line %d, in |%s|\n    %s\n    ",
+        fprintf(out, "  File \"%s\", line %d, in |%s|\n    %s\n    ",
                 tb->stream_name, tb->line_number, tb->method_name, tb->source_line);
         for (int i = 0; i < tb->column; i++) {
             fputc(' ', out);
@@ -240,8 +245,9 @@ static void OME_print_traceback(FILE *out, OME_Value error)
         for (int i = 0; i < tb->underline; i++) {
             fputc('^', out);
         }
+        fputc('\n', out);
     }
-    fputs("\nError: ", out);
+    fputs("Error: ", out);
     OME_print_value(out, OME_strip_error(error));
     fputc('\n', out);
     fflush(out);
