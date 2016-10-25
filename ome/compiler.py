@@ -34,33 +34,78 @@ def collect_nodes_of_type(ast, node_type):
     ast.walk(append_block)
     return nodes
 
+class IdAllocator(object):
+    def __init__(self, integer_tag_names=(), pointer_tag_names=(), constant_names=()):
+        self.integer_tag_names = list(integer_tag_names)
+        self.pointer_tag_names = list(pointer_tag_names)
+        self.constant_names = list(constant_names)
+
+    def allocate_ids(self, block_list):
+        self.tags = {}
+        self.tag_list = []
+        tag_id = 0
+        for name in self.integer_tag_names:
+            self.tags[name] = tag_id
+            self.tag_list.append((name, tag_id))
+            tag_id += 1
+        self.pointer_tag_id = tag_id
+        for name in self.pointer_tag_names:
+            self.tags[name] = tag_id
+            self.tag_list.append((name, tag_id))
+            tag_id += 1
+        for block in block_list:
+            if not block.is_constant:
+                block.tag = tag_id
+                tag_id += 1
+        if tag_id > MAX_TAG:
+            raise OmeError('exhausted all tag IDs')
+
+        self.constants = {}
+        self.constant_list = []
+        constant_id = 0
+        for name in self.constant_names:
+            self.constants[name] = constant_id
+            self.constant_list.append((name, constant_id))
+            self.tags[name] = constant_to_tag(constant_id)
+            constant_id += 1
+        for block in block_list:
+            if block.is_constant:
+                block.tag = constant_to_tag(constant_id)
+                block.tag_constant = constant_id
+                constant_id += 1
+        if constant_id > MAX_CONSTANT_TAG:
+            raise OmeError('exhausted all constant tag IDs')
+
+        self.last_tag_id = tag_id
+        self.last_constant_id = constant_id
+
+        assert Tag_Constant == self.tags['Constant']
+        assert Constant_BuiltIn == self.constants['BuiltIn']
+
 class Program(object):
     def __init__(self, filename, ast, builtin, target, debug=True):
         self.filename = filename
-        self.builtin = builtin
-        self.debug = debug
         self.toplevel_method = ast
-        self.toplevel_block = ast.expr
-
-        if isinstance(self.toplevel_block, Sequence):
-            self.toplevel_block = self.toplevel_block.statements[-1]
-
-        if 'main' not in self.toplevel_block.symbols:
-            self.error('no main method defined')
-
+        self.builtin = builtin
         self.target = target
+        self.debug = debug
+
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
-
         self.block_list = collect_nodes_of_type(ast, Block)
-        self.allocate_tag_ids()
-        self.allocate_constant_tag_ids()
-
         self.send_list = collect_nodes_of_type(ast, Send)
-        self.find_used_methods()
-        self.compile_traceback_info()
 
+        toplevel_block = ast.expr
+        if isinstance(toplevel_block, Sequence):
+            toplevel_block = self.toplevel_block.statements[-1]
+        if 'main' not in toplevel_block.symbols:
+            self.error('no main method defined')
+
+        self.ids = IdAllocator(integer_type_names, pointer_type_names, constant_names)
+        self.ids.allocate_ids(self.block_list)
+        self.compile_traceback_info()
+        self.find_used_methods()
         self.build_code_table()
 
     def error(self, message):
@@ -68,42 +113,6 @@ class Program(object):
 
     def warning(self, message):
         sys.stderr.write('\x1b[1m{0}: \x1b[35mwarning:\x1b[0m {1}\n'.format(self.filename, message))
-
-    def allocate_tag_ids(self):
-        tag = Tag_User
-        for block in self.block_list:
-            if not block.is_constant:
-                block.tag = tag
-                tag += 1
-        if tag > MAX_TAG:
-            self.error('exhausted all tag IDs')
-
-    def allocate_constant_tag_ids(self):
-        constant_tag = Constant_User
-        for block in self.block_list:
-            if block.is_constant:
-                block.tag = constant_to_tag(constant_tag)
-                block.tag_constant = constant_tag
-                constant_tag += 1
-        if constant_tag > MAX_CONSTANT_TAG:
-            self.error('exhausted all constant tag IDs')
-
-    def find_used_methods(self):
-        self.sent_messages = set(['main', 'string'])
-        self.sent_messages.update(
-            send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
-
-        called_methods = set(
-            (send.receiver_block.tag, send.symbol) for send in self.send_list
-            if send.receiver_block and send.symbol not in self.sent_messages)
-
-        for method in self.target.builtin_methods:
-            if method.sent_messages and (method.symbol in self.sent_messages or (method.tag, method.symbol) in called_methods):
-                self.sent_messages.update(method.sent_messages)
-
-        self.called_methods = set(
-            (send.receiver_block.tag, send.symbol) for send in self.send_list
-            if send.receiver_block and send.symbol not in self.sent_messages)
 
     def compile_traceback_info(self):
         for send in self.send_list:
@@ -130,11 +139,29 @@ class Program(object):
                     self.traceback_table[key] = tbinfo
                 send.traceback_info = tbinfo
 
-    def compile_method(self, method):
-        return method.generate_code(self.data_table)
+    def find_used_methods(self):
+        self.sent_messages = set(['main', 'string'])
+        self.sent_messages.update(
+            send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
+
+        called_methods = set(
+            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            if send.receiver_block and send.symbol not in self.sent_messages)
+
+        for method in self.target.builtin_methods:
+            method_tag = self.ids.tags[method.tag_name]
+            if method.sent_messages and (method.symbol in self.sent_messages or (method_tag, method.symbol) in called_methods):
+                self.sent_messages.update(method.sent_messages)
+
+        self.called_methods = set(
+            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            if send.receiver_block and send.symbol not in self.sent_messages)
 
     def should_include_method(self, method, tag):
         return method.symbol in self.sent_messages or (tag, method.symbol) in self.called_methods
+
+    def compile_method(self, method):
+        return method.generate_code(self)
 
     def build_code_table(self):
         methods = {}
@@ -143,7 +170,8 @@ class Program(object):
             if self.should_include_method(method, self.builtin.tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
-                methods[method.symbol].append((method.tag, method))
+                method_tag = self.ids.tags[method.tag_name]
+                methods[method.symbol].append((method_tag, method))
 
         for block in self.block_list:
             for method in block.methods:
@@ -156,13 +184,16 @@ class Program(object):
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
 
-        methods.clear()
-
     def emit_constants(self, out):
         define_format = self.target.define_constant_format
         for name, value in sorted(constants.__dict__.items()):
-            if isinstance(value, int):
+            if isinstance(value, int) and not name.startswith(('Tag_', 'Constant_')):
                 out.write(define_format.format('OME_' + name, value))
+        for name, value in self.ids.tag_list:
+            out.write(define_format.format('OME_Tag_' + name.replace('-', '_'), value))
+        out.write(define_format.format('OME_Pointer_Tag', self.ids.pointer_tag_id))
+        for name, value in self.ids.constant_list:
+            out.write(define_format.format('OME_Constant_' + name.replace('-', '_'), value))
         out.write(self.target.builtin_macros)
 
     def emit_data(self, out):

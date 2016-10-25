@@ -2,7 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 NUM_BITS = 64
-NUM_TAG_BITS = 20
+NUM_TAG_BITS = 17
 NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
@@ -30,6 +30,9 @@ MASK_DATA = (1 << NUM_DATA_BITS) - 1
 MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
+Tag_Constant = 1
+Constant_BuiltIn = 1
+
 # Tags < 256 are reserved for non-heap data types
 integer_type_names = [
     'Boolean',
@@ -41,12 +44,13 @@ integer_type_names = [
 # Tags >= 256 are reserved for heap data types
 pointer_type_names = [
     'String',
-    'String-Mutable',
     'String-Buffer',
+    'Byte-Array',
+    'Byte-Array-Mutable',
+    'Byte-Array-Buffer',
     'Array',            # immutable
     'Array-Mutable',    # mutable, fixed-size
     'Array-Buffer',     # mutable, resizable
-    'User',
 ]
 
 constant_names = [
@@ -58,26 +62,7 @@ constant_names = [
     'Index-Error',
     'Overflow',
     'Divide-By-Zero',
-    'User',                 # First ID for user-defined constant blocks
 ]
-
-constant_value = {}
-type_tag = {}
-
-def build_constants():
-    g = globals()
-    for tag, name in enumerate(integer_type_names):
-        type_tag[name] = tag
-        g['Tag_' + name.replace('-', '_')] = tag
-    for tag, name in enumerate(pointer_type_names, 256):
-        type_tag[name] = tag
-        g['Tag_' + name.replace('-', '_')] = tag
-    for value, name in enumerate(constant_names):
-        constant_value[name] = value
-        g['Constant_' + name.replace('-', '_')] = value
-
-build_constants()
-del build_constants
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG

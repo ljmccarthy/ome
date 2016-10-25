@@ -194,7 +194,7 @@ class Block(object):
     def generate_code(self, code):
         dest = code.add_temp()
         if self.is_constant:
-            code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.tag_constant))
+            code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.tag_constant))
         else:
             code.add_instruction(ALLOC(dest, len(self.slots), self.tag))
             for index, slot in enumerate(self.slots):
@@ -279,8 +279,8 @@ class Method(object):
         visitor(self)
         self.expr.walk(visitor)
 
-    def generate_code(self, data_table):
-        code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args), data_table)
+    def generate_code(self, program):
+        code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args), program)
         code.add_instruction(RETURN(self.expr.generate_code(code)))
         return code.get_code()
 
@@ -360,7 +360,7 @@ class Array(object):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(ARRAY(dest, len(self.elems), Tag_Array))
+        code.add_instruction(ARRAY(dest, len(self.elems), code.get_tag('Array')))
         for index, elem in enumerate(self.elems):
             value = elem.generate_code(code)
             code.add_instruction(SET_ELEM(dest, index, value))
@@ -377,23 +377,31 @@ class TerminalNode(object):
         visitor(self)
 
 class Value(TerminalNode):
-    def __init__(self, tag, value):
-        self.tag = tag
+    def __init__(self, tag_name, value):
+        self.tag_name = tag_name
         self.value = value
 
     def __str__(self):
-        return '<value %X:%X>' % (self.tag, self.value)
+        return '<value %s:%s>' % (self.tag_name, self.value)
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, self.tag, self.value))
+        code.add_instruction(LOAD_VALUE(dest, code.get_tag(self.tag_name), self.value))
         return dest
 
-class EmptyBlock(Value):
-    def __str__(self):
-        return '(block)'
+class Constant(TerminalNode):
+    def __init__(self, constant_name):
+        self.constant_name = constant_name
 
-EmptyBlock = EmptyBlock(Tag_Constant, Constant_Empty)
+    def __str__(self):
+        return '<constant %s>' % (self.constant_name)
+
+    def generate_code(self, code):
+        dest = code.add_temp()
+        code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), code.get_constant(self.constant_name)))
+        return dest
+
+EmptyBlock = Constant('Empty')
 
 class ConstantBlock(TerminalNode):
     def __init__(self, block):
@@ -408,9 +416,9 @@ class ConstantBlock(TerminalNode):
         return dest
 
 class BuiltInMethod(object):
-    def __init__(self, symbol, tag, sent_messages, code):
+    def __init__(self, symbol, tag_name, sent_messages, code):
         self.symbol = symbol
-        self.tag = tag
+        self.tag_name = tag_name
         self.sent_messages = sent_messages
         self.code = code
 
@@ -421,10 +429,10 @@ class BuiltInBlock(object):
     is_constant = True
     tag = constant_to_tag(Constant_BuiltIn)
     tag_constant = Constant_BuiltIn
-    constant_ref = Value(Tag_Constant, Constant_BuiltIn)
+    constant_ref = Constant('BuiltIn')
 
     def __init__(self, target):
-        self.symbols = {method.symbol for method in target.builtin_methods if method.tag == self.tag}
+        self.symbols = {method.symbol for method in target.builtin_methods if method.tag_name == 'BuiltIn'}
 
     def lookup_var(self, symbol):
         pass
@@ -447,8 +455,8 @@ Self = Self()
 
 reserved_names = {
     'self': Self,
-    'False': Value(Tag_Boolean, 0),
-    'True': Value(Tag_Boolean, 1),
+    'False': Value('Boolean', 0),
+    'True': Value('Boolean', 1),
 }
 
 class LocalGet(TerminalNode):
@@ -530,21 +538,21 @@ class Number(TerminalNode):
     def __str__(self):
         return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
 
-    def encode_value(self):
+    def encode_value(self, code):
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
             if MIN_SMALL_INTEGER <= value <= MAX_SMALL_INTEGER:
-                return (Tag_Small_Integer, value & MASK_DATA)
+                return (code.get_tag('Small-Integer'), value & MASK_DATA)
 
         if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
         and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
             self.parse_state.error('number out of range')
 
         value = ((self.significand & MASK_SIGNIFICAND) << NUM_EXPONENT_BITS) | (self.exponent & MASK_EXPONENT)
-        return (Tag_Small_Decimal, value)
+        return (code.get_tag('Small-Decimal'), value)
 
     def generate_code(self, code):
-        tag, value = self.encode_value()
+        tag, value = self.encode_value(code)
         dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, tag, value))
         return dest
@@ -558,6 +566,6 @@ class String(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        label = code.data_table.allocate_string(self.string)
-        code.add_instruction(LOAD_LABEL(dest, Tag_String, label))
+        label = code.allocate_string(self.string)
+        code.add_instruction(LOAD_LABEL(dest, code.get_tag('String'), label))
         return dest

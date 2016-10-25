@@ -13,7 +13,7 @@ builtin_macros = r'''
 
 typedef uint32_t OME_Tag;
 typedef union OME_Value OME_Value;
-typedef struct OME_Heap_Header OME_Heap_Header;
+typedef struct OME_Small_Header OME_Small_Header;
 typedef struct OME_Traceback_Entry OME_Traceback_Entry;
 typedef struct OME_Context OME_Context;
 typedef struct OME_String OME_String;
@@ -32,12 +32,12 @@ union OME_Value {
     };
 };
 
-struct OME_Heap_Header {
-    uint32_t mark_next;      // heap index of next object in the mark stack
-    uint32_t marked   : 1;   // mark bit
-    uint32_t size     : 10;  // number of slots
-    uint32_t slots    : 10;  // number of slots to scan
-    uint32_t disposer : 11;  // index of dispose method - 0 for no disposer
+struct OME_Small_Header {
+    uint32_t mark_next;         // heap index of next object in the mark stack
+    uint32_t marked      : 1;   // mark bit
+    uint32_t size        : 11;  // size in bytes
+    uint32_t scan_offset : 8;   // slot offset from where to scan
+    uint32_t scan_size   : 8;   // number of slots to scan
 };
 
 struct OME_Traceback_Entry {
@@ -68,6 +68,7 @@ struct OME_String {
 
 struct OME_Array {
     uint32_t size;
+    uint32_t padding;
     OME_Value elems[];
 };
 
@@ -345,12 +346,12 @@ int main(const int argc, const char *const *argv)
 
 builtin_methods = [
 
-BuiltInMethod('print:', constant_to_tag(Constant_BuiltIn), [], '''
+BuiltInMethod('print:', 'BuiltIn', [], '''
     OME_print_value(OME_context->stdout, _1);
     return OME_Empty;
 '''),
 
-BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return'], '''
+BuiltInMethod('for:', 'BuiltIn', ['do', 'while', 'return'], '''
     OME_ENTER(1);
     stack[0] = _1;
     OME_Method_0 while_method = OME_lookup_while__0(_1);
@@ -377,32 +378,32 @@ BuiltInMethod('for:', constant_to_tag(Constant_BuiltIn), ['do', 'while', 'return
     }
 '''),
 
-BuiltInMethod('argv', constant_to_tag(Constant_BuiltIn), [], '''
+BuiltInMethod('argv', 'BuiltIn', [], '''
     return OME_context->argv;
 '''),
 
-BuiltInMethod('string', Tag_Boolean, [], '''
+BuiltInMethod('string', 'Boolean', [], '''
     OME_STATIC_STRING(s_false, "False");
     OME_STATIC_STRING(s_true, "True");
     return OME_tag_pointer(OME_Tag_String, OME_untag_unsigned(_0) ? &s_true : &s_false);
 '''),
 
-BuiltInMethod('string', Tag_Small_Integer, [], '''
+BuiltInMethod('string', 'Small-Integer', [], '''
     intptr_t n = OME_untag_signed(_0);
     OME_String *s = OME_allocate_data(32);
     s->size = snprintf(s->data, 31 - sizeof(OME_String), "%" PRIdPTR, n);
     return OME_tag_pointer(OME_Tag_String, s);
 '''),
 
-BuiltInMethod('or:', Tag_Boolean, [], '''
+BuiltInMethod('or:', 'Boolean', [], '''
     return OME_untag_unsigned(_0) ? _0 : _1;
 '''),
 
-BuiltInMethod('and:', Tag_Boolean, [], '''
+BuiltInMethod('and:', 'Boolean', [], '''
     return OME_untag_unsigned(_0) ? _1 : _0;
 '''),
 
-BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''
+BuiltInMethod('if:', 'Boolean', ['then', 'else'], '''
     if (OME_untag_unsigned(_0)) {
         return OME_message_then__0(_1);
     }
@@ -411,21 +412,21 @@ BuiltInMethod('if:', Tag_Boolean, ['then', 'else'], '''
     }
 '''),
 
-BuiltInMethod('then:', Tag_Boolean, ['do'], '''
+BuiltInMethod('then:', 'Boolean', ['do'], '''
     if (OME_untag_unsigned(_0)) {
         OME_message_do__0(_1);
     }
     return OME_Empty;
 '''),
 
-BuiltInMethod('else:', Tag_Boolean, ['do'], '''
+BuiltInMethod('else:', 'Boolean', ['do'], '''
     if (!OME_untag_unsigned(_0)) {
         OME_message_do__0(_1);
     }
     return OME_Empty;
 '''),
 
-BuiltInMethod('+', Tag_Small_Integer, [], '''
+BuiltInMethod('+', 'Small-Integer', [], '''
     intptr_t result = OME_untag_signed(_0) + OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -436,7 +437,7 @@ BuiltInMethod('+', Tag_Small_Integer, [], '''
     return OME_tag_signed(OME_Tag_Small_Integer, result);
 '''),
 
-BuiltInMethod('-', Tag_Small_Integer, [], '''
+BuiltInMethod('-', 'Small-Integer', [], '''
     intptr_t result = OME_untag_signed(_0) - OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -447,7 +448,7 @@ BuiltInMethod('-', Tag_Small_Integer, [], '''
     return OME_tag_signed(OME_Tag_Small_Integer, result);
 '''),
 
-BuiltInMethod('×', Tag_Small_Integer, [], '''
+BuiltInMethod('×', 'Small-Integer', [], '''
     __int128_t result = (__int128_t) OME_untag_signed(_0) * OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -458,7 +459,7 @@ BuiltInMethod('×', Tag_Small_Integer, [], '''
     return OME_tag_signed(OME_Tag_Small_Integer, (intptr_t) result);
 '''),
 
-BuiltInMethod('mod:', Tag_Small_Integer, [], '''
+BuiltInMethod('mod:', 'Small-Integer', [], '''
     intptr_t result = OME_untag_signed(_0) % OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -466,7 +467,7 @@ BuiltInMethod('mod:', Tag_Small_Integer, [], '''
     return OME_tag_signed(OME_Tag_Small_Integer, result);
 '''),
 
-BuiltInMethod('==', Tag_Small_Integer, [], '''
+BuiltInMethod('==', 'Small-Integer', [], '''
     uintptr_t result = OME_untag_signed(_0) == OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_False;
@@ -474,7 +475,7 @@ BuiltInMethod('==', Tag_Small_Integer, [], '''
     return OME_tag_unsigned(OME_Tag_Boolean, result);
 '''),
 
-BuiltInMethod('<', Tag_Small_Integer, [], '''
+BuiltInMethod('<', 'Small-Integer', [], '''
     uintptr_t result = OME_untag_signed(_0) < OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -482,7 +483,7 @@ BuiltInMethod('<', Tag_Small_Integer, [], '''
     return OME_tag_unsigned(OME_Tag_Boolean, result);
 '''),
 
-BuiltInMethod('≤', Tag_Small_Integer, [], '''
+BuiltInMethod('≤', 'Small-Integer', [], '''
     uintptr_t result = OME_untag_signed(_0) <= OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
@@ -490,7 +491,7 @@ BuiltInMethod('≤', Tag_Small_Integer, [], '''
     return OME_tag_unsigned(OME_Tag_Boolean, result);
 '''),
 
-BuiltInMethod('at:', Tag_Array, [], '''
+BuiltInMethod('at:', 'Array', [], '''
     OME_Array *self = OME_untag_pointer(_0);
     intptr_t index = OME_untag_signed(_1);
     if (OME_get_tag(_1) != OME_Tag_Small_Integer) {
@@ -502,12 +503,12 @@ BuiltInMethod('at:', Tag_Array, [], '''
     return self->elems[index];
 '''),
 
-BuiltInMethod('size', Tag_Array, [], '''
+BuiltInMethod('size', 'Array', [], '''
     OME_Array *self = OME_untag_pointer(_0);
     return OME_tag_signed(OME_Tag_Small_Integer, self->size);
 '''),
 
-BuiltInMethod('each:', Tag_Array, ['item:'], '''
+BuiltInMethod('each:', 'Array', ['item:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
@@ -526,7 +527,7 @@ BuiltInMethod('each:', Tag_Array, ['item:'], '''
     OME_RETURN(OME_Empty);
 '''),
 
-BuiltInMethod('enumerate:', Tag_Array, ['item:index:'], '''
+BuiltInMethod('enumerate:', 'Array', ['item:index:'], '''
     OME_ENTER(2);
     stack[0] = _0;
     stack[1] = _1;
@@ -552,10 +553,9 @@ def build_builtins():
     data_defs = []
 
     for name in constant_names[:-1]:
-        value = constant_value[name]
-        data_defs.append('static const OME_Value OME_{} = {{._udata = {}, ._utag = OME_Tag_Constant}};\n'.format(
-            name.replace('-', '_'), value))
-        builtin_methods.append(BuiltInMethod('string', constant_to_tag(value), [], '''
+        uname = name.replace('-', '_')
+        data_defs.append('static const OME_Value OME_{} = {{._udata = OME_Constant_{}, ._utag = OME_Tag_Constant}};\n'.format(uname, uname))
+        builtin_methods.append(BuiltInMethod('string', name, [], '''
     OME_STATIC_STRING(s, "{}");
     return OME_tag_pointer(OME_Tag_String, &s);
 '''.format(name)))

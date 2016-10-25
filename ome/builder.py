@@ -4,10 +4,10 @@
 from .emit import ProcedureCodeEmitter
 
 class MethodCodeBuilder(object):
-    def __init__(self, num_args, num_locals, data_table):
+    def __init__(self, num_args, num_locals, program):
         self.num_args = num_args + 1  # self is arg 0
         self.num_locals = num_args + num_locals + 1
-        self.data_table = data_table
+        self.program = program
         self.instructions = []
         self.dest = self.add_temp()
 
@@ -18,6 +18,15 @@ class MethodCodeBuilder(object):
 
     def add_instruction(self, instruction):
         self.instructions.append(instruction)
+
+    def allocate_string(self, string):
+        return self.program.data_table.allocate_string(string)
+
+    def get_tag(self, tag_name):
+        return self.program.ids.tags[tag_name]
+
+    def get_constant(self, constant_name):
+        return self.program.ids.constants[constant_name]
 
     def get_code(self):
         return MethodCode(self.instructions, self.num_args)
