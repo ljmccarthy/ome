@@ -33,7 +33,6 @@ MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 Tag_Constant = 1
 Constant_BuiltIn = 1
 
-# Tags < 256 are reserved for non-heap data types
 integer_type_names = [
     'Boolean',
     'Constant',
@@ -41,7 +40,6 @@ integer_type_names = [
     'Small-Decimal',
 ]
 
-# Tags >= 256 are reserved for heap data types
 pointer_type_names = [
     'String',
     'String-Buffer',
@@ -66,9 +64,3 @@ constant_names = [
 
 def constant_to_tag(constant):
     return constant + MIN_CONSTANT_TAG
-
-if __name__ == '__main__':
-    for name in integer_type_names + pointer_type_names:
-        print('Tag_{} = {}'.format(name.replace('-', '_'), type_tag[name]))
-    for name in constant_names:
-        print('Constant_{} = {}'.format(name.replace('-', '_'), constant_value[name]))
