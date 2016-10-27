@@ -2,7 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 NUM_BITS = 64
-NUM_TAG_BITS = 17
+NUM_TAG_BITS = 20
 NUM_DATA_BITS = NUM_BITS - NUM_TAG_BITS
 NUM_EXPONENT_BITS = 8
 NUM_SIGNIFICAND_BITS = NUM_DATA_BITS - NUM_EXPONENT_BITS
