@@ -381,6 +381,7 @@ static void OME_compact(void)
     }
 
     heap->pointer = dest;
+    memset(heap->pointer, 0, heap->limit - heap->pointer);
 
     for (OME_Value *stack_cur = OME_context->stack_base, *stack_end = OME_context->stack_pointer; stack_cur < stack_end; stack_cur++) {
         //printf("fix up stack slot %p %u %p\n", stack_cur, OME_get_tag(*stack_cur), OME_untag_pointer(*stack_cur));
