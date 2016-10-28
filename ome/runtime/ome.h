@@ -74,9 +74,6 @@ struct OME_Context {
     uint32_t *traceback;
     void *const callstack_base;
     OME_Heap heap;
-    FILE *stdin;
-    FILE *stdout;
-    FILE *stderr;
 };
 
 struct OME_String {

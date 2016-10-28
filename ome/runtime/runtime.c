@@ -406,9 +406,6 @@ static int OME_thread_main(void)
         .stack_base = &stack[0],
         .callstack_base = NULL,
         .traceback = (uint32_t *) &stack[OME_STACK_SIZE],
-        .stdin = stdin,
-        .stdout = stdout,
-        .stderr = stderr,
     };
 
     OME_initialize_heap(&context.heap);

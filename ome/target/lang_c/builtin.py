@@ -20,7 +20,7 @@ int main(int argc, const char *const *argv)
 builtin_methods = [
 
 BuiltInMethod('print:', 'BuiltIn', [], '''
-    OME_print_value(OME_context->stdout, _1);
+    OME_print_value(stdout, _1);
     return OME_Empty;
 '''),
 
