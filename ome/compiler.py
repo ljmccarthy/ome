@@ -194,6 +194,7 @@ class Program(object):
         out.write(define_format.format('OME_Pointer_Tag', self.ids.pointer_tag_id))
         for name, value in self.ids.constant_list:
             out.write(define_format.format('OME_Constant_' + name.replace('-', '_'), value))
+        out.write('\n')
         out.write(self.target.builtin_macros)
 
     def emit_data(self, out):
@@ -206,6 +207,7 @@ class Program(object):
         out.write('\n')
 
     def emit_code_declarations(self, out):
+        self.target.emit_declaration(out, 'OME_toplevel', 1)
         method_decls = set()
         message_decls = set(self.sent_messages)
         for symbol, methods in self.code_table:
@@ -218,6 +220,7 @@ class Program(object):
             self.target.emit_declaration(out, make_message_label(symbol), symbol_arity(symbol))
         for symbol in sorted(message_decls):
             self.target.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
+        out.write('\n')
 
     def emit_code_definitions(self, out):
         out.write(self.target.builtin_code)
