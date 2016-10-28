@@ -71,7 +71,7 @@ struct OME_Context {
     OME_Value *stack_pointer;
     OME_Value *const stack_limit;
     OME_Value *const stack_base;
-    OME_Traceback_Entry const **traceback;
+    uint32_t *traceback;
     void *const callstack_base;
     OME_Heap heap;
     FILE *stdin;

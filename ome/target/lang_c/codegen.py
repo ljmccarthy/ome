@@ -74,7 +74,7 @@ class ProcedureCodegen(object):
         self.emit('if (OME_is_error(_{})) {{'.format(error))
         with self.emit.indented():
             if traceback_info:
-                self.emit('OME_append_traceback(&OME_traceback_table[{}]);'.format(traceback_info.index))
+                self.emit('OME_append_traceback({});'.format(traceback_info.index))
             self.emit_return('_{}'.format(error))
         self.emit('}')
 

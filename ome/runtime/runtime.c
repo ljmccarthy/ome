@@ -12,9 +12,9 @@ static void OME_print_value(FILE *out, OME_Value value)
     }
 }
 
-static void OME_append_traceback(OME_Traceback_Entry const *entry)
+static void OME_append_traceback(uint32_t entry)
 {
-    OME_Traceback_Entry const **traceback = &OME_context->traceback[-1];
+    uint32_t *traceback = &OME_context->traceback[-1];
     if ((void *) traceback >= (void *) OME_context->stack_pointer) {
         *traceback = entry;
         OME_context->traceback = traceback;
@@ -25,19 +25,19 @@ static void OME_reset_traceback(void)
 {
     size_t size = (char *) OME_context->stack_limit - (char *) OME_context->traceback;
     memset(OME_context->traceback, 0, size);
-    OME_context->traceback = (OME_Traceback_Entry const **) OME_context->stack_limit;
+    OME_context->traceback = (uint32_t *) OME_context->stack_limit;
 }
 
 static void OME_print_traceback(FILE *out, OME_Value error)
 {
-    OME_Traceback_Entry const **cur = OME_context->traceback;
-    OME_Traceback_Entry const **end = (OME_Traceback_Entry const **) OME_context->stack_limit;
+    uint32_t *cur = OME_context->traceback;
+    uint32_t *end = (uint32_t *) OME_context->stack_limit;
 
     if (cur < end) {
         fputs("Traceback (most recent call last):\n", out);
     }
     for (; cur < end; cur++) {
-        OME_Traceback_Entry const *tb = *cur;
+        OME_Traceback_Entry const *tb = &OME_traceback_table[*cur];
         fprintf(out, "  File \"%s\", line %d, in |%s|\n    %s\n    ",
                 tb->stream_name, tb->line_number, tb->method_name, tb->source_line);
         for (uint32_t i = 0; i < tb->column; i++) {
@@ -405,7 +405,7 @@ static int OME_thread_main(void)
         .stack_limit = &stack[OME_STACK_SIZE],
         .stack_base = &stack[0],
         .callstack_base = NULL,
-        .traceback = (OME_Traceback_Entry const **) &stack[OME_STACK_SIZE],
+        .traceback = (uint32_t *) &stack[OME_STACK_SIZE],
         .stdin = stdin,
         .stdout = stdout,
         .stderr = stderr,
