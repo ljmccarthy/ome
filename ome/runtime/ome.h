@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <time.h>
 #include <sys/mman.h>
 
 typedef uint32_t OME_Tag;
@@ -66,6 +67,7 @@ struct OME_Heap {
     size_t bitmap_size;
     size_t num_allocated;
     size_t num_collections;
+    clock_t clock_time;
 };
 
 struct OME_Context {

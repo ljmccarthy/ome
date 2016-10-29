@@ -1,3 +1,11 @@
+#ifdef OME_DEBUG_GC
+    #define OME_GC_ASSERT(e) assert(e)
+    #define OME_GC_PRINT(...) fprintf(stderr, __VA_ARGS__)
+#else
+    #define OME_GC_ASSERT(e) do {} while (0)
+    #define OME_GC_PRINT(...) do {} while (0)
+#endif
+
 static void OME_print_value(FILE *out, OME_Value value)
 {
     if (OME_get_tag(value) != OME_Tag_String) {
@@ -57,7 +65,7 @@ static void OME_print_traceback(FILE *out, OME_Value error)
 static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 {
     size &= ~(OME_HEAP_ALIGNMENT - 1);
-    size_t relocs_size = (size >> 6) / sizeof(OME_Heap_Relocation);
+    size_t relocs_size = (size >> 5) / sizeof(OME_Heap_Relocation);
     size_t nbits = 8 * sizeof(unsigned long);
     size_t bitmap_size = ((size / sizeof(OME_Header)) + nbits - 1) / nbits;
     size_t metadata_size = OME_heap_align(relocs_size * sizeof(OME_Heap_Relocation) + bitmap_size * sizeof(unsigned long));
@@ -91,8 +99,8 @@ static void OME_mark_bitmap(OME_Heap *heap, OME_Header *header)
 {
     const size_t index = ((char *) header - heap->base) / sizeof(OME_Header);
     const size_t nbits = 8 * sizeof(unsigned long);
-    //assert(heap->base + (index * sizeof(OME_Header)) == (char *) header);
-    //assert(index / nbits < heap->bitmap_size);
+    OME_GC_ASSERT(heap->base + (index * sizeof(OME_Header)) == (char *) header);
+    OME_GC_ASSERT(index / nbits < heap->bitmap_size);
     heap->bitmap[index / nbits] |= 1UL << (index % nbits);
 }
 
@@ -100,8 +108,8 @@ static int OME_is_marked(OME_Heap *heap, OME_Header *header)
 {
     size_t index = ((char *) header - heap->base) / sizeof(OME_Header);
     const size_t nbits = 8 * sizeof(unsigned long);
-    //assert(heap->base + (index * sizeof(OME_Header)) == (char *) header);
-    //assert(index / nbits < heap->bitmap_size);
+    OME_GC_ASSERT(heap->base + (index * sizeof(OME_Header)) == (char *) header);
+    OME_GC_ASSERT(index / nbits < heap->bitmap_size);
     return (heap->bitmap[index / nbits] & (1UL << (index % nbits))) != 0;
 }
 
@@ -125,7 +133,7 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
     OME_Header *end = (OME_Header *) (new_heap + pointer_offset);
 
     if (diff != 0) {
-        //printf("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
+        OME_GC_PRINT("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
 
         OME_adjust_slots(heap, OME_context->stack_base, OME_context->stack_pointer, diff);
 
@@ -138,6 +146,17 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
     }
     OME_set_heap_base(heap, new_heap, new_size);
     heap->pointer += pointer_offset;
+}
+
+static void OME_resize_heap(OME_Heap *heap, size_t new_size)
+{
+    OME_GC_PRINT("resizing heap: %lu KB\n", new_size / 1024);
+    char *new_heap = mremap(heap->base, heap->size, new_size, MREMAP_MAYMOVE);
+    if (new_heap == MAP_FAILED) {
+        perror("mremap");
+        exit(1);
+    }
+    OME_move_heap(heap, new_heap, new_size);
 }
 
 #define OME_MARK_LIST_NULL 0xFFFFFFFF
@@ -160,7 +179,7 @@ static void OME_mark(void)
                 OME_mark_bitmap(heap, header);
                 header->mark_next = mark_list;
                 mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
-                //assert((mark_list * OME_HEAP_ALIGNMENT) + heap->base == body);
+                OME_GC_ASSERT((mark_list * OME_HEAP_ALIGNMENT) + heap->base == body);
                 //printf("marked %p %d\n", header, mark_list);
             }
         }
@@ -289,7 +308,7 @@ static void OME_compact(void)
             //printf("reloc src=%p dest=%p size=%u reloc=%u-%u\n", src, dest, size, relocs_cur->src, relocs_cur->diff);
             if (relocs_cur + 1 >= relocs_end) {
                 // relocation buffer full, apply relocations now and reset
-                //printf("relocation buffer full!\n");
+                OME_GC_PRINT("relocation buffer full\n");
                 relocs_cur->src = ((char *) cur + sizeof(OME_Header) - heap->base) / OME_HEAP_ALIGNMENT;
                 relocs_cur->diff = 0;
                 relocs_cur++;
@@ -304,7 +323,6 @@ static void OME_compact(void)
     }
 
     heap->pointer = dest;
-    //printf("memset %p %p %ld\n", heap->pointer, heap->limit, heap->limit - heap->pointer);
     if (heap->pointer < heap->limit) {
         memset(heap->pointer, 0, heap->limit - heap->pointer);
     }
@@ -316,14 +334,19 @@ static void OME_compact(void)
     OME_relocate_compacted((OME_Header *) heap->base, (OME_Header *) heap->pointer, heap, relocs_cur);
 }
 
-static void OME_collect(void)
+static void OME_collect(OME_Heap *heap)
 {
-    //printf("---- begin collection %ld\n", OME_context->heap.num_collections);
+#ifdef OME_DEBUG_GC
+    OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
+    clock_t t = clock();
+#endif
     OME_mark();
     OME_compact();
-    //printf("---- end collection (%lu bytes used)\n\n", OME_context->heap.pointer - OME_context->heap.base);
-    OME_context->heap.num_collections++;
-    //exit(0);
+#ifdef OME_DEBUG_GC
+    OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
+    heap->num_collections++;
+    heap->clock_time += clock() - t;
+#endif
 }
 
 static OME_Header *OME_reserve_allocation(OME_Heap *heap, size_t object_size)
@@ -332,18 +355,11 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, size_t object_size)
     size_t padded_size = alloc_size + sizeof(OME_Header);
 
     if (heap->pointer + padded_size >= heap->limit) {
-        OME_collect();
+        OME_collect(heap);
         size_t used = heap->pointer - heap->base;
         size_t total = heap->limit - heap->base;
-        if (heap->pointer + padded_size >= heap->limit || used > total / 2) {
-            size_t new_size = heap->size * 3 / 2;
-            //printf("resizing heap: %lu KB\n", new_size / 1024);
-            char *new_heap = mremap(heap->base, heap->size, new_size, MREMAP_MAYMOVE);
-            if (new_heap == MAP_FAILED) {
-                perror("mremap");
-                exit(1);
-            }
-            OME_move_heap(heap, new_heap, new_size);
+        if (heap->pointer + padded_size >= heap->limit || used > total / 4) {
+            OME_resize_heap(heap, heap->size * 4);
         }
     }
 
@@ -373,7 +389,7 @@ static void *OME_allocate(uint32_t object_size, uint32_t scan_offset, uint32_t s
     heap->num_allocated++;
 
     void *body = header + 1;
-    //assert(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
+    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
     return body;
 }
 
@@ -453,11 +469,22 @@ static int OME_thread_main(void)
     };
 
     OME_initialize_heap(&context.heap);
-    OME_context = &context;
+    context.heap.clock_time = 0;
+    clock_t start = clock();
 
+    OME_context = &context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
     if (OME_is_error(value)) {
         OME_print_traceback(stderr, value);
     }
+
+#ifdef OME_DEBUG_GC
+    clock_t time = clock() - start;
+    printf("collections:  %lu\n", context.heap.num_collections);
+    printf("gc time:      %lu\n", context.heap.clock_time);
+    printf("mutator time: %lu\n", time - context.heap.clock_time);
+    printf("total time:   %lu\n", time);
+#endif
+
     return OME_is_error(value) ? 1 : 0;
 }
