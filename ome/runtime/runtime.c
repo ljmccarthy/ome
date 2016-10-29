@@ -322,6 +322,11 @@ static void *OME_allocate(uint32_t object_size, uint32_t scan_offset, uint32_t s
     OME_Heap *heap = &OME_context->heap;
     object_size = (object_size + 7) & ~7;
 
+    if (object_size > (1 << 8) * sizeof(OME_Header)) {
+        fprintf(stderr, "error: invalid object size %u\n", object_size);
+        exit(1);
+    }
+
     OME_Header *header = OME_reserve_allocation(heap, object_size);
     header->marked = 0;
     header->size = object_size / sizeof(OME_Header);
@@ -388,9 +393,9 @@ static void OME_initialize(int argc, const char *const *argv)
     OME_argv->size = argc;
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]);
-        OME_String *arg = malloc(sizeof(OME_String) + len + 1);
+        OME_String *arg = calloc(1, OME_heap_align(sizeof(OME_String) + len + 1));
         arg->size = len;
-        memcpy(arg->data, argv[i], len + 1);
+        memcpy(arg->data, argv[i], len);
         OME_argv->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
     }
 }
@@ -401,11 +406,10 @@ static int OME_thread_main(void)
 {
     OME_Value stack[OME_STACK_SIZE];
     OME_Context context = {
-        .stack_pointer = &stack[0],
-        .stack_limit = &stack[OME_STACK_SIZE],
-        .stack_base = &stack[0],
-        .callstack_base = NULL,
-        .traceback = (uint32_t *) &stack[OME_STACK_SIZE],
+        .stack_pointer = stack,
+        .stack_limit = stack + OME_STACK_SIZE,
+        .stack_base = stack,
+        .traceback = (uint32_t *) (stack + OME_STACK_SIZE),
     };
 
     OME_initialize_heap(&context.heap);

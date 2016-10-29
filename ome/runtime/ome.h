@@ -69,10 +69,9 @@ struct OME_Heap {
 
 struct OME_Context {
     OME_Value *stack_pointer;
-    OME_Value *const stack_limit;
-    OME_Value *const stack_base;
+    OME_Value *stack_limit;
+    OME_Value *stack_base;
     uint32_t *traceback;
-    void *const callstack_base;
     OME_Heap heap;
 };
 
@@ -163,12 +162,12 @@ static int OME_is_error(OME_Value value)
     return (value._utag & OME_ERROR_BIT) != 0;
 }
 
-static int OME_not_understood(OME_Value value)
+static int OME_is_pointer(OME_Value value)
 {
-    return value._bits == OME_error_constant(OME_Constant_Not_Understood)._bits;
+    return OME_get_tag(value) >= OME_Pointer_Tag;
 }
 
-static size_t OME_heap_alignment(size_t size)
+static size_t OME_heap_align(size_t size)
 {
     return (size + OME_HEAP_ALIGNMENT - 1) & ~(OME_HEAP_ALIGNMENT - 1);
 }
@@ -176,11 +175,6 @@ static size_t OME_heap_alignment(size_t size)
 static int OME_is_header_aligned(void *header)
 {
     return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
-}
-
-static int OME_is_pointer(OME_Value value)
-{
-    return OME_get_tag(value) >= OME_Pointer_Tag;
 }
 
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
