@@ -56,15 +56,24 @@ static void OME_print_traceback(FILE *out, OME_Value error)
 
 static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 {
+    size &= ~(OME_HEAP_ALIGNMENT - 1);
     size_t relocs_size = (size >> 6) / sizeof(OME_Heap_Relocation);
+    size_t nbits = 8 * sizeof(unsigned long);
+    size_t bitmap_size = ((size / sizeof(OME_Header)) + nbits) / nbits; // extra bit to simplify check
+    size_t metadata_size = OME_heap_align(relocs_size * sizeof(OME_Heap_Relocation) + bitmap_size * sizeof(unsigned long));
     heap->base = heap_base;
     heap->pointer = heap_base;
-    heap->limit = heap_base + size - relocs_size * sizeof(OME_Heap_Relocation);
+    heap->limit = heap_base + size - metadata_size;
     heap->relocs = (OME_Heap_Relocation *) heap->limit;
+    heap->bitmap = (unsigned long *) (heap->relocs + relocs_size);
     heap->size = size;
     heap->relocs_size = relocs_size;
+    heap->bitmap_size = bitmap_size;
 
+    //printf("heap size: %lu bytes total, %lu bytes usable\n", size, size - metadata_size);
+    //printf("metadata size: %lu bytes\n", metadata_size);
     //printf("reloc buffer size: %lu bytes\n", relocs_size * sizeof(OME_Heap_Relocation));
+    //printf("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
 }
 
 static void OME_initialize_heap(OME_Heap *heap)
@@ -78,17 +87,33 @@ static void OME_initialize_heap(OME_Heap *heap)
     OME_set_heap_base(heap, heap_base, heap_size);
 }
 
+static void OME_mark_bitmap(OME_Heap *heap, OME_Header *header)
+{
+    const size_t index = ((char *) header - heap->base) / sizeof(OME_Header);
+    const size_t nbits = 8 * sizeof(unsigned long);
+    //assert(heap->base + (index * sizeof(OME_Header)) == (char *) header);
+    //assert(index / nbits < heap->bitmap_size);
+    heap->bitmap[index / nbits] |= 1L << (index % nbits);
+}
+
+static int OME_is_marked(OME_Heap *heap, OME_Header *header)
+{
+    size_t index = ((char *) header - heap->base) / sizeof(OME_Header);
+    const size_t nbits = 8 * sizeof(unsigned long);
+    //assert(heap->base + (index * sizeof(OME_Header)) == (char *) header);
+    //assert(index / nbits < heap->bitmap_size);
+    return (heap->bitmap[index / nbits] & (1L << (index % nbits))) != 0;
+}
+
 static void OME_adjust_slots(OME_Heap *heap, OME_Value *start, OME_Value *end, ptrdiff_t diff)
 {
     //printf("adjust slots from %p to %p\n", start, end);
     for (OME_Value *slot = start; slot < end; slot++) {
         OME_Tag tag = OME_get_tag(*slot);
-        if (tag >= OME_Pointer_Tag) {
-            char *body = OME_untag_pointer(*slot);
-            if (body >= heap->base && body < heap->limit) {
-                //printf("  changing field at %p from %p to %p\n", slot, body, body + diff);
-                *slot = OME_tag_pointer(tag, body + diff);
-            }
+        char *body = OME_untag_pointer(*slot);
+        if (tag >= OME_Pointer_Tag && body >= heap->base && body < heap->limit) {
+            //printf("  changing field at %p from %p to %p\n", slot, body, body + diff);
+            *slot = OME_tag_pointer(tag, body + diff);
         }
     }
 }
@@ -104,7 +129,7 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
     OME_adjust_slots(heap, OME_context->stack_base, OME_context->stack_pointer, diff);
 
     for (OME_Header *cur = (OME_Header *) new_heap; cur < end; cur += cur->size + 1) {
-        if (cur->marked && cur->scan_size > 0) {
+        if (cur->scan_size > 0) {
             OME_Value *slot = (OME_Value *) (cur + 1) + cur->scan_offset;
             OME_adjust_slots(heap, slot, slot + cur->scan_size, diff);
         }
@@ -123,12 +148,14 @@ static void OME_mark(void)
     OME_Header *heap_end = (OME_Header *) heap->pointer;
     uint32_t mark_list = OME_MARK_LIST_NULL;
 
+    memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
+
     for (OME_Value *cur = context->stack_base, *end = context->stack_pointer; cur < end; cur++) {
         if (OME_is_pointer(*cur)) {
             char *body = OME_untag_pointer(*cur);
             OME_Header *header = (OME_Header *) body - 1;
-            if (header >= heap_base && header <= heap_end && !header->marked) {
-                header->marked = 1;
+            if (header >= heap_base && header <= heap_end && !OME_is_marked(heap, header)) {
+                OME_mark_bitmap(heap, header);
                 header->mark_next = mark_list;
                 mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
                 //assert((mark_list * OME_HEAP_ALIGNMENT) + heap->base == body);
@@ -146,8 +173,8 @@ static void OME_mark(void)
             if (OME_is_pointer(*cur)) {
                 char *body = OME_untag_pointer(*cur);
                 OME_Header *header = (OME_Header *) body - 1;
-                if (header >= heap_base && header <= heap_end && !header->marked) {
-                    header->marked = 1;
+                if (header >= heap_base && header <= heap_end && !OME_is_marked(heap, header)) {
+                    OME_mark_bitmap(heap, header);
                     header->mark_next = mark_list;
                     mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
                     //printf("marked %p %d\n", header, mark_list);
@@ -204,7 +231,7 @@ static void OME_relocate_compacted(OME_Header *start, OME_Header *end, OME_Heap 
 static void OME_relocate_uncompacted(OME_Header *start, OME_Header *end, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
 {
     for (OME_Header *cur = start; cur < end; cur += cur->size + 1) {
-        if (cur->marked && cur->scan_size > 0) {
+        if (OME_is_marked(heap, cur) && cur->scan_size > 0) {
             OME_relocate_object(cur, heap, end_relocs);
         }
     }
@@ -220,7 +247,7 @@ static void OME_compact(void)
     OME_Heap_Relocation *relocs_end = heap->relocs + heap->relocs_size;
 
     while (cur < end) {
-        while (cur < end && !cur->marked) {
+        while (cur < end && !OME_is_marked(heap, cur)) {
             //printf("delete %p (%d bytes)\n", cur, cur->size * 8);
             cur += cur->size + 1;
         }
@@ -229,9 +256,8 @@ static void OME_compact(void)
             dest += sizeof(OME_Header);
         }
         char *src = (char *) cur;
-        while (cur < end && (cur->marked || (cur->size == 0 && cur+1 < end && (cur+1)->marked))) {
+        while (cur < end && (OME_is_marked(heap, cur) || (cur->size == 0 && OME_is_marked(heap, cur+1)))) {
             //printf("retain %p (%d bytes) src=%p dest=%p\n", cur, cur->size * 8, cur, dest_next);
-            cur->marked = 0;
             cur += cur->size + 1;
         }
         uint32_t size = (char *) cur - src;
@@ -321,7 +347,6 @@ static void *OME_allocate(uint32_t object_size, uint32_t scan_offset, uint32_t s
     }
 
     OME_Header *header = OME_reserve_allocation(heap, object_size);
-    header->marked = 0;
     header->size = object_size / sizeof(OME_Header);
     header->scan_offset = scan_offset;
     header->scan_size = scan_size;

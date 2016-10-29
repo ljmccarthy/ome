@@ -47,7 +47,6 @@ union OME_Header {
         uint32_t size        : 8;   // size in words not including header
         uint32_t scan_offset : 8;   // word offset from where to scan
         uint32_t scan_size   : 8;   // number of words to scan
-        uint32_t marked      : 1;   // mark bit
     };
 };
 
@@ -61,8 +60,10 @@ struct OME_Heap {
     char *base;
     char *limit;
     OME_Heap_Relocation *relocs;
+    unsigned long *bitmap;
     size_t size;
     size_t relocs_size;
+    size_t bitmap_size;
     size_t num_allocated;
     size_t num_collections;
 };
@@ -167,7 +168,7 @@ static int OME_is_pointer(OME_Value value)
     return OME_get_tag(value) >= OME_Pointer_Tag;
 }
 
-static size_t OME_heap_align(size_t size)
+static size_t OME_heap_align(uintptr_t size)
 {
     return (size + OME_HEAP_ALIGNMENT - 1) & ~(OME_HEAP_ALIGNMENT - 1);
 }
