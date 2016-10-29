@@ -1,6 +1,6 @@
 #ifdef OME_DEBUG_GC
     #define OME_GC_ASSERT(e) assert(e)
-    #define OME_GC_PRINT(...) fprintf(stderr, __VA_ARGS__)
+    #define OME_GC_PRINT(...) fprintf(stderr, "ome gc: " __VA_ARGS__)
 #else
     #define OME_GC_ASSERT(e) do {} while (0)
     #define OME_GC_PRINT(...) do {} while (0)
@@ -132,6 +132,8 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
     ptrdiff_t pointer_offset = heap->pointer - heap->base;
     OME_Header *end = (OME_Header *) (new_heap + pointer_offset);
 
+    OME_GC_ASSERT(new_size > heap->size);
+
     if (diff != 0) {
         OME_GC_PRINT("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
 
@@ -150,6 +152,7 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
 
 static void OME_resize_heap(OME_Heap *heap, size_t new_size)
 {
+    OME_GC_ASSERT(new_size > heap->size);
     OME_GC_PRINT("resizing heap: %lu KB\n", new_size / 1024);
     char *new_heap = mremap(heap->base, heap->size, new_size, MREMAP_MAYMOVE);
     if (new_heap == MAP_FAILED) {
@@ -349,16 +352,23 @@ static void OME_collect(OME_Heap *heap)
 #endif
 }
 
-static OME_Header *OME_reserve_allocation(OME_Heap *heap, size_t object_size)
+static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
 {
     size_t alloc_size = object_size + sizeof(OME_Header);
     size_t padded_size = alloc_size + sizeof(OME_Header);
 
+#ifdef OME_DEBUG_GC
+    if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
+        OME_GC_PRINT("error: invalid object size %u\n", object_size);
+        exit(1);
+    }
+#endif
+
     if (heap->pointer + padded_size >= heap->limit) {
         OME_collect(heap);
-        size_t used = heap->pointer - heap->base;
-        size_t total = heap->limit - heap->base;
-        if (heap->pointer + padded_size >= heap->limit || used > total / 4) {
+        size_t heap_size = heap->limit - heap->base;
+        char *heap_quarter = heap->base + heap_size / 4;
+        if (heap->pointer + padded_size >= heap_quarter) {
             OME_resize_heap(heap, heap->size * 4);
         }
     }
@@ -377,13 +387,8 @@ static void *OME_allocate(uint32_t object_size, uint32_t scan_offset, uint32_t s
     OME_Heap *heap = &OME_context->heap;
     object_size = (object_size + 7) & ~7;
 
-    if (object_size > (1 << 8) * sizeof(OME_Header)) {
-        fprintf(stderr, "error: invalid object size %u\n", object_size);
-        exit(1);
-    }
-
     OME_Header *header = OME_reserve_allocation(heap, object_size);
-    header->size = object_size / sizeof(OME_Header);
+    header->size = object_size / sizeof(OME_Value);
     header->scan_offset = scan_offset;
     header->scan_size = scan_size;
     heap->num_allocated++;

@@ -44,10 +44,10 @@ struct OME_Traceback_Entry {
 union OME_Header {
     uint64_t bits;
     struct {
-        uint32_t mark_next;         // heap index of next object in the mark stack
-        uint32_t size        : 8;   // size in words not including header
-        uint32_t scan_offset : 8;   // word offset from where to scan
-        uint32_t scan_size   : 8;   // number of words to scan
+        uint32_t mark_next;  // heap index of next object in the mark stack
+        uint32_t size        : OME_HEAP_SIZE_BITS; // size in words not including header
+        uint32_t scan_offset : OME_HEAP_SIZE_BITS; // word offset from where to scan
+        uint32_t scan_size   : OME_HEAP_SIZE_BITS; // number of words to scan
     };
 };
 
