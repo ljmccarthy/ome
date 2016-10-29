@@ -59,7 +59,7 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     size &= ~(OME_HEAP_ALIGNMENT - 1);
     size_t relocs_size = (size >> 6) / sizeof(OME_Heap_Relocation);
     size_t nbits = 8 * sizeof(unsigned long);
-    size_t bitmap_size = ((size / sizeof(OME_Header)) + nbits) / nbits; // extra bit to simplify check
+    size_t bitmap_size = ((size / sizeof(OME_Header)) + nbits - 1) / nbits;
     size_t metadata_size = OME_heap_align(relocs_size * sizeof(OME_Heap_Relocation) + bitmap_size * sizeof(unsigned long));
     heap->base = heap_base;
     heap->pointer = heap_base;
@@ -124,14 +124,16 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
     ptrdiff_t pointer_offset = heap->pointer - heap->base;
     OME_Header *end = (OME_Header *) (new_heap + pointer_offset);
 
-    //printf("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
+    if (diff != 0) {
+        //printf("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
 
-    OME_adjust_slots(heap, OME_context->stack_base, OME_context->stack_pointer, diff);
+        OME_adjust_slots(heap, OME_context->stack_base, OME_context->stack_pointer, diff);
 
-    for (OME_Header *cur = (OME_Header *) new_heap; cur < end; cur += cur->size + 1) {
-        if (cur->scan_size > 0) {
-            OME_Value *slot = (OME_Value *) (cur + 1) + cur->scan_offset;
-            OME_adjust_slots(heap, slot, slot + cur->scan_size, diff);
+        for (OME_Header *cur = (OME_Header *) new_heap; cur < end; cur += cur->size + 1) {
+            if (cur->scan_size > 0) {
+                OME_Value *slot = (OME_Value *) (cur + 1) + cur->scan_offset;
+                OME_adjust_slots(heap, slot, slot + cur->scan_size, diff);
+            }
         }
     }
     OME_set_heap_base(heap, new_heap, new_size);
@@ -334,15 +336,14 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, size_t object_size)
         size_t used = heap->pointer - heap->base;
         size_t total = heap->limit - heap->base;
         if (heap->pointer + padded_size >= heap->limit || used > total / 2) {
-            size_t new_size = heap->size * 2;
+            size_t new_size = heap->size * 3 / 2;
+            //printf("resizing heap: %lu KB\n", new_size / 1024);
             char *new_heap = mremap(heap->base, heap->size, new_size, MREMAP_MAYMOVE);
             if (new_heap == MAP_FAILED) {
                 perror("mremap");
                 exit(1);
             }
-            if (new_heap != heap->base) {
-                OME_move_heap(heap, new_heap, new_size);
-            }
+            OME_move_heap(heap, new_heap, new_size);
         }
     }
 
