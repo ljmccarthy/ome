@@ -35,8 +35,8 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class IdAllocator(object):
-    def __init__(self, integer_tag_names=(), pointer_tag_names=(), constant_names=()):
-        self.integer_tag_names = list(integer_tag_names)
+    def __init__(self, opaque_tag_names=(), pointer_tag_names=(), constant_names=()):
+        self.opaque_tag_names = list(opaque_tag_names)
         self.pointer_tag_names = list(pointer_tag_names)
         self.constant_names = list(constant_names)
 
@@ -44,7 +44,7 @@ class IdAllocator(object):
         self.tags = {}
         self.tag_list = []
         tag_id = 0
-        for name in self.integer_tag_names:
+        for name in self.opaque_tag_names:
             self.tags[name] = tag_id
             self.tag_list.append((name, tag_id))
             tag_id += 1
@@ -102,7 +102,7 @@ class Program(object):
         if 'main' not in toplevel_block.symbols:
             self.error('no main method defined')
 
-        self.ids = IdAllocator(integer_type_names, pointer_type_names, constant_names)
+        self.ids = IdAllocator(opaque_type_names, pointer_type_names, constant_names)
         self.ids.allocate_ids(self.block_list)
         self.compile_traceback_info()
         self.find_used_methods()

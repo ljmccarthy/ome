@@ -33,7 +33,7 @@ MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 Tag_Constant = 1
 Constant_BuiltIn = 1
 
-integer_type_names = [
+opaque_type_names = [
     'Boolean',
     'Constant',
     'Small-Integer',
