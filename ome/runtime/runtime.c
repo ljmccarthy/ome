@@ -137,7 +137,7 @@ static void OME_mark(void)
         }
     }
     while (mark_list != OME_MARK_LIST_NULL) {
-        char *body = heap->base + mark_list * OME_HEAP_ALIGNMENT;
+        char *body = heap->base + (uintptr_t) mark_list * OME_HEAP_ALIGNMENT;
         OME_Header *header = (OME_Header *) body - 1;
         mark_list = header->mark_next;
         OME_Value *cur = (OME_Value *) body + header->scan_offset;
@@ -162,11 +162,8 @@ static uintptr_t OME_find_relocation(char *body, OME_Heap *heap, OME_Heap_Reloca
     uint32_t index = (body - heap->base) / OME_HEAP_ALIGNMENT;
     //printf("  searching for %u...", index);
     OME_Heap_Relocation *reloc = heap->relocs;
-    for (OME_Heap_Relocation *next_reloc = reloc + 1; next_reloc < end_relocs; reloc = next_reloc++) {
-        if (next_reloc->src > index) {
-            break;
-        }
-    }
+    for (OME_Heap_Relocation *next_reloc = reloc + 1; next_reloc < end_relocs && next_reloc->src <= index; reloc = next_reloc++)
+        ;
     //printf(" %s %u (%u)\n", reloc->src <= index ? "found" : "not found", reloc->src, reloc->diff);
     return reloc->src <= index ? (uintptr_t) reloc->diff * OME_HEAP_ALIGNMENT : 0;
 }
