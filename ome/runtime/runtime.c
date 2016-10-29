@@ -86,7 +86,7 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 
 static void OME_initialize_heap(OME_Heap *heap)
 {
-    size_t heap_size = 0x10000;
+    size_t heap_size = 0x8000;
     char *heap_base = mmap(NULL, heap_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (heap_base == MAP_FAILED) {
         perror("mmap");
@@ -211,10 +211,28 @@ static void OME_mark(void)
 static uintptr_t OME_find_relocation(char *body, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
 {
     uint32_t index = (body - heap->base) / OME_HEAP_ALIGNMENT;
-    OME_Heap_Relocation *reloc = heap->relocs;
-    for (OME_Heap_Relocation *next_reloc = reloc + 1; next_reloc < end_relocs && next_reloc->src <= index; reloc = next_reloc++)
-        ;
-    return reloc->src <= index ? (uintptr_t) reloc->diff * OME_HEAP_ALIGNMENT : 0;
+    size_t num_relocs = end_relocs - heap->relocs;
+    size_t lo = 0;
+    size_t hi = num_relocs - 1;
+    size_t i = 0;
+    while (lo <= hi) {
+        size_t mid = (lo + hi) / 2;
+        if (mid >= num_relocs)
+            break;
+
+        uint32_t src = heap->relocs[mid].src;
+        if (index < src) {
+            hi = mid - 1;
+        }
+        else {
+            lo = mid + 1;
+            i = mid;
+        }
+    }
+    if (i < num_relocs && heap->relocs[i].src <= index) {
+        return (uintptr_t) heap->relocs[i].diff * OME_HEAP_ALIGNMENT;
+    }
+    return 0;
 }
 
 static void OME_relocate_slots(OME_Value *slot, OME_Value *end, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
@@ -341,14 +359,20 @@ static void OME_collect(OME_Heap *heap)
 {
 #ifdef OME_DEBUG_GC
     //OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
-    clock_t t = clock();
+    clock_t t0 = clock();
 #endif
     OME_mark();
+#ifdef OME_DEBUG_GC
+    clock_t t1 = clock();
+#endif
     OME_compact();
 #ifdef OME_DEBUG_GC
+    clock_t t2 = clock();
     //OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
     heap->num_collections++;
-    heap->clock_time += clock() - t;
+    heap->mark_time += t1 - t0;
+    heap->compact_time += t2 - t1;
+    //exit(0);
 #endif
 }
 
@@ -476,7 +500,8 @@ static int OME_thread_main(void)
     OME_initialize_heap(&context.heap);
 
 #ifdef OME_DEBUG_GC
-    context.heap.clock_time = 0;
+    context.heap.mark_time = 0;
+    context.heap.compact_time = 0;
     clock_t start = clock();
 #endif
 
@@ -488,9 +513,12 @@ static int OME_thread_main(void)
 
 #ifdef OME_DEBUG_GC
     clock_t time = clock() - start;
+    clock_t gc_time = context.heap.mark_time + context.heap.compact_time;
     printf("collections:  %lu\n", context.heap.num_collections);
-    printf("gc time:      %lu\n", context.heap.clock_time);
-    printf("mutator time: %lu\n", time - context.heap.clock_time);
+    printf("gc time:      %lu\n", gc_time);
+    printf("- marking:    %lu\n", context.heap.mark_time);
+    printf("- compacting: %lu\n", context.heap.compact_time);
+    printf("mutator time: %lu\n", time - gc_time);
     printf("total time:   %lu\n", time);
 #endif
 

@@ -67,7 +67,8 @@ struct OME_Heap {
     size_t bitmap_size;
     size_t num_allocated;
     size_t num_collections;
-    clock_t clock_time;
+    clock_t mark_time;
+    clock_t compact_time;
 };
 
 struct OME_Context {
