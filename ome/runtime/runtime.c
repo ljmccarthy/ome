@@ -337,13 +337,13 @@ static void OME_compact(void)
 static void OME_collect(OME_Heap *heap)
 {
 #ifdef OME_DEBUG_GC
-    OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
+    //OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
     clock_t t = clock();
 #endif
     OME_mark();
     OME_compact();
 #ifdef OME_DEBUG_GC
-    OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
+    //OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
     heap->num_collections++;
     heap->clock_time += clock() - t;
 #endif
@@ -469,8 +469,11 @@ static int OME_thread_main(void)
     };
 
     OME_initialize_heap(&context.heap);
+
+#ifdef OME_DEBUG_GC
     context.heap.clock_time = 0;
     clock_t start = clock();
+#endif
 
     OME_context = &context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
