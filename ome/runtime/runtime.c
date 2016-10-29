@@ -160,11 +160,9 @@ static void OME_mark(void)
 static uintptr_t OME_find_relocation(char *body, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
 {
     uint32_t index = (body - heap->base) / OME_HEAP_ALIGNMENT;
-    //printf("  searching for %u...", index);
     OME_Heap_Relocation *reloc = heap->relocs;
     for (OME_Heap_Relocation *next_reloc = reloc + 1; next_reloc < end_relocs && next_reloc->src <= index; reloc = next_reloc++)
         ;
-    //printf(" %s %u (%u)\n", reloc->src <= index ? "found" : "not found", reloc->src, reloc->diff);
     return reloc->src <= index ? (uintptr_t) reloc->diff * OME_HEAP_ALIGNMENT : 0;
 }
 
@@ -172,14 +170,12 @@ static void OME_relocate_slots(OME_Value *slot, OME_Value *end, OME_Heap *heap, 
 {
     for (; slot < end; slot++) {
         OME_Tag tag = OME_get_tag(*slot);
-        if (tag >= OME_Pointer_Tag) {
-            char *body = OME_untag_pointer(*slot);
-            if (body >= heap->base && body < heap->limit) {
-                uintptr_t diff = OME_find_relocation(body, heap, end_relocs);
-                if (diff) {
-                    //printf("changing field at %p from %p to %p\n", slot, body, body - diff);
-                    *slot = OME_tag_pointer(tag, body - diff);
-                }
+        char *body = OME_untag_pointer(*slot);
+        if (tag >= OME_Pointer_Tag && body >= heap->base && body < heap->limit) {
+            uintptr_t diff = OME_find_relocation(body, heap, end_relocs);
+            if (diff) {
+                //printf("changing field at %p from %p to %p\n", slot, body, body - diff);
+                *slot = OME_tag_pointer(tag, body - diff);
             }
         }
     }
@@ -199,7 +195,9 @@ static void OME_relocate_object(OME_Header *header, OME_Heap *heap, OME_Heap_Rel
 static void OME_relocate_compacted(OME_Header *start, OME_Header *end, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
 {
     for (OME_Header *cur = start; cur < end; cur += cur->size + 1) {
-        OME_relocate_object(cur, heap, end_relocs);
+        if (cur->scan_size > 0) {
+            OME_relocate_object(cur, heap, end_relocs);
+        }
     }
 }
 
@@ -231,11 +229,9 @@ static void OME_compact(void)
             dest += sizeof(OME_Header);
         }
         char *src = (char *) cur;
-        char *dest_next = dest;
         while (cur < end && (cur->marked || (cur->size == 0 && cur+1 < end && (cur+1)->marked))) {
             //printf("retain %p (%d bytes) src=%p dest=%p\n", cur, cur->size * 8, cur, dest_next);
             cur->marked = 0;
-            dest_next += (cur->size + 1) * sizeof(OME_Header);
             cur += cur->size + 1;
         }
         uint32_t size = (char *) cur - src;
@@ -252,12 +248,12 @@ static void OME_compact(void)
                 relocs_cur->diff = 0;
                 relocs_cur++;
                 OME_relocate_stack(heap, relocs_cur);
-                OME_relocate_compacted((OME_Header *) heap->base, cur, heap, relocs_cur);
+                OME_relocate_compacted((OME_Header *) heap->base, (OME_Header *) (dest + size), heap, relocs_cur);
                 OME_relocate_uncompacted(cur, end, heap, relocs_cur);
                 relocs_cur = heap->relocs;
             }
         }
-        dest = dest_next;
+        dest += size;
     }
 
     heap->pointer = dest;
