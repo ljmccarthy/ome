@@ -121,12 +121,6 @@ class Parser(ParserState):
         self.indent_stack = []  # Stack of indent levels for outer expressions
         self.comments = []      # List of comments collected by previous scan()
         self.tab_width = tab_width
-        self.gensym_num = 0
-
-    def gensym(self, name):
-        n = self.gensym_num
-        self.gensym_num += 1
-        return '?%s#%d' % (name, n)
 
     def match(self, pattern):
         """
