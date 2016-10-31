@@ -3,4 +3,4 @@
 
 from . import platform_linux
 
-platforms = [platform_linux]
+targets = [platform_linux]

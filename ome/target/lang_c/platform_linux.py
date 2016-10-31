@@ -1,14 +1,14 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
-from ...ast import BuiltInMethod
+from .backend_gcc import GCCBuilder
 from .builtin import *
 from .codegen import *
 
-platform = ('c', 'linux')
+target_id = ('c', 'linux')
 
-def get_assembler_args(outfile):
-    return ['gcc', '-c', '-x', 'c', '-std=c99', '-Wall', '-Wno-unused', '-O3', '-', '-o', outfile]
+default_builder = 'gcc'
 
-def get_linker_args(infile, outfile):
-    return ['gcc', '-Wl,--strip-all', '-Wl,--gc-sections', '-o', outfile, infile]
+builders = {
+    'gcc': GCCBuilder(),
+}

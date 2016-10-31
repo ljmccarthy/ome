@@ -9,8 +9,8 @@ def main():
         sys.exit('usage: ome <infile.ome>')
     else:
         try:
-            from .compiler import compile_file
-            compile_file(sys.argv[1])
+            from .compiler import make_executable
+            make_executable(sys.argv[1])
         except OmeError as e:
             sys.exit(str(e))
 

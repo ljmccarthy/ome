@@ -2,13 +2,11 @@
 # Copyright (c) 2015 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import platform
-from .lang_c import platforms as c_platforms
+from .lang_c import targets
 
-targets = c_platforms
-
-target_platform_map = {
-    target_type.platform: target_type for target_type in targets
+target_map = {
+    target_type.target_id: target_type for target_type in targets
 }
 
 #default_target_platform = (platform.machine(), platform.system())
-default_target_platform = ('c', platform.system().lower())
+default_target_id = ('c', platform.system().lower())

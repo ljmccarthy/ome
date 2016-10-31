@@ -14,7 +14,7 @@ from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .labels import *
 from .parser import Parser
-from .target import target_platform_map, default_target_platform
+from .target import target_map, default_target_id
 from .types import TraceBackInfo
 
 def collect_nodes_of_type(ast, node_type):
@@ -276,24 +276,37 @@ def compile_file_to_code(filename, target):
     asm = out.getvalue()
     return asm.encode('utf8')
 
-def run_assembler(target, input, outfile):
-    p = subprocess.Popen(target.get_assembler_args(outfile), stdin=subprocess.PIPE)
-    p.communicate(input)
-    if p.returncode != 0:
-        sys.exit(p.returncode)
+class BuildShell(object):
+    def run(self, *args, input=None):
+        if len(args) == 1 and isinstance(args[0], (list, tuple)):
+            args = args[0]
+        process = subprocess.Popen(args, stdin=input and subprocess.PIPE)
+        process.communicate(input)
+        if process.returncode != 0:
+            sys.exit(process.returncode)
 
-def run_linker(target, infile, outfile):
-    p = subprocess.Popen(target.get_linker_args(infile, outfile))
-    p.communicate()
-    if p.returncode != 0:
-        sys.exit(p.returncode)
+class BuildOptions(object):
+    def __init__(self, platform, debug=False, link=True):
+        self.debug = debug
+        self.link = link
+        self.include_dirs = []
+        self.lib_dirs = []
+        self.dynamic_libs = []
+        self.static_libs = []
+        self.defines = [
+            ('OME_PLATFORM', platform),
+            ('OME_PLATFORM_' + platform.upper(), ''),
+        ]
+        if not debug:
+            self.defines.append(('NDEBUG', ''))
 
-def compile_file(filename, target_platform=default_target_platform):
-    if target_platform not in target_platform_map:
-        raise OmeError('unsupported target platform: {0}-{1}'.format(*target_platform))
-    target = target_platform_map[target_platform]
-    asm = compile_file_to_code(filename, target)
-    exe_file = os.path.splitext(filename)[0]
-    obj_file = exe_file + '.o'
-    run_assembler(target, asm, obj_file)
-    run_linker(target, obj_file, exe_file)
+def make_executable(filename, target_id=default_target_id):
+    if target_id not in target_map:
+        raise OmeError('unsupported target platform: {}-{}'.format(*target_id))
+    target = target_map[target_id]
+    options = BuildOptions(target_id[1])
+    builder = target.builders[target.default_builder]
+    outfile = builder.executable_name(filename)
+    shell = BuildShell()
+    code = compile_file_to_code(filename, target)
+    builder.make_executable(shell, code, outfile, options)
