@@ -13,8 +13,11 @@ comment_format = '// {}'
 define_label_format = '{}:'
 indent = '    '
 
+def format_function_defn_with_arg_names(name, argnames):
+    return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value {}'.format(arg) for arg in argnames))
+
 def format_function_defn(name, num_args):
-    return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value _{}'.format(n) for n in range(num_args)))
+    return format_function_defn_with_arg_names(name, ('_{}'.format(n) for n in range(num_args)))
 
 def format_function_decl(name, num_args):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value' for n in range(num_args)))
@@ -226,5 +229,5 @@ def emit_declaration(out, name, num_args):
 def emit_lookup_declaration(out, name, num_args):
     out.write('static OME_Method_{} {}(OME_Value);\n'.format(num_args - 1, name))
 
-def generate_builtin_method(label, num_args, code):
-    return '{}\n{{{}}}\n'.format(format_function_defn(label, num_args), code)
+def generate_builtin_method(label, argnames, code):
+    return '{}\n{{{}}}\n'.format(format_function_defn_with_arg_names(label, argnames), code)

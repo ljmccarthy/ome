@@ -415,16 +415,6 @@ class ConstantBlock(TerminalNode):
         code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.tag_constant))
         return dest
 
-class BuiltInMethod(object):
-    def __init__(self, symbol, tag_name, sent_messages, code):
-        self.symbol = symbol
-        self.tag_name = tag_name
-        self.sent_messages = sent_messages
-        self.code = code
-
-    def generate_target_code(self, label, target):
-        return target.generate_builtin_method(label, symbol_arity(self.symbol), self.code)
-
 class BuiltInBlock(object):
     is_constant = True
     tag = constant_to_tag(Constant_BuiltIn)

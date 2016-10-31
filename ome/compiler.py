@@ -15,16 +15,7 @@ from .error import OmeError
 from .labels import *
 from .parser import Parser
 from .target import target_platform_map, default_target_platform
-
-class TraceBackInfo(object):
-    def __init__(self, index, method_name, stream_name, source_line, line_number, column, underline):
-        self.index = index
-        self.method_name = method_name
-        self.stream_name = stream_name
-        self.source_line = source_line
-        self.line_number = line_number
-        self.column = column
-        self.underline = underline
+from .types import TraceBackInfo
 
 def collect_nodes_of_type(ast, node_type):
     nodes = []
