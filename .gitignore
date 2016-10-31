@@ -1,3 +1,9 @@
+examples/*
+!examples/*.*
+!examples/*/
 __pycache__/
 *.py[cod]
 *.o
+*.a
+*.lib
+*.exe
