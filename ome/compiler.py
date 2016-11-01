@@ -261,13 +261,13 @@ def parse_file(filename):
         raise OmeError(str(e), filename)
     return Parser(source, filename).toplevel()
 
-def compile_file_to_code(filename, target):
+def compile_file(filename, target):
     ast = parse_file(filename)
     program = Program(filename, ast, target)
-    out = io.StringIO()
-    program.emit_program_text(out)
-    asm = out.getvalue()
-    return asm.encode(target.encoding)
+    out = io.BytesIO()
+    text_out = io.TextIOWrapper(out, encoding=target.encoding, write_through=True)
+    program.emit_program_text(text_out)
+    return out.getvalue()
 
 class BuildShell(object):
     def run(self, *args, input=None):
@@ -301,5 +301,5 @@ def make_executable(filename, target_id=default_target_id):
     builder = target.builders[target.default_builder]
     outfile = builder.executable_name(filename)
     shell = BuildShell()
-    code = compile_file_to_code(filename, target)
+    code = compile_file(filename, target)
     builder.make_executable(shell, code, outfile, options)
