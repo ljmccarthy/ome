@@ -7,11 +7,7 @@ from ...cpreparser import CPreParser
 from ...runtime import runtime_header, runtime_source
 from ...types import BuiltInMethod
 
-builtin_macros = runtime_header
-
-builtin_code = runtime_source
-
-builtin_code_main = '''
+main_code = '''
 int main(int argc, const char *const *argv)
 {
     OME_initialize(argc, argv);
@@ -19,7 +15,28 @@ int main(int argc, const char *const *argv)
 }
 '''
 
-def builtin_methods():
+constant_string_method = '''
+    OME_STATIC_STRING(s, "{name}");
+    return OME_tag_pointer(OME_Tag_String, &s);
+'''
+
+def emit_constant_declarations(out, constants):
+    out.write(runtime_header)
+    for n in range(17):
+        out.write('typedef OME_Value (*OME_Method_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
+    out.write('\n')
+    for name, value in constants:
+        uname = name.replace('-', '_')
+        out.write('static const OME_Value OME_{} = {{._udata = OME_Constant_{}, ._utag = OME_Tag_Constant}};\n'.format(uname, uname))
+    out.write('\n')
+
+def emit_builtin_code(out):
+    out.write(runtime_source)
+
+def emit_toplevel(out):
+    out.write(main_code)
+
+def get_builtin_methods():
     methods = []
     builtins_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'builtins'))
     for filename in os.listdir(builtins_path):
@@ -30,31 +47,10 @@ def builtin_methods():
             parser = CPreParser(source, filename)
             parser.parse()
             methods.extend(parser.methods)
+    for name in constant_names[:-1]:
+        methods.append(BuiltInMethod(name, 'string', ['_0'], [], constant_string_method.format(name=name)))
     return methods
 
-builtin_methods = builtin_methods()
-
-def build_builtins():
-    data_defs = []
-
-    for name in constant_names[:-1]:
-        uname = name.replace('-', '_')
-        data_defs.append('static const OME_Value OME_{} = {{._udata = OME_Constant_{}, ._utag = OME_Tag_Constant}};\n'.format(uname, uname))
-        builtin_methods.append(BuiltInMethod(name, 'string', ['_0'], [], '''
-    OME_STATIC_STRING(s, "{}");
-    return OME_tag_pointer(OME_Tag_String, &s);
-'''.format(name)))
-
-    data_defs.append('\n')
-    for n in range(17):
-        data_defs.append('typedef OME_Value (*OME_Method_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
-
-    global builtin_data
-    builtin_data = ''.join(data_defs)
-
-build_builtins()
-del build_builtins
-
 if __name__ == '__main__':
-    for method in builtin_methods:
+    for method in get_builtin_methods():
         print(method.tag_name, method.symbol, method.sent_messages)

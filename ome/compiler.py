@@ -74,16 +74,20 @@ class IdAllocator(object):
         assert Constant_BuiltIn == self.constants['BuiltIn']
 
 class Program(object):
-    def __init__(self, filename, ast, builtin, target, debug=True):
+    def __init__(self, filename, ast, target, debug=True):
         self.filename = filename
-        self.toplevel_method = ast
-        self.builtin = builtin
         self.target = target
         self.debug = debug
-
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
+        self.builtin_methods = target.get_builtin_methods()
+        self.builtin_block = BuiltInBlock(self.builtin_methods)
+
+        ast = Method('', [], ast)
+        ast = ast.resolve_free_vars(self.builtin_block)
+        ast = ast.resolve_block_refs(self.builtin_block)
+        self.toplevel_method = ast
         self.block_list = collect_nodes_of_type(ast, Block)
         self.send_list = collect_nodes_of_type(ast, Send)
 
@@ -139,7 +143,7 @@ class Program(object):
             (send.receiver_block.tag, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
-        for method in self.target.builtin_methods:
+        for method in self.builtin_methods:
             method_tag = self.ids.tags[method.tag_name]
             if method.sent_messages and (method.symbol in self.sent_messages or (method_tag, method.symbol) in called_methods):
                 self.sent_messages.update(method.sent_messages)
@@ -157,8 +161,8 @@ class Program(object):
     def build_code_table(self):
         methods = {}
 
-        for method in self.target.builtin_methods:
-            if self.should_include_method(method, self.builtin.tag):
+        for method in self.builtin_methods:
+            if self.should_include_method(method, self.builtin_block.tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 method_tag = self.ids.tags[method.tag_name]
@@ -176,21 +180,18 @@ class Program(object):
             self.code_table.append((symbol, methods[symbol]))
 
     def emit_constants(self, out):
-        define_format = self.target.define_constant_format
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int) and not name.startswith(('Tag_', 'Constant_')):
-                out.write(define_format.format('OME_' + name, value))
+                self.target.emit_constant(out, name, value)
         for name, value in self.ids.tag_list:
-            out.write(define_format.format('OME_Tag_' + name.replace('-', '_'), value))
-        out.write(define_format.format('OME_Pointer_Tag', self.ids.pointer_tag_id))
+            self.target.emit_constant(out, 'Tag_' + name.replace('-', '_'), value)
+        self.target.emit_constant(out, 'Pointer_Tag', self.ids.pointer_tag_id)
         for name, value in self.ids.constant_list:
-            out.write(define_format.format('OME_Constant_' + name.replace('-', '_'), value))
+            self.target.emit_constant(out, 'Constant_' + name.replace('-', '_'), value)
         out.write('\n')
-        out.write(self.target.builtin_macros)
+        self.target.emit_constant_declarations(out, self.ids.constant_list)
 
     def emit_data(self, out):
-        out.write(self.target.builtin_data)
-        out.write('\n')
         self.data_table.emit(out)
         out.write('\n')
         traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
@@ -198,23 +199,17 @@ class Program(object):
         out.write('\n')
 
     def emit_code_declarations(self, out):
-        self.target.emit_declaration(out, 'OME_toplevel', 1)
-        method_decls = set()
-        message_decls = set(self.sent_messages)
+        methods_set = set()
+        messages_set = set(self.sent_messages)
         for symbol, methods in self.code_table:
-            message_decls.add(symbol)
+            messages_set.add(symbol)
             for tag, code in methods:
-                method_decls.add((symbol, tag))
-        for symbol, tag in sorted(method_decls):
-            self.target.emit_declaration(out, make_method_label(tag, symbol), symbol_arity(symbol))
-        for symbol in sorted(message_decls):
-            self.target.emit_declaration(out, make_message_label(symbol), symbol_arity(symbol))
-        for symbol in sorted(message_decls):
-            self.target.emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
+                methods_set.add((tag, symbol))
+        self.target.emit_method_declarations(out, sorted(messages_set), sorted(methods_set))
         out.write('\n')
 
     def emit_code_definitions(self, out):
-        out.write(self.target.builtin_code)
+        self.target.emit_builtin_code(out)
         out.write('\n')
 
         dispatchers = set()
@@ -243,7 +238,7 @@ class Program(object):
     def emit_toplevel(self, out):
         code = self.compile_method(self.toplevel_method)
         out.write(code.generate_target_code('OME_toplevel', self.target))
-        out.write(self.target.builtin_code_main)
+        self.target.emit_toplevel(out)
 
     def emit_program_text(self, out):
         self.emit_constants(out)
@@ -265,16 +260,12 @@ def parse_file(filename):
     return Parser(source, filename).toplevel()
 
 def compile_file_to_code(filename, target):
-    builtin = BuiltInBlock(target)
     ast = parse_file(filename)
-    ast = Method('', [], ast)
-    ast = ast.resolve_free_vars(builtin)
-    ast = ast.resolve_block_refs(builtin)
-    program = Program(filename, ast, builtin, target)
+    program = Program(filename, ast, target)
     out = io.StringIO()
     program.emit_program_text(out)
     asm = out.getvalue()
-    return asm.encode('utf8')
+    return asm.encode(target.encoding)
 
 class BuildShell(object):
     def run(self, *args, input=None):

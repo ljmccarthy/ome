@@ -421,8 +421,8 @@ class BuiltInBlock(object):
     tag_constant = Constant_BuiltIn
     constant_ref = Constant('BuiltIn')
 
-    def __init__(self, target):
-        self.symbols = {method.symbol for method in target.builtin_methods if method.tag_name == 'BuiltIn'}
+    def __init__(self, builtin_methods):
+        self.symbols = {method.symbol for method in builtin_methods if method.tag_name == 'BuiltIn'}
 
     def lookup_var(self, symbol):
         pass

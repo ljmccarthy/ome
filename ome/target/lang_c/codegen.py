@@ -5,10 +5,11 @@ import struct
 from ... import optimise
 from ...constants import *
 from ...instructions import CONCAT
+from ...labels import *
 from .cstring import literal_c_string
 from .stackalloc import allocate_stack_slots
 
-define_constant_format = '#define {} {}\n'
+encoding = 'ascii'
 comment_format = '// {}'
 define_label_format = '{}:'
 indent = '    '
@@ -222,12 +223,24 @@ def emit_traceback_table(out, traceback_entries):
             tb.underline))
     out.write('}; /* end of OME_traceback_table */\n')
 
-def emit_declaration(out, name, num_args):
+def emit_constant(out, name, value):
+    out.write('#define OME_{} {}\n'.format(name, value))
+
+def emit_function_declaration(out, name, num_args):
     out.write(format_function_decl(name, num_args))
     out.write(';\n')
 
 def emit_lookup_declaration(out, name, num_args):
     out.write('static OME_Method_{} {}(OME_Value);\n'.format(num_args - 1, name))
+
+def emit_method_declarations(out, messages, methods):
+    emit_function_declaration(out, 'OME_toplevel', 1)
+    for tag, symbol in methods:
+        emit_function_declaration(out, make_method_label(tag, symbol), symbol_arity(symbol))
+    for symbol in messages:
+        emit_function_declaration(out, make_message_label(symbol), symbol_arity(symbol))
+    for symbol in messages:
+        emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
 
 def generate_builtin_method(label, argnames, code):
     return '{}\n{{{}}}\n'.format(format_function_defn_with_arg_names(label, argnames), code)
