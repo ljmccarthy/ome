@@ -3,45 +3,52 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 */
 
-#method Boolean string
+#method True or: rhs
 {
-    OME_STATIC_STRING(s_false, "False");
-    OME_STATIC_STRING(s_true, "True");
-    return OME_tag_pointer(OME_Tag_String, OME_untag_unsigned(self) ? &s_true : &s_false);
+    return self;
 }
 
-#method Boolean or: rhs
+#method False or: rhs
 {
-    return OME_untag_unsigned(self) ? self : rhs;
+    return rhs;
 }
 
-#method Boolean and: rhs
+#method True and: rhs
 {
-    return OME_untag_unsigned(self) ? rhs : self;
+    return rhs;
 }
 
-#method Boolean if: block
+#method False and: rhs
 {
-    if (OME_untag_unsigned(self)) {
-        return @message("then")(block);
-    }
-    else {
-        return @message("else")(block);
-    }
+    return self;
 }
 
-#method Boolean then: block
+#method True if: block
 {
-    if (OME_untag_unsigned(self)) {
-        @message("do")(block);
-    }
+    return @message("then")(block);
+}
+
+#method False if: block
+{
+    return @message("else")(block);
+}
+
+#method True then: block
+{
+    return @message("do")(block);
+}
+
+#method False then: block
+{
     return OME_Empty;
 }
 
-#method Boolean else: block
+#method True else: block
 {
-    if (!OME_untag_unsigned(self)) {
-        @message("do")(block);
-    }
     return OME_Empty;
+}
+
+#method False else: block
+{
+    return @message("do")(block);
 }

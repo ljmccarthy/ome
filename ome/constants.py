@@ -30,11 +30,10 @@ MASK_DATA = (1 << NUM_DATA_BITS) - 1
 MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
 
-Tag_Constant = 1
-Constant_BuiltIn = 1
+Tag_Constant = 0
+Constant_BuiltIn = 3
 
 opaque_type_names = [
-    'Boolean',
     'Constant',
     'Small-Integer',
     'Small-Decimal',
@@ -52,6 +51,8 @@ pointer_type_names = [
 ]
 
 constant_names = [
+    'False',
+    'True',
     'Empty',                # The empty block
     'BuiltIn',              # Block for built-in methods
     'Stack-Overflow',

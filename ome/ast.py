@@ -394,14 +394,12 @@ class Constant(TerminalNode):
         self.constant_name = constant_name
 
     def __str__(self):
-        return '<constant %s>' % (self.constant_name)
+        return self.constant_name
 
     def generate_code(self, code):
         dest = code.add_temp()
         code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), code.get_constant(self.constant_name)))
         return dest
-
-EmptyBlock = Constant('Empty')
 
 class ConstantBlock(TerminalNode):
     def __init__(self, block):
@@ -440,14 +438,6 @@ class Self(TerminalNode):
 
     def generate_code(self, code):
         return 0
-
-Self = Self()
-
-reserved_names = {
-    'self': Self,
-    'False': Value('Boolean', 0),
-    'True': Value('Boolean', 1),
-}
 
 class LocalGet(TerminalNode):
     def __init__(self, index):
@@ -559,3 +549,12 @@ class String(TerminalNode):
         label = code.allocate_string(self.string)
         code.add_instruction(LOAD_LABEL(dest, code.get_tag('String'), label))
         return dest
+
+EmptyBlock = Constant('Empty')
+Self = Self()
+
+reserved_names = {
+    'self': Self,
+    'False': Constant('True'),
+    'True': Constant('False'),
+}

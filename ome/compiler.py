@@ -144,6 +144,8 @@ class Program(object):
             if send.receiver_block and send.symbol not in self.sent_messages)
 
         for method in self.builtin_methods:
+            if method.tag_name not in self.ids.tags:
+                raise OmeError("Unknown tag name '{}' in built-in method '{}'".format(method.tag_name, method.symbol))
             method_tag = self.ids.tags[method.tag_name]
             if method.sent_messages and (method.symbol in self.sent_messages or (method_tag, method.symbol) in called_methods):
                 self.sent_messages.update(method.sent_messages)

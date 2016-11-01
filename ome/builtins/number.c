@@ -62,7 +62,7 @@
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
         return OME_False;
     }
-    return OME_tag_unsigned(OME_Tag_Boolean, result);
+    return OME_boolean(result);
 }
 
 #method Small-Integer < rhs
@@ -71,7 +71,7 @@
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
     }
-    return OME_tag_unsigned(OME_Tag_Boolean, result);
+    return OME_boolean(result);
 }
 
 #method Small-Integer ≤ rhs
@@ -80,5 +80,5 @@
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
     }
-    return OME_tag_unsigned(OME_Tag_Boolean, result);
+    return OME_boolean(result);
 }

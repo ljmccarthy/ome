@@ -26,16 +26,16 @@
     while (1) {
         OME_Value cond = while_method(block);
         OME_RETURN_ERROR(cond);
-        if (OME_get_tag(cond) != OME_Tag_Boolean) {
-            OME_ERROR(Type_Error);
-        }
         block = stack[0];
-        if (!OME_untag_unsigned(cond)) {
+        if (OME_is_false(cond)) {
             OME_Method_0 return_method = @lookup("return")(block);
             if (return_method) {
                 OME_RETURN(return_method(block));
             }
             OME_RETURN(OME_Empty);
+        }
+        if (!OME_is_true(cond)) {
+            OME_ERROR(Type_Error);
         }
         OME_RETURN_ERROR(do_method(block));
         block = stack[0];

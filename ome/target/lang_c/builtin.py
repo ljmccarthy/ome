@@ -22,6 +22,7 @@ constant_string_method = '''
 
 def emit_constant_declarations(out, constants):
     out.write(runtime_header)
+    out.write('\n')
     for n in range(17):
         out.write('typedef OME_Value (*OME_Method_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
     out.write('\n')

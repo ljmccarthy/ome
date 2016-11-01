@@ -181,6 +181,21 @@ static int OME_is_header_aligned(void *header)
     return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
 }
 
+static OME_Value OME_boolean(int boolean)
+{
+    return OME_tag_unsigned(OME_Tag_Constant, boolean ? OME_Constant_True : OME_Constant_False);
+}
+
+static int OME_is_false(OME_Value value)
+{
+    return value._bits == OME_boolean(0)._bits;
+}
+
+static int OME_is_true(OME_Value value)
+{
+    return value._bits == OME_boolean(1)._bits;
+}
+
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
 
 #define OME_ENTER_OR_RETURN(stack_size, retval)\
@@ -216,6 +231,3 @@ static int OME_is_header_aligned(void *header)
 
 static __thread OME_Context *OME_context;
 static OME_Array *OME_argv;
-
-static const OME_Value OME_False = {._udata = 0, ._utag = OME_Tag_Boolean};
-static const OME_Value OME_True = {._udata = 1, ._utag = OME_Tag_Boolean};
