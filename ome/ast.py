@@ -555,6 +555,6 @@ Self = Self()
 
 reserved_names = {
     'self': Self,
-    'False': Constant('True'),
-    'True': Constant('False'),
+    'False': Constant('False'),
+    'True': Constant('True'),
 }
