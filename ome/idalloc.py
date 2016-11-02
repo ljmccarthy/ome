@@ -71,5 +71,5 @@ class IdAllocator(object):
 
         if len(self.tags) > MAX_TAG:
             raise OmeError('exhausted all tag IDs')
-        if len(self.constants) > MAX_CONSTANT_TAG:
+        if len(self.constants) > MAX_CONSTANT:
             raise OmeError('exhausted all constant tag IDs')
