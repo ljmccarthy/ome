@@ -24,10 +24,9 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class Program(object):
-    def __init__(self, filename, ast, target, debug=True):
+    def __init__(self, filename, ast, target):
         self.filename = filename
         self.target = target
-        self.debug = debug
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
