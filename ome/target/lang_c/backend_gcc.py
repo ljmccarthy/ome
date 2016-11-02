@@ -41,11 +41,12 @@ def get_gcc_args(build_options):
 
 class GCCBuilder(object):
     name = 'GCC'
+    default_command = 'gcc'
     supported_platforms = frozenset(['Linux'])
     version_args = ['--version']
     version_re = 'gcc \(GCC\) (\d+\.\d+\.\d+)'
 
-    def __init__(self, command='gcc'):
+    def __init__(self, command):
         self.command = command
 
     def executable_name(self, infile):

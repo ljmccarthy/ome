@@ -279,6 +279,7 @@ def get_target(target_name):
 
 def get_backend_version(backend):
     if not hasattr(backend, 'version'):
+        reason = 'could not get version number'
         args = [backend.command] + backend.version_args
         try:
             process = subprocess.Popen(args, stdout=subprocess.PIPE)
@@ -288,19 +289,28 @@ def get_backend_version(backend):
                 if m:
                     backend.version = m.group(1)
                     return
-        except (OSError, UnicodeDecodeError):
+        except OSError as e:
+            reason = str(e)
+        except UnicodeDecodeError:
             pass
-        raise OmeError("backend '{}' is not available".format(backend.name))
+        raise OmeError("backend '{}' is not available: {}".format(backend.name, reason))
 
-def get_backend(target, backend_name=None):
+def get_backend(target, backend_name=None, backend_command=None):
     if backend_name is None:
         for backend_name in target.backend_preference:
-            backend = target.backends[backend_name]()
-            if get_backend_version(backend):
+            backend = target.backends[backend_name]
+            backend = backend(backend_command or backend.default_command)
+            try:
+                get_backend_version(backend)
                 return backend
-    backend_name = backend_name.lower()
-    if backend_name not in target.backends:
-        raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
-    backend = target.backends[backend_name]()
-    get_backend_version(backend)
-    return backend
+            except Exception:
+                pass
+        raise OmeError("could not find a working backend for target '{}'".format(target.name))
+    else:
+        backend_name = backend_name.lower()
+        if backend_name not in target.backends:
+            raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
+        backend = target.backends[backend_name]
+        backend = backend(backend_command or backend.default_command)
+        get_backend_version(backend)
+        return backend

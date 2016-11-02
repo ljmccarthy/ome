@@ -44,11 +44,12 @@ def get_clang_args(build_options):
 
 class ClangBuilder(object):
     name = 'Clang'
+    default_command = 'clang'
     supported_platforms = frozenset(['Linux'])
     version_args = ['--version']
     version_re = 'clang version (\d+\.\d+\.\d+)'
 
-    def __init__(self, command='clang'):
+    def __init__(self, command):
         self.command = command
 
     def executable_name(self, infile):

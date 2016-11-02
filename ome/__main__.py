@@ -16,7 +16,7 @@ def main():
         from . import compiler
         target = compiler.get_target(command_args.target)
         build_options = compiler.BuildOptions(target)
-        backend = compiler.get_backend(target, command_args.backend)
+        backend = compiler.get_backend(target, command_args.backend, command_args.backend_command)
         print_verbose('ome: using target {}'.format(target.name))
         print_verbose('ome: using backend {} {}'.format(backend.name, backend.version))
         for filename in command_args.filename:
