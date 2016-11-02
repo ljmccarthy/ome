@@ -25,7 +25,7 @@ class GCCArgsBuilder(CCArgsBuilder):
 class GCCBuilder(CCBuilder):
     name = 'GCC'
     default_command = 'gcc'
-    supported_platforms = frozenset(['Linux'])
+    supported_platforms = frozenset(['linux'])
     version_args = ['--version']
     version_re = 'gcc \(GCC\) (\d+\.\d+\.\d+)'
     get_build_args = GCCArgsBuilder()

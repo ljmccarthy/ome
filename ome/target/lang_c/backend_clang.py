@@ -26,7 +26,7 @@ class ClangArgsBuilder(CCArgsBuilder):
 class ClangBuilder(CCBuilder):
     name = 'Clang'
     default_command = 'clang'
-    supported_platforms = frozenset(['Linux'])
+    supported_platforms = frozenset(['linux'])
     version_args = ['--version']
     version_re = 'clang version (\d+\.\d+\.\d+)'
     get_build_args = ClangArgsBuilder()

@@ -2,7 +2,6 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import io
-import platform
 import re
 import subprocess
 import sys
@@ -249,8 +248,9 @@ class BuildShell(object):
 shell = BuildShell()
 
 class BuildOptions(object):
-    def __init__(self, target, debug=False, link=True, verbose=False):
+    def __init__(self, target, platform, debug=False, link=True, verbose=False):
         self.target = target
+        self.platform = platform.lower()
         self.debug = debug
         self.link = link
         self.verbose = verbose
@@ -258,7 +258,6 @@ class BuildOptions(object):
         self.lib_dirs = []
         self.dynamic_libs = []
         self.static_libs = []
-        self.platform = platform.system()
         self.defines = [
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
@@ -268,7 +267,7 @@ class BuildOptions(object):
 
     def make_executable(self, filename, backend):
         if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:
-            raise OmeError("backend '{}' does not support platform {}".format(backend.name, self.platform))
+            raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, self.platform))
         outfile = backend.executable_name(filename)
         code = compile_file(filename, self.target)
         backend.make_executable(shell, code, outfile, self)
@@ -297,17 +296,19 @@ def get_backend_version(backend):
             pass
         raise OmeError("backend '{}' is not available: {}".format(backend.name, reason))
 
-def get_backend(target, backend_name=None, backend_command=None):
+def get_backend(target, platform, backend_name=None, backend_command=None):
+    platform = platform.lower()
     if backend_name is None:
         for backend_name in target.backend_preference:
             backend = target.backends[backend_name]
             backend = backend(backend_command or backend.default_command)
-            try:
-                get_backend_version(backend)
-                return backend
-            except Exception:
-                pass
-        raise OmeError("could not find a working backend for target '{}'".format(target.name))
+            if not hasattr(backend, 'supported_platforms') or platform in backend.supported_platforms:
+                try:
+                    get_backend_version(backend)
+                    return backend
+                except Exception:
+                    pass
+        raise OmeError("could not find a working backend for target '{}' for platform '{}'".format(target.name, platform))
     else:
         backend_name = backend_name.lower()
         if backend_name not in target.backends:
