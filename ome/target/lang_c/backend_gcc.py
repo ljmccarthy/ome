@@ -2,31 +2,28 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import os
-from .backend_cc import get_cc_args
+from .backend_cc import CCArgsBuilder
 
-all_args = [
-    '-x', 'c',
-    '-std=c99',
-    '-Wall',
-    '-Wextra',
-    '-Wno-unused',
-]
+class GCCArgsBuilder(CCArgsBuilder):
+    all = [
+        '-x', 'c',
+        '-std=c99',
+        '-Wall',
+        '-Wextra',
+        '-Wno-unused',
+    ]
+    release = [
+        '-O3',
+    ]
+    debug = [
+        '-ggdb',
+    ]
+    release_link = [
+        '-Wl,--strip-all',
+        '-Wl,--gc-sections',
+    ]
 
-release_args = [
-    '-O3',
-]
-
-debug_args = [
-    '-ggdb',
-]
-
-release_link_args = [
-    '-Wl,--strip-all',
-    '-Wl,--gc-sections',
-]
-
-def get_gcc_args(build_options):
-    return get_cc_args(build_options, all_args, release_args, debug_args, release_link_args)
+get_gcc_args = GCCArgsBuilder()
 
 class GCCBuilder(object):
     name = 'GCC'
