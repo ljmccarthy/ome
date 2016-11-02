@@ -1,5 +1,5 @@
 # ome - Object Message Expressions
-# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+# Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 NUM_BITS = 64
 NUM_TAG_BITS = 20
