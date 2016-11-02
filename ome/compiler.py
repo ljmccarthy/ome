@@ -110,9 +110,6 @@ class Program(object):
     def should_include_method(self, method, tag):
         return method.symbol in self.sent_messages or (tag, method.symbol) in self.called_methods
 
-    def compile_method(self, method):
-        return method.generate_code(self)
-
     def build_code_table(self):
         methods = {}
 
@@ -128,7 +125,7 @@ class Program(object):
                 if self.should_include_method(method, block.tag_id):
                     if method.symbol not in methods:
                         methods[method.symbol] = []
-                    code = self.compile_method(method)
+                    code = method.generate_code(self)
                     methods[method.symbol].append((block.tag_id, code))
 
         for symbol in sorted(methods.keys()):
@@ -191,7 +188,7 @@ class Program(object):
                 out.write('\n')
 
     def emit_toplevel(self, out):
-        code = self.compile_method(self.toplevel_method)
+        code = self.toplevel_method.generate_code(self)
         out.write(code.generate_target_code('OME_toplevel', self.target))
         self.target.emit_toplevel(out)
 
