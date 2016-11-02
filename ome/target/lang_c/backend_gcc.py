@@ -42,11 +42,11 @@ class GCCBuilder(object):
         return os.path.splitext(infile)[0] + '.o'
 
     def make_executable(self, shell, code, outfile, build_options):
-        build_args = get_gcc_args(build_options)
-        shell.run([self.command] + build_args + ['-', '-o', outfile], input=code)
+        build_args = get_gcc_args(build_options, '-', outfile)
+        shell.run([self.command] + build_args, input=code)
         if not build_options.debug:
             shell.run('strip', '-R', '.comment', outfile)
 
     def make_object(self, shell, code, outfile, build_options):
-        build_args = get_gcc_args(build_options)
-        shell.run([self.command] + build_args + ['-', '-o', outfile], input=code)
+        build_args = get_gcc_args(build_options, '-', outfile)
+        shell.run([self.command] + build_args, input=code)

@@ -8,7 +8,7 @@ class CCArgsBuilder(object):
     release_link = []
     debug_link = []
 
-    def __call__(self, build_options):
+    def __call__(self, build_options, infile, outfile):
         args = []
         if not build_options.link:
             args.append('-c')
@@ -26,4 +26,7 @@ class CCArgsBuilder(object):
             args.append('-l' + dynamic_lib)
         for static_lib in build_options.static_libs:
             args.append(static_lib)
+        args.append(infile)
+        args.append('-o')
+        args.append(outfile)
         return args
