@@ -31,8 +31,8 @@ constant_names = [
     'Divide-By-Zero',
 ]
 
-def constant_to_tag(constant):
-    return constant + MIN_CONSTANT_TAG
+def constant_id_to_tag(constant_id):
+    return constant_id + MIN_CONSTANT_TAG
 
 class IdAllocator(object):
     def __init__(self):
@@ -43,7 +43,7 @@ class IdAllocator(object):
         self.constant_list = [(name, i) for i, name in enumerate(constant_names)]
         self.tags = dict(self.tag_list)
         self.constants = dict(self.constant_list)
-        self.tags.update((name, constant_to_tag(id)) for name, id in self.constant_list)
+        self.tags.update((name, constant_id_to_tag(id)) for name, id in self.constant_list)
 
     def allocate_ids(self, block_list):
         for name in self.opaque_names:
@@ -61,13 +61,13 @@ class IdAllocator(object):
         for block in block_list:
             if block.is_constant:
                 block.tag_constant = len(self.constant_list)
-                block.tag = constant_to_tag(block.tag_constant)
+                block.tag = constant_id_to_tag(block.tag_constant)
                 self.tag_list.append(('Block-{}'.format(block.tag), block.tag))
                 self.constant_list.append(('Constant-{}'.format(block.tag_constant), block.tag_constant))
 
         self.tags = dict(self.tag_list)
         self.constants = dict(self.constant_list)
-        self.tags.update((name, constant_to_tag(id)) for name, id in self.constant_list)
+        self.tags.update((name, constant_id_to_tag(id)) for name, id in self.constant_list)
 
         if len(self.tags) > MAX_TAG:
             raise OmeError('exhausted all tag IDs')
