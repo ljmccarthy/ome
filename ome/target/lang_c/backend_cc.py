@@ -15,7 +15,7 @@ class CCArgsBuilder(object):
         args.extend(self.all)
         args.extend(self.debug if build_options.debug else self.release)
         if build_options.link:
-            args.extend(self.release_link if build_options.debug else self.debug_link)
+            args.extend(self.debug_link if build_options.debug else self.release_link)
         for name, value in build_options.defines:
             args.append('-D{}={}'.format(name, value) if value else '-D' + name)
         for include_dir in build_options.include_dirs:
