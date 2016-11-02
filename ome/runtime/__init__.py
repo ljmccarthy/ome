@@ -5,5 +5,6 @@ def read_source(filename):
     with open(path) as f:
         return f.read()
 
-runtime_header = read_source('ome.h')
-runtime_source = read_source('runtime.c')
+header = read_source('ome.h')
+source = read_source('runtime.c')
+main = read_source('main.c')

@@ -2,18 +2,10 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import os
+from ... import runtime
 from ...cpreparser import CPreParser
 from ...idalloc import constant_names
-from ...runtime import runtime_header, runtime_source
 from ...types import BuiltInMethod
-
-main_code = '''
-int main(int argc, const char *const *argv)
-{
-    OME_initialize(argc, argv);
-    return OME_thread_main();
-}
-'''
 
 constant_string_method = '''
     OME_STATIC_STRING(s, "{name}");
@@ -21,7 +13,7 @@ constant_string_method = '''
 '''
 
 def emit_constant_declarations(out, constants):
-    out.write(runtime_header)
+    out.write(runtime.header)
     out.write('\n')
     for n in range(17):
         out.write('typedef OME_Value (*OME_Method_{})({});\n'.format(n, ', '.join(['OME_Value'] * (n + 1))))
@@ -32,10 +24,10 @@ def emit_constant_declarations(out, constants):
     out.write('\n')
 
 def emit_builtin_code(out):
-    out.write(runtime_source)
+    out.write(runtime.source)
 
 def emit_toplevel(out):
-    out.write(main_code)
+    out.write(runtime.main)
 
 def get_builtin_methods():
     methods = []
