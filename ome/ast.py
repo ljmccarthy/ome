@@ -80,7 +80,7 @@ class Send(object):
         dest = code.add_temp()
 
         if self.receiver_block:
-            label = make_method_label(self.receiver_block.tag, self.symbol)
+            label = make_method_label(self.receiver_block.tag_id, self.symbol)
         else:
             label = make_message_label(self.symbol)
 
@@ -194,9 +194,9 @@ class Block(object):
     def generate_code(self, code):
         dest = code.add_temp()
         if self.is_constant:
-            code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.tag_constant))
+            code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.constant_id))
         else:
-            code.add_instruction(ALLOC(dest, len(self.slots), self.tag))
+            code.add_instruction(ALLOC(dest, len(self.slots), self.tag_id))
             for index, slot in enumerate(self.slots):
                 value = slot.generate_code(code)
                 code.add_instruction(SET_SLOT(dest, index, value))
@@ -397,7 +397,7 @@ class ConstantBlock(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.block.tag_constant))
+        code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.block.constant_id))
         return dest
 
 class BuiltInBlock(object):

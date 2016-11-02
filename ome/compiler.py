@@ -35,8 +35,8 @@ class Program(object):
 
         self.builtin_methods = target.get_builtin_methods()
         self.builtin_block = BuiltInBlock()
-        self.builtin_block.tag = self.ids.tags['BuiltIn']
-        self.builtin_block.tag_constant = self.ids.constants['BuiltIn']
+        self.builtin_block.tag_id = self.ids.tags['BuiltIn']
+        self.builtin_block.constant_id = self.ids.constants['BuiltIn']
         self.builtin_block.add_methods(self.builtin_methods)
 
         ast = Method('', [], ast)
@@ -94,7 +94,7 @@ class Program(object):
             send.symbol for send in self.send_list if send.receiver and not send.receiver_block)
 
         called_methods = set(
-            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            (send.receiver_block.tag_id, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
         for method in self.builtin_methods:
@@ -105,7 +105,7 @@ class Program(object):
                 self.sent_messages.update(method.sent_messages)
 
         self.called_methods = set(
-            (send.receiver_block.tag, send.symbol) for send in self.send_list
+            (send.receiver_block.tag_id, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
     def should_include_method(self, method, tag):
@@ -118,7 +118,7 @@ class Program(object):
         methods = {}
 
         for method in self.builtin_methods:
-            if self.should_include_method(method, self.builtin_block.tag):
+            if self.should_include_method(method, self.builtin_block.tag_id):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
                 method_tag = self.ids.tags[method.tag_name]
@@ -126,11 +126,11 @@ class Program(object):
 
         for block in self.block_list:
             for method in block.methods:
-                if self.should_include_method(method, block.tag):
+                if self.should_include_method(method, block.tag_id):
                     if method.symbol not in methods:
                         methods[method.symbol] = []
                     code = self.compile_method(method)
-                    methods[method.symbol].append((block.tag, code))
+                    methods[method.symbol].append((block.tag_id, code))
 
         for symbol in sorted(methods.keys()):
             self.code_table.append((symbol, methods[symbol]))
