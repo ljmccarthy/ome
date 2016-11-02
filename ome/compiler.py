@@ -267,7 +267,7 @@ class BuildOptions(object):
             self.defines.append(('NDEBUG', ''))
 
     def make_executable(self, filename, backend):
-        if self.platform not in backend.supported_platforms:
+        if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:
             raise OmeError("backend '{}' does not support platform {}".format(backend.name, self.platform))
         outfile = backend.executable_name(filename)
         code = compile_file(filename, self.target)
@@ -280,7 +280,7 @@ def get_target(target_name):
     return target_map[target_name]
 
 def get_backend_version(backend):
-    if not hasattr(backend, 'version'):
+    if not hasattr(backend, 'version') and hasattr(backend, 'command'):
         reason = 'could not get version number'
         args = [backend.command] + backend.version_args
         try:
