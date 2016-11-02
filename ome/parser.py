@@ -2,10 +2,9 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import re
-import math
 from . import ast
 from .constants import *
-from .error import OmeError
+from .error import OmeParseError
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
@@ -98,15 +97,8 @@ class ParserState(object):
     def column(self):
         return self.pos - self.line_pos
 
-    def format_error(self, message):
-        line_unstripped = self.current_line.rstrip()
-        line = line_unstripped.lstrip()
-        arrow = ' ' * (self.column - (len(line_unstripped) - len(line))) + '\x1b[1;32m^\x1b[0m'
-        return ('\x1b[1m{0.stream_name}:{0.line_number}:{0.column}:\x1b[0m {1}\n'
-              + '    {2}\n    {3}').format(self, message, line, arrow)
-
     def error(self, message):
-        raise OmeError(self.format_error(message))
+        raise OmeParseError(message, self)
 
 class Parser(ParserState):
     def __init__(self, stream, stream_name, tab_width=8):

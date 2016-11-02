@@ -13,6 +13,7 @@ from .idalloc import IdAllocator
 from .labels import *
 from .parser import Parser
 from .target import target_map, default_target_id
+from .terminal import stderr
 from .types import TraceBackInfo
 
 def collect_nodes_of_type(ast, node_type):
@@ -60,7 +61,12 @@ class Program(object):
         raise OmeError(message, self.filename)
 
     def warning(self, message):
-        sys.stderr.write('\x1b[1m{0}: \x1b[35mwarning:\x1b[0m {1}\n'.format(self.filename, message))
+        stderr.bold()
+        stderr.write('{}: '.format(self.filename))
+        stderr.colour('magenta')
+        stderr.write('warning: ')
+        stderr.reset()
+        stderr.write(message + '\n')
 
     def compile_traceback_info(self):
         for send in self.send_list:
