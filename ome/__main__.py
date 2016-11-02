@@ -6,6 +6,10 @@ from .command import command_args
 from .error import OmeError
 from .terminal import stderr
 
+def print_verbose(*args, **kwargs):
+    if command_args.verbose:
+        print(*args, **kwargs)
+
 def main():
     stderr.reset()
     try:
@@ -13,12 +17,10 @@ def main():
         target = compiler.get_target(command_args.target)
         build_options = compiler.BuildOptions(target)
         backend = compiler.get_backend(target, command_args.backend)
-        if command_args.verbose:
-            print('ome: using target {}'.format(target.name))
-            print('ome: using backend {} {}'.format(backend.name, backend.version))
+        print_verbose('ome: using target {}'.format(target.name))
+        print_verbose('ome: using backend {} {}'.format(backend.name, backend.version))
         for filename in command_args.filename:
-            if command_args.verbose:
-                print('ome: compiling {}'.format(filename))
+            print_verbose('ome: compiling {}'.format(filename))
             if command_args.print_code:
                 print(compiler.compile_file(filename, target).decode(target.encoding))
             else:
