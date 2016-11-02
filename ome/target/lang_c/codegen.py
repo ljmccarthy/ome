@@ -3,7 +3,6 @@
 
 import struct
 from ... import optimise
-from ...constants import *
 from ...instructions import CONCAT
 from ...labels import *
 from .cstring import literal_c_string
@@ -160,7 +159,7 @@ class DispatchCodegen(object):
     def emit_dispatch(self, any_constant_tags):
         self.emit('OME_Tag _tag = OME_get_tag(_0);')
         if any_constant_tags:
-            self.emit('if (_tag == OME_Tag_Constant) {{ _tag = OME_untag_unsigned(_0) + {}; }}'.format(MIN_CONSTANT_TAG))
+            self.emit('if (_tag == OME_Tag_Constant) {{ _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }}')
 
     def emit_compare_gte(self, tag, gte_label):
         self.emit('if (_tag >= {}) goto {};'.format(tag, gte_label))
