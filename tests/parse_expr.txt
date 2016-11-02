@@ -1,0 +1,77 @@
+a
+(send a <free>)
+
+a b
+(send b (send a <free>))
+
+a b c
+(send c (send b (send a <free>)))
+
+(a b) c
+(send c (send b (send a <free>)))
+
+a b: c
+(send b: (send a <free>) (send c <free>))
+
+a b: c d: e
+(send b:d: (send a <free>) (send c <free>) (send e <free>))
+
+a b: c d
+(send b: (send a <free>) (send d (send c <free>)))
+
+a b: (c d)
+(send b: (send a <free>) (send d (send c <free>)))
+
+(a b: c) d
+(send d (send b: (send a <free>) (send c <free>)))
+
+a b: (c d: e)
+(send b: (send a <free>) (send d: (send c <free>) (send e <free>)))
+
+a: b
+(send a: <free> (send b <free>))
+
+a + b
+(send + (send a <free>) (send b <free>))
+
+a + b + c
+(send + (send + (send a <free>) (send b <free>)) (send c <free>))
+
+(a + b) + c
+(send + (send + (send a <free>) (send b <free>)) (send c <free>))
+
+a + (b + c)
+(send + (send a <free>) (send + (send b <free>) (send c <free>)))
+
+a + b c
+(send + (send a <free>) (send c (send b <free>)))
+
+a + (b c)
+(send + (send a <free>) (send c (send b <free>)))
+
+(a + b) c
+(send c (send + (send a <free>) (send b <free>)))
+
+a + b * c
+(send + (send a <free>) (send × (send b <free>) (send c <free>)))
+
+a + (b * c)
+(send + (send a <free>) (send × (send b <free>) (send c <free>)))
+
+(a + b) * c
+(send × (send + (send a <free>) (send b <free>)) (send c <free>))
+
+a * b + c * d
+(send + (send × (send a <free>) (send b <free>)) (send × (send c <free>) (send d <free>)))
+
+a b + c d
+(send + (send b (send a <free>)) (send d (send c <free>)))
+
+a b: c, d
+(send b:, (send a <free>) (send c <free>) (send d <free>))
+
+a b: c, d, e f: g, h
+(send b:,,f:, (send a <free>) (send c <free>) (send d <free>) (send e <free>) (send g <free>) (send h <free>))
+
+a b: (c; d)
+(send b: (send a <free>) (begin (send c <free>) (send d <free>)))
