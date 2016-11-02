@@ -410,17 +410,20 @@ class ConstantBlock(TerminalNode):
 
     def generate_code(self, code):
         dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, Tag_Constant, self.block.tag_constant))
+        code.add_instruction(LOAD_VALUE(dest, code.get_tag('Constant'), self.block.tag_constant))
         return dest
 
 class BuiltInBlock(object):
     is_constant = True
-    tag = constant_to_tag(Constant_BuiltIn)
-    tag_constant = Constant_BuiltIn
     constant_ref = Constant('BuiltIn')
 
-    def __init__(self, builtin_methods):
-        self.symbols = {method.symbol for method in builtin_methods if method.tag_name == 'BuiltIn'}
+    def __init__(self):
+        self.symbols = {}
+
+    def add_methods(self, methods):
+        for method in methods:
+            if method.tag_name == 'BuiltIn':
+                self.symbols[method.symbol] = method
 
     def lookup_var(self, symbol):
         pass

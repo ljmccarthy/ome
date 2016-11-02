@@ -29,39 +29,3 @@ MASK_TAG = (1 << NUM_TAG_BITS) - 1
 MASK_DATA = (1 << NUM_DATA_BITS) - 1
 MASK_EXPONENT = (1 << NUM_EXPONENT_BITS) - 1
 MASK_SIGNIFICAND = (1 << NUM_SIGNIFICAND_BITS) - 1
-
-Tag_Constant = 0
-Constant_BuiltIn = 3
-
-opaque_type_names = [
-    'Constant',
-    'Small-Integer',
-    'Small-Decimal',
-]
-
-pointer_type_names = [
-    'String',
-    'String-Buffer',
-    'Byte-Array',
-    'Byte-Array-Mutable',
-    'Byte-Array-Buffer',
-    'Array',            # immutable
-    'Array-Mutable',    # mutable, fixed-size
-    'Array-Buffer',     # mutable, resizable
-]
-
-constant_names = [
-    'False',
-    'True',
-    'Empty',                # The empty block
-    'BuiltIn',              # Block for built-in methods
-    'Stack-Overflow',
-    'Not-Understood',
-    'Type-Error',
-    'Index-Error',
-    'Overflow',
-    'Divide-By-Zero',
-]
-
-def constant_to_tag(constant):
-    return constant + MIN_CONSTANT_TAG

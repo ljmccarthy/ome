@@ -2,16 +2,14 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import io
-import os
-import re
 import subprocess
 import sys
 
 from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
-from .constants import *
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
+from .idalloc import IdAllocator
 from .labels import *
 from .parser import Parser
 from .target import target_map, default_target_id
@@ -25,54 +23,6 @@ def collect_nodes_of_type(ast, node_type):
     ast.walk(append_block)
     return nodes
 
-class IdAllocator(object):
-    def __init__(self, opaque_tag_names=(), pointer_tag_names=(), constant_names=()):
-        self.opaque_tag_names = list(opaque_tag_names)
-        self.pointer_tag_names = list(pointer_tag_names)
-        self.constant_names = list(constant_names)
-
-    def allocate_ids(self, block_list):
-        self.tags = {}
-        self.tag_list = []
-        tag_id = 0
-        for name in self.opaque_tag_names:
-            self.tags[name] = tag_id
-            self.tag_list.append((name, tag_id))
-            tag_id += 1
-        self.pointer_tag_id = tag_id
-        for name in self.pointer_tag_names:
-            self.tags[name] = tag_id
-            self.tag_list.append((name, tag_id))
-            tag_id += 1
-        for block in block_list:
-            if not block.is_constant:
-                block.tag = tag_id
-                tag_id += 1
-        if tag_id > MAX_TAG:
-            raise OmeError('exhausted all tag IDs')
-
-        self.constants = {}
-        self.constant_list = []
-        constant_id = 0
-        for name in self.constant_names:
-            self.constants[name] = constant_id
-            self.constant_list.append((name, constant_id))
-            self.tags[name] = constant_to_tag(constant_id)
-            constant_id += 1
-        for block in block_list:
-            if block.is_constant:
-                block.tag = constant_to_tag(constant_id)
-                block.tag_constant = constant_id
-                constant_id += 1
-        if constant_id > MAX_CONSTANT_TAG:
-            raise OmeError('exhausted all constant tag IDs')
-
-        self.last_tag_id = tag_id
-        self.last_constant_id = constant_id
-
-        assert Tag_Constant == self.tags['Constant']
-        assert Constant_BuiltIn == self.constants['BuiltIn']
-
 class Program(object):
     def __init__(self, filename, ast, target, debug=True):
         self.filename = filename
@@ -81,8 +31,13 @@ class Program(object):
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
+        self.ids = IdAllocator()
+
         self.builtin_methods = target.get_builtin_methods()
-        self.builtin_block = BuiltInBlock(self.builtin_methods)
+        self.builtin_block = BuiltInBlock()
+        self.builtin_block.tag = self.ids.tags['BuiltIn']
+        self.builtin_block.tag_constant = self.ids.constants['BuiltIn']
+        self.builtin_block.add_methods(self.builtin_methods)
 
         ast = Method('', [], ast)
         ast = ast.resolve_free_vars(self.builtin_block)
@@ -90,6 +45,7 @@ class Program(object):
         self.toplevel_method = ast
         self.block_list = collect_nodes_of_type(ast, Block)
         self.send_list = collect_nodes_of_type(ast, Send)
+        self.ids.allocate_ids(self.block_list)
 
         toplevel_block = ast.expr
         if isinstance(toplevel_block, Sequence):
@@ -97,8 +53,6 @@ class Program(object):
         if 'main' not in toplevel_block.symbols:
             self.error('no main method defined')
 
-        self.ids = IdAllocator(opaque_type_names, pointer_type_names, constant_names)
-        self.ids.allocate_ids(self.block_list)
         self.compile_traceback_info()
         self.find_used_methods()
         self.build_code_table()
@@ -183,7 +137,7 @@ class Program(object):
 
     def emit_constants(self, out):
         for name, value in sorted(constants.__dict__.items()):
-            if isinstance(value, int) and not name.startswith(('Tag_', 'Constant_')):
+            if isinstance(value, int):
                 self.target.emit_constant(out, name, value)
         for name, value in self.ids.tag_list:
             self.target.emit_constant(out, 'Tag_' + name.replace('-', '_'), value)

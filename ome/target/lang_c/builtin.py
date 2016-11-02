@@ -2,8 +2,8 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import os
-from ...constants import *
 from ...cpreparser import CPreParser
+from ...idalloc import constant_names
 from ...runtime import runtime_header, runtime_source
 from ...types import BuiltInMethod
 
@@ -48,7 +48,7 @@ def get_builtin_methods():
             parser = CPreParser(source, filename)
             parser.parse()
             methods.extend(parser.methods)
-    for name in constant_names[:-1]:
+    for name in constant_names:
         methods.append(BuiltInMethod(name, 'string', ['_0'], [], constant_string_method.format(name=name)))
     return methods
 
