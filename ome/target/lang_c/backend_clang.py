@@ -1,8 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
-import os
-from .backend_cc import CCArgsBuilder
+from .backend_cc import CCArgsBuilder, CCBuilder
 
 class ClangArgsBuilder(CCArgsBuilder):
     all = [
@@ -24,30 +23,10 @@ class ClangArgsBuilder(CCArgsBuilder):
         '-Wl,--gc-sections',
     ]
 
-get_clang_args = ClangArgsBuilder()
-
-class ClangBuilder(object):
+class ClangBuilder(CCBuilder):
     name = 'Clang'
     default_command = 'clang'
     supported_platforms = frozenset(['Linux'])
     version_args = ['--version']
     version_re = 'clang version (\d+\.\d+\.\d+)'
-
-    def __init__(self, command):
-        self.command = command
-
-    def executable_name(self, infile):
-        return os.path.splitext(infile)[0]
-
-    def object_name(self, infile):
-        return os.path.splitext(infile)[0] + '.o'
-
-    def make_executable(self, shell, code, outfile, build_options):
-        build_args = get_clang_args(build_options, '-', outfile)
-        shell.run([self.command] + build_args, input=code)
-        if not build_options.debug:
-            shell.run('strip', '-R', '.comment', outfile)
-
-    def make_object(self, shell, code, outfile, build_options):
-        build_args = get_clang_args(build_options, '-', outfile)
-        shell.run([self.command] + build_args, input=code)
+    get_build_args = ClangArgsBuilder()
