@@ -376,19 +376,6 @@ class TerminalNode(object):
     def walk(self, visitor):
         visitor(self)
 
-class Value(TerminalNode):
-    def __init__(self, tag_name, value):
-        self.tag_name = tag_name
-        self.value = value
-
-    def __str__(self):
-        return '<value %s:%s>' % (self.tag_name, self.value)
-
-    def generate_code(self, code):
-        dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, code.get_tag(self.tag_name), self.value))
-        return dest
-
 class Constant(TerminalNode):
     def __init__(self, constant_name):
         self.constant_name = constant_name
