@@ -19,7 +19,10 @@ def main():
         for filename in command_args.filename:
             if command_args.verbose:
                 print('ome: compiling {}'.format(filename))
-            build_options.make_executable(filename, backend)
+            if command_args.print_code:
+                print(compiler.compile_file(filename, target).decode(target.encoding))
+            else:
+                build_options.make_executable(filename, backend)
     except OmeError as error:
         error.write_ansi(stderr)
         stderr.reset()

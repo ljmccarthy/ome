@@ -9,7 +9,6 @@ import sys
 
 from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
-from .command import command_args
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .idalloc import IdAllocator
@@ -226,11 +225,7 @@ def compile_file(filename, target):
     out = io.BytesIO()
     text_out = io.TextIOWrapper(out, encoding=target.encoding, write_through=True)
     program.emit_program_text(text_out)
-    code = out.getvalue()
-    if command_args.print_code:
-        print(code.decode('utf8'))
-        sys.exit(0)
-    return code
+    return out.getvalue()
 
 def run_shell_command(args, input=None, output=None):
     if len(args) == 1 and isinstance(args[0], (list, tuple)):
