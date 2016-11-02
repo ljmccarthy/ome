@@ -10,6 +10,8 @@ class CCArgsBuilder(object):
 
     def __call__(self, build_options, infile, outfile):
         args = []
+        if build_options.verbose:
+            args.append('-v')
         if not build_options.link:
             args.append('-c')
         args.extend(self.all)

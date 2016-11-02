@@ -249,10 +249,11 @@ class BuildShell(object):
 shell = BuildShell()
 
 class BuildOptions(object):
-    def __init__(self, target, debug=False, link=True):
+    def __init__(self, target, debug=False, link=True, verbose=False):
         self.target = target
         self.debug = debug
         self.link = link
+        self.verbose = verbose
         self.include_dirs = []
         self.lib_dirs = []
         self.dynamic_libs = []
