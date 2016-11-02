@@ -13,6 +13,7 @@ class OmeError(Exception):
         terminal.write('error: ')
         terminal.reset()
         terminal.write(self.message)
+        terminal.write('\n')
 
 class OmeParseError(OmeError):
     def __init__(self, message, ps):

@@ -3,38 +3,41 @@
 
 import os
 
-gcc_args = [
+clang = 'clang'
+
+clang_args = [
     '-x', 'c',
     '-std=c99',
     '-Wall',
     '-Wextra',
     '-Wno-unused',
+    '-Wno-unused-parameter',
 ]
 
-gcc_release_args = [
+clang_release_args = [
     '-O3',
 ]
 
-gcc_debug_args = [
+clang_debug_args = [
     '-ggdb',
 ]
 
-gcc_release_link_args = [
+clang_release_link_args = [
     '-Wl,--strip-all',
     '-Wl,--gc-sections',
 ]
 
-def get_gcc_args(build_options):
+def get_clang_args(build_options):
     args = []
     if not build_options.link:
         args.append('-c')
-    args.extend(gcc_args)
+    args.extend(clang_args)
     if build_options.debug:
-        args.extend(gcc_debug_args)
+        args.extend(clang_debug_args)
     else:
-        args.extend(gcc_release_args)
+        args.extend(clang_release_args)
         if build_options.link:
-            args.extend(gcc_release_link_args)
+            args.extend(clang_release_link_args)
     for name, value in build_options.defines:
         args.append('-D{}={}'.format(name, value) if value else '-D' + name)
     for include_dir in build_options.include_dirs:
@@ -47,8 +50,8 @@ def get_gcc_args(build_options):
         args.append(static_lib)
     return args
 
-class GCCBuilder(object):
-    def __init__(self, command='gcc'):
+class ClangBuilder(object):
+    def __init__(self, command='clang'):
         self.command = command
 
     def executable_name(self, infile):
@@ -58,11 +61,11 @@ class GCCBuilder(object):
         return os.path.splitext(infile)[0] + '.o'
 
     def make_executable(self, shell, code, outfile, build_options):
-        build_args = get_gcc_args(build_options)
+        build_args = get_clang_args(build_options)
         shell.run([self.command] + build_args + ['-', '-o', outfile], input=code)
         if not build_options.debug:
             shell.run('strip', '-R', '.comment', outfile)
 
     def make_object(self, shell, code, outfile, build_options):
-        build_args = get_gcc_args(build_options)
+        build_args = get_clang_args(build_options)
         shell.run([self.command] + build_args + ['-', '-o', outfile], input=code)

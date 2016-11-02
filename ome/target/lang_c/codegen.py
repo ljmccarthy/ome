@@ -207,8 +207,7 @@ class DataTable(object):
 
     def emit(self, out):
         for string, index in sorted(self.strings.items(), key=lambda x: x[1]):
-            out.write('static const OME_String OME_static_string_{} OME_ALIGNED = {{{}, {}}};\n'.format(
-                index, len(string), literal_c_string(string)))
+            out.write('OME_STATIC_STRING(OME_static_string_{}, {});\n'.format(index, literal_c_string(string)))
 
 def emit_traceback_table(out, traceback_entries):
     out.write('static const OME_Traceback_Entry OME_traceback_table[] = {\n')

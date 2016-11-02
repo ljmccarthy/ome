@@ -406,7 +406,7 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
     return header;
 }
 
-static void *OME_allocate(uint32_t object_size, uint32_t scan_offset, uint32_t scan_size)
+static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t scan_size)
 {
     OME_Heap *heap = &OME_context->heap;
     object_size = (object_size + 7) & ~7;
