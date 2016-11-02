@@ -3,6 +3,7 @@
 
 import io
 import platform
+import re
 import subprocess
 import sys
 
@@ -276,13 +277,35 @@ class BuildOptions(object):
         backend.make_executable(shell, code, outfile, self)
 
 def get_target(target_name):
+    target_name = target_name.lower()
     if target_name not in target_map:
         raise OmeError("unknown target '{}'".format(target_name))
     return target_map[target_name]
 
+def get_backend_version(backend):
+    if not hasattr(backend, 'version'):
+        args = [backend.command] + backend.version_args
+        try:
+            process = subprocess.Popen(args, stdout=subprocess.PIPE)
+            outs, errs = process.communicate()
+            if process.returncode == 0:
+                m = re.match(backend.version_re, outs.decode('ascii'))
+                if m:
+                    backend.version = m.group(1)
+                    return
+        except (OSError, UnicodeDecodeError):
+            pass
+        raise OmeError("backend '{}' is not available".format(backend.name))
+
 def get_backend(target, backend_name=None):
     if backend_name is None:
-        backend_name = target.backend_preference[0]
+        for backend_name in target.backend_preference:
+            backend = target.backends[backend_name]()
+            if get_backend_version(backend):
+                return backend
+    backend_name = backend_name.lower()
     if backend_name not in target.backends:
         raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
-    return target.backends[backend_name]()
+    backend = target.backends[backend_name]()
+    get_backend_version(backend)
+    return backend

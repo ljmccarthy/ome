@@ -45,6 +45,8 @@ def get_clang_args(build_options):
 class ClangBuilder(object):
     name = 'Clang'
     supported_platforms = frozenset(['Linux'])
+    version_args = ['--version']
+    version_re = 'clang version (\d+\.\d+\.\d+)'
 
     def __init__(self, command='clang'):
         self.command = command
@@ -54,9 +56,6 @@ class ClangBuilder(object):
 
     def object_name(self, infile):
         return os.path.splitext(infile)[0] + '.o'
-
-    def version(self, shell):
-        shell.run_output(self.command, '--version')
 
     def make_executable(self, shell, code, outfile, build_options):
         build_args = get_clang_args(build_options)

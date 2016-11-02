@@ -42,6 +42,8 @@ def get_gcc_args(build_options):
 class GCCBuilder(object):
     name = 'GCC'
     supported_platforms = frozenset(['Linux'])
+    version_args = ['--version']
+    version_re = 'gcc \(GCC\) (\d+\.\d+\.\d+)'
 
     def __init__(self, command='gcc'):
         self.command = command
@@ -51,9 +53,6 @@ class GCCBuilder(object):
 
     def object_name(self, infile):
         return os.path.splitext(infile)[0] + '.o'
-
-    def version(self, shell):
-        shell.run_output(self.command, '--version')
 
     def make_executable(self, shell, code, outfile, build_options):
         build_args = get_gcc_args(build_options)
