@@ -2,23 +2,24 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import sys
-from argparse import ArgumentParser
+from .command import command_args
 from .error import OmeError
 from .terminal import stdout, stderr
 
-argparser = ArgumentParser('ome', add_help=False)
-argparser.add_argument('filename', nargs='+')
-argparser.add_argument('--verbose', '-v', action='store_true')
-
 def main():
-    args = argparser.parse_args()
     stderr.reset()
     try:
-        from .compiler import make_executable
-        for filename in args.filename:
-            if args.verbose:
+        from . import compiler
+        target = compiler.get_target(command_args.target.lower())
+        build_options = compiler.BuildOptions(target)
+        backend = compiler.get_backend(target, command_args.backend)
+        if command_args.verbose:
+            print('ome: using target {}'.format(target.name))
+            print('ome: using backend {}'.format(backend.name))
+        for filename in command_args.filename:
+            if command_args.verbose:
                 stdout.write('ome: compiling {}\n'.format(filename))
-            make_executable(filename)
+            build_options.make_executable(filename, backend)
     except OmeError as error:
         error.write_ansi(stderr)
         stderr.reset()

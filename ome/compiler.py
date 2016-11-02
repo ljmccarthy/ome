@@ -2,17 +2,19 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import io
+import platform
 import subprocess
 import sys
 
 from . import constants
 from .ast import Block, BuiltInBlock, Method, Send, Sequence
+from .command import command_args
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .idalloc import IdAllocator
 from .labels import *
 from .parser import Parser
-from .target import target_map, default_target_id
+from .target import target_map
 from .terminal import stderr
 from .types import TraceBackInfo
 
@@ -223,39 +225,64 @@ def compile_file(filename, target):
     out = io.BytesIO()
     text_out = io.TextIOWrapper(out, encoding=target.encoding, write_through=True)
     program.emit_program_text(text_out)
-    return out.getvalue()
+    code = out.getvalue()
+    if command_args.print_code:
+        print(code.decode('utf8'))
+        sys.exit(0)
+    return code
+
+def run_shell_command(args, input=None, output=None):
+    if len(args) == 1 and isinstance(args[0], (list, tuple)):
+        args = args[0]
+    process = subprocess.Popen(args,
+        stdin = input and subprocess.PIPE,
+        stdout = output and subprocess.PIPE)
+    outs, errs = process.communicate(input)
+    if process.returncode != 0:
+        raise OmeError('command failed with return code {}'.format(process.returncode))
+    return outs
 
 class BuildShell(object):
     def run(self, *args, input=None):
-        if len(args) == 1 and isinstance(args[0], (list, tuple)):
-            args = args[0]
-        process = subprocess.Popen(args, stdin=input and subprocess.PIPE)
-        process.communicate(input)
-        if process.returncode != 0:
-            sys.exit(process.returncode)
+        run_shell_command(args, input)
+
+    def run_output(self, *args, input=None):
+        return run_shell_command(args, input, True)
+
+shell = BuildShell()
 
 class BuildOptions(object):
-    def __init__(self, platform, debug=False, link=True):
+    def __init__(self, target, debug=False, link=True):
+        self.target = target
         self.debug = debug
         self.link = link
         self.include_dirs = []
         self.lib_dirs = []
         self.dynamic_libs = []
         self.static_libs = []
+        self.platform = platform.system()
         self.defines = [
-            ('OME_PLATFORM', platform),
-            ('OME_PLATFORM_' + platform.upper(), ''),
+            ('OME_PLATFORM', self.platform),
+            ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
         if not debug:
             self.defines.append(('NDEBUG', ''))
 
-def make_executable(filename, target_id=default_target_id):
-    if target_id not in target_map:
-        raise OmeError('unsupported target platform: {}-{}'.format(*target_id))
-    target = target_map[target_id]
-    options = BuildOptions(target_id[1])
-    builder = target.builders[target.default_builder]
-    outfile = builder.executable_name(filename)
-    shell = BuildShell()
-    code = compile_file(filename, target)
-    builder.make_executable(shell, code, outfile, options)
+    def make_executable(self, filename, backend):
+        if self.platform not in backend.supported_platforms:
+            raise OmeError("backend '{}' does not support platform {}".format(backend.name, self.platform))
+        outfile = backend.executable_name(filename)
+        code = compile_file(filename, self.target)
+        backend.make_executable(shell, code, outfile, self)
+
+def get_target(target_name):
+    if target_name not in target_map:
+        raise OmeError("unknown target '{}'".format(target_name))
+    return target_map[target_name]
+
+def get_backend(target, backend_name=None):
+    if backend_name is None:
+        backend_name = target.backend_preference[0]
+    if backend_name not in target.backends:
+        raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
+    return target.backends[backend_name]()

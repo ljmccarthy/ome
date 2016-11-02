@@ -2,6 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 
 import os
+from .backend_cc import get_cc_args
 
 gcc_args = [
     '-x', 'c',
@@ -35,19 +36,13 @@ def get_gcc_args(build_options):
         args.extend(gcc_release_args)
         if build_options.link:
             args.extend(gcc_release_link_args)
-    for name, value in build_options.defines:
-        args.append('-D{}={}'.format(name, value) if value else '-D' + name)
-    for include_dir in build_options.include_dirs:
-        args.append('-I' + include_dir)
-    for lib_dir in build_options.lib_dirs:
-        args.append('-L' + lib_dir)
-    for dynamic_lib in build_options.dynamic_libs:
-        args.append('-l' + dynamic_lib)
-    for static_lib in build_options.static_libs:
-        args.append(static_lib)
+    get_cc_args(build_options, args)
     return args
 
 class GCCBuilder(object):
+    name = 'GCC'
+    supported_platforms = frozenset(['Linux'])
+
     def __init__(self, command='gcc'):
         self.command = command
 
@@ -56,6 +51,9 @@ class GCCBuilder(object):
 
     def object_name(self, infile):
         return os.path.splitext(infile)[0] + '.o'
+
+    def version(self, shell):
+        shell.run_output(self.command, '--version')
 
     def make_executable(self, shell, code, outfile, build_options):
         build_args = get_gcc_args(build_options)
