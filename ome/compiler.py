@@ -198,6 +198,7 @@ class Program(object):
     def emit_toplevel(self, out):
         code = self.toplevel_method.generate_code(self)
         out.write(code.generate_target_code('OME_toplevel', self.target))
+        out.write('\n')
         self.target.emit_toplevel(out)
 
     def emit_program_text(self, out):
