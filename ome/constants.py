@@ -13,7 +13,7 @@ HEAP_ALIGNMENT = 1 << HEAP_ALIGNMENT_SHIFT
 HEAP_SIZE_BITS = 10  # 2^10-1 = 1023 slots (~8 KB)
 MAX_HEAP_OBJECT_SIZE = 2**HEAP_SIZE_BITS - 1
 
-MAX_TAG = 2**(NUM_TAG_BITS-1) - 2  # Highest bit of tag is error bit
+MAX_TAG = 2**(NUM_TAG_BITS-1) - 1  # Highest bit of tag is error bit
 MIN_CONSTANT_TAG = 2**NUM_TAG_BITS
 MAX_CONSTANT_TAG = 2**32 - MIN_CONSTANT_TAG - 1
 
