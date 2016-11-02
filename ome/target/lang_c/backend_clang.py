@@ -6,7 +6,7 @@ from .backend_cc import get_cc_args
 
 clang = 'clang'
 
-clang_args = [
+all_args = [
     '-x', 'c',
     '-std=c99',
     '-Wall',
@@ -15,32 +15,21 @@ clang_args = [
     '-Wno-unused-parameter',
 ]
 
-clang_release_args = [
+release_args = [
     '-O3',
 ]
 
-clang_debug_args = [
+debug_args = [
     '-ggdb',
 ]
 
-clang_release_link_args = [
+release_link_args = [
     '-Wl,--strip-all',
     '-Wl,--gc-sections',
 ]
 
 def get_clang_args(build_options):
-    args = []
-    if not build_options.link:
-        args.append('-c')
-    args.extend(clang_args)
-    if build_options.debug:
-        args.extend(clang_debug_args)
-    else:
-        args.extend(clang_release_args)
-        if build_options.link:
-            args.extend(clang_release_link_args)
-    get_cc_args(build_options, args)
-    return args
+    return get_cc_args(build_options, all_args, release_args, debug_args, release_link_args)
 
 class ClangBuilder(object):
     name = 'Clang'

@@ -4,7 +4,7 @@
 import os
 from .backend_cc import get_cc_args
 
-gcc_args = [
+all_args = [
     '-x', 'c',
     '-std=c99',
     '-Wall',
@@ -12,32 +12,21 @@ gcc_args = [
     '-Wno-unused',
 ]
 
-gcc_release_args = [
+release_args = [
     '-O3',
 ]
 
-gcc_debug_args = [
+debug_args = [
     '-ggdb',
 ]
 
-gcc_release_link_args = [
+release_link_args = [
     '-Wl,--strip-all',
     '-Wl,--gc-sections',
 ]
 
 def get_gcc_args(build_options):
-    args = []
-    if not build_options.link:
-        args.append('-c')
-    args.extend(gcc_args)
-    if build_options.debug:
-        args.extend(gcc_debug_args)
-    else:
-        args.extend(gcc_release_args)
-        if build_options.link:
-            args.extend(gcc_release_link_args)
-    get_cc_args(build_options, args)
-    return args
+    return get_cc_args(build_options, all_args, release_args, debug_args, release_link_args)
 
 class GCCBuilder(object):
     name = 'GCC'
