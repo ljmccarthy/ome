@@ -272,8 +272,10 @@ class BuildOptions(object):
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
-        if not self.debug:
+        if not options.debug:
             self.defines.append(('NDEBUG', ''))
+        if options.gc_stats:
+            self.defines.append(('OME_GC_STATS', ''))
 
     def make_output(self, filename, backend):
         if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:

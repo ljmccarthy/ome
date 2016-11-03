@@ -6,6 +6,12 @@
     #define OME_GC_PRINT(...) do {} while (0)
 #endif
 
+#ifdef OME_GC_STATS
+    #define OME_GC_CLOCK(name) clock_t name = clock()
+#else
+    #define OME_GC_CLOCK(name)
+#endif
+
 static void OME_print_value(FILE *out, OME_Value value)
 {
     if (OME_get_tag(value) != OME_Tag_String) {
@@ -357,18 +363,15 @@ static void OME_compact(void)
 
 static void OME_collect(OME_Heap *heap)
 {
-#ifdef OME_DEBUG_GC
     //OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
-    clock_t t0 = clock();
-#endif
+    OME_GC_CLOCK(t0);
     OME_mark();
-#ifdef OME_DEBUG_GC
-    clock_t t1 = clock();
-#endif
+    OME_GC_CLOCK(t1);
     OME_compact();
-#ifdef OME_DEBUG_GC
-    clock_t t2 = clock();
+    OME_GC_CLOCK(t2);
     //OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
+
+#ifdef OME_GC_STATS
     heap->num_collections++;
     heap->mark_time += t1 - t0;
     heap->compact_time += t2 - t1;
@@ -498,12 +501,9 @@ static int OME_thread_main(void)
     };
 
     OME_initialize_heap(&context.heap);
-
-#ifdef OME_DEBUG_GC
     context.heap.mark_time = 0;
     context.heap.compact_time = 0;
-    clock_t start = clock();
-#endif
+    OME_GC_CLOCK(start);
 
     OME_context = &context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
@@ -511,7 +511,7 @@ static int OME_thread_main(void)
         OME_print_traceback(stderr, value);
     }
 
-#ifdef OME_DEBUG_GC
+#ifdef OME_GC_STATS
     clock_t time = clock() - start;
     clock_t gc_time = context.heap.mark_time + context.heap.compact_time;
     printf("collections:  %lu\n", context.heap.num_collections);

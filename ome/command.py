@@ -15,6 +15,7 @@ argparser.add_argument('--backend-command', action='store', default=None)
 argparser.add_argument('--platform', action='store', default=platform.system())
 argparser.add_argument('--make-object', '-c', action='store_true')
 argparser.add_argument('--debug', '-g', action='store_true')
+argparser.add_argument('--gc-stats', action='store_true')
 argparser.add_argument('--print-code', action='store_true')
 argparser.add_argument('--output', '-o', action='store', default=None)
 
