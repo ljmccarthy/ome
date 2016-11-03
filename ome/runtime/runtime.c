@@ -479,11 +479,10 @@ static void OME_initialize(int argc, const char *const *argv)
     OME_argv->size = argc;
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]);
-        size_t alloc_size = OME_heap_align(sizeof(OME_String) + len + 1);
+        size_t alloc_size = sizeof(OME_String) + len + 1;
         OME_String *arg = malloc(alloc_size);
         arg->size = len;
-        memcpy(arg->data, argv[i], len);
-        memset(arg->data + len, 0, alloc_size - len);
+        memcpy(arg->data, argv[i], len + 1);
         OME_argv->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
     }
 }
