@@ -274,6 +274,8 @@ class BuildOptions(object):
         ]
         if not options.debug:
             self.defines.append(('NDEBUG', ''))
+        if options.debug_gc:
+            self.defines.append(('OME_GC_DEBUG', ''))
         if options.gc_stats:
             self.defines.append(('OME_GC_STATS', ''))
 

@@ -1,6 +1,6 @@
-#ifdef OME_DEBUG_GC
+#ifdef OME_GC_DEBUG
     #define OME_GC_ASSERT(e) assert(e)
-    #define OME_GC_PRINT(...) fprintf(stderr, "ome gc: " __VA_ARGS__)
+    #define OME_GC_PRINT(...) printf("ome gc: " __VA_ARGS__)
 #else
     #define OME_GC_ASSERT(e) do {} while (0)
     #define OME_GC_PRINT(...) do {} while (0)
@@ -84,10 +84,10 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     heap->relocs_size = relocs_size;
     heap->bitmap_size = bitmap_size;
 
-    //printf("heap size: %lu bytes total, %lu bytes usable\n", size, size - metadata_size);
-    //printf("metadata size: %lu bytes\n", metadata_size);
-    //printf("reloc buffer size: %lu bytes\n", relocs_size * sizeof(OME_Heap_Relocation));
-    //printf("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
+    OME_GC_PRINT("heap size: %lu bytes total, %lu bytes usable\n", size, size - metadata_size);
+    OME_GC_PRINT("metadata size: %lu bytes\n", metadata_size);
+    OME_GC_PRINT("reloc buffer size: %lu bytes\n", relocs_size * sizeof(OME_Heap_Relocation));
+    OME_GC_PRINT("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
 }
 
 static void OME_initialize_heap(OME_Heap *heap)
@@ -363,13 +363,12 @@ static void OME_compact(void)
 
 static void OME_collect(OME_Heap *heap)
 {
-    //OME_GC_PRINT("---- begin collection %ld\n", heap->num_collections);
     OME_GC_CLOCK(t0);
     OME_mark();
     OME_GC_CLOCK(t1);
     OME_compact();
     OME_GC_CLOCK(t2);
-    //OME_GC_PRINT("---- end collection (%lu bytes used)\n\n", heap->pointer - heap->base);
+    OME_GC_PRINT("%lu bytes used after collection\n", heap->pointer - heap->base);
 
 #ifdef OME_GC_STATS
     heap->num_collections++;
@@ -384,7 +383,7 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
     size_t alloc_size = object_size + sizeof(OME_Header);
     size_t padded_size = alloc_size + sizeof(OME_Header);
 
-#ifdef OME_DEBUG_GC
+#ifdef OME_GC_DEBUG
     if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
         OME_GC_PRINT("error: invalid object size %u\n", object_size);
         exit(1);
