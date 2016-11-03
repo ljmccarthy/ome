@@ -29,8 +29,15 @@ def emit_builtin_code(out):
 def emit_toplevel(out):
     out.write(runtime.main)
 
-def get_builtin_methods():
-    methods = []
+class Builtins(object):
+    def __init__(self):
+        self.methods = []
+        self.constant_names = []
+        self.opaque_names = []
+        self.pointer_names = []
+
+def get_builtins():
+    builtins = Builtins()
     builtins_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'builtins'))
     for filename in os.listdir(builtins_path):
         if filename.endswith('.c'):
@@ -39,10 +46,13 @@ def get_builtin_methods():
                 source = f.read()
             parser = CPreParser(source, filename)
             parser.parse()
-            methods.extend(parser.methods)
+            builtins.methods.extend(parser.methods)
+            builtins.constant_names.extend(parser.constant_names)
+            builtins.opaque_names.extend(parser.opaque_names)
+            builtins.pointer_names.extend(parser.pointer_names)
     for name in constant_names:
-        methods.append(BuiltInMethod(name, 'string', ['_0'], [], constant_string_method.format(name=name)))
-    return methods
+        builtins.methods.append(BuiltInMethod(name, 'string', ['_0'], [], constant_string_method.format(name=name)))
+    return builtins
 
 if __name__ == '__main__':
     for method in get_builtin_methods():

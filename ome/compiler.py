@@ -32,13 +32,14 @@ class Program(object):
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
+        self.builtins = target.get_builtins()
         self.ids = IdAllocator()
+        self.ids.add_builtins(self.builtins)
 
-        self.builtin_methods = target.get_builtin_methods()
         self.builtin_block = BuiltInBlock()
         self.builtin_block.tag_id = self.ids.tags['BuiltIn']
         self.builtin_block.constant_id = self.ids.constants['BuiltIn']
-        self.builtin_block.add_methods(self.builtin_methods)
+        self.builtin_block.add_methods(self.builtins.methods)
 
         ast = Method('', [], ast)
         ast = ast.resolve_free_vars(self.builtin_block)
@@ -103,7 +104,7 @@ class Program(object):
             (send.receiver_block.tag_id, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
-        for method in self.builtin_methods:
+        for method in self.builtins.methods:
             if method.tag_name not in self.ids.tags:
                 raise OmeError("Unknown tag name '{}' in built-in method '{}'".format(method.tag_name, method.symbol))
             method_tag = self.ids.tags[method.tag_name]
@@ -120,7 +121,7 @@ class Program(object):
     def build_code_table(self):
         methods = {}
 
-        for method in self.builtin_methods:
+        for method in self.builtins.methods:
             if self.should_include_method(method, self.builtin_block.tag_id):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
