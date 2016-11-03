@@ -22,16 +22,15 @@ def main():
         from . import compiler
         target = compiler.get_target(command_args.target)
         platform = command_args.platform
-        build_options = compiler.BuildOptions(target, platform, verbose=command_args.verbose_backend)
+        build_options = compiler.BuildOptions(target, command_args)
         backend = compiler.get_backend(target, platform, command_args.backend, command_args.backend_command)
         print_verbose('ome: using target {}'.format(target.name))
         print_verbose('ome: using backend {} {}'.format(backend.name, backend.version))
-        for filename in command_args.file:
-            print_verbose('ome: compiling {}'.format(filename))
-            if command_args.print_code:
-                print(compiler.compile_file(filename, target).decode(target.encoding))
-            else:
-                build_options.make_executable(filename, backend)
+        print_verbose('ome: compiling {}'.format(command_args.file))
+        if command_args.print_code:
+            print(compiler.compile_file(command_args.file, target).decode(target.encoding))
+        else:
+            build_options.make_output(command_args.file, backend)
     except OmeError as error:
         error.write_ansi(stderr)
         stderr.reset()

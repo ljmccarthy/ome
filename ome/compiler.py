@@ -257,12 +257,13 @@ class BuildShell(object):
 shell = BuildShell()
 
 class BuildOptions(object):
-    def __init__(self, target, platform, debug=False, link=True, verbose=False):
+    def __init__(self, target, options):
         self.target = target
-        self.platform = platform.lower()
-        self.debug = debug
-        self.link = link
-        self.verbose = verbose
+        self.platform = options.platform.lower()
+        self.debug = options.debug
+        self.link = not options.make_object
+        self.verbose = options.verbose_backend
+        self.output = options.output
         self.include_dirs = []
         self.lib_dirs = []
         self.dynamic_libs = []
@@ -271,15 +272,15 @@ class BuildOptions(object):
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
-        if not debug:
+        if not self.debug:
             self.defines.append(('NDEBUG', ''))
 
-    def make_executable(self, filename, backend):
+    def make_output(self, filename, backend):
         if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:
             raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, self.platform))
-        outfile = backend.executable_name(filename)
         code = compile_file(filename, self.target)
-        backend.make_executable(shell, code, outfile, self)
+        outfile = backend.output_name(filename, self) if self.output is None else self.output
+        backend.make_output(shell, code, outfile, self)
 
 def get_target(target_name):
     target_name = target_name.lower()

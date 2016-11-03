@@ -39,18 +39,14 @@ class CCBuilder(object):
     def __init__(self, command):
         self.command = command
 
-    def executable_name(self, infile):
-        return os.path.splitext(infile)[0]
+    def output_name(self, infile, build_options):
+        outfile = os.path.splitext(infile)[0]
+        if not build_options.link:
+            outfile += '.o'
+        return outfile
 
-    def object_name(self, infile):
-        return os.path.splitext(infile)[0] + '.o'
-
-    def make_executable(self, shell, code, outfile, build_options):
+    def make_output(self, shell, code, outfile, build_options):
         build_args = self.get_build_args(build_options, '-', outfile)
         shell.run([self.command] + build_args, input=code)
-        if not build_options.debug:
+        if not (build_options.debug or build_options.link):
             shell.run('strip', '-R', '.comment', outfile)
-
-    def make_object(self, shell, code, outfile, build_options):
-        build_args = self.get_build_args(build_options, '-', outfile)
-        shell.run([self.command] + build_args, input=code)

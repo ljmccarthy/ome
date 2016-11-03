@@ -11,9 +11,9 @@ class FileBuilder(object):
     def __init__(self, command):
         pass
 
-    def executable_name(self, infile):
+    def output_name(self, infile, build_options):
         return os.path.splitext(infile)[0] + '.c'
 
-    def make_executable(self, shell, code, outfile, build_options):
+    def make_output(self, shell, code, outfile, build_options):
         with open(outfile, 'wb') as f:
             f.write(code)
