@@ -26,9 +26,9 @@ def collect_nodes_of_type(ast, node_type):
     return nodes
 
 class Program(object):
-    def __init__(self, filename, ast, target):
-        self.filename = filename
+    def __init__(self, ast, target, filename=''):
         self.target = target
+        self.filename = filename
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
@@ -207,6 +207,15 @@ class Program(object):
         self.emit_code_definitions(out)
         self.emit_toplevel(out)
 
+    def get_program_text(self):
+        out = io.BytesIO()
+        text_out = io.TextIOWrapper(out, encoding=self.target.encoding, write_through=True)
+        self.emit_program_text(text_out)
+        return out.getvalue()
+
+def parse_string(string, filename='<string>'):
+    return Parser(string, filename).toplevel()
+
 def parse_file(filename):
     try:
         with open(filename) as f:
@@ -217,15 +226,15 @@ def parse_file(filename):
         raise OmeError('utf-8 decoding failed at position {0.start}: {0.reason}'.format(e), filename)
     except Exception as e:
         raise OmeError(str(e), filename)
-    return Parser(source, filename).toplevel()
+    return parse_string(source, filename)
+
+def compile_string(string, target, filename='<string>'):
+    ast = parse_string(string, filename)
+    return Program(ast, target, filename).get_program_text()
 
 def compile_file(filename, target):
     ast = parse_file(filename)
-    program = Program(filename, ast, target)
-    out = io.BytesIO()
-    text_out = io.TextIOWrapper(out, encoding=target.encoding, write_through=True)
-    program.emit_program_text(text_out)
-    return out.getvalue()
+    return Program(ast, target, filename).get_program_text()
 
 def run_shell_command(args, input=None, output=None):
     if len(args) == 1 and isinstance(args[0], (list, tuple)):
@@ -306,7 +315,7 @@ def get_backend(target, platform, backend_name=None, backend_command=None):
                 try:
                     get_backend_version(backend)
                     return backend
-                except Exception:
+                except OmeError:
                     pass
         raise OmeError("could not find a working backend for target '{}' for platform '{}'".format(target.name, platform))
     else:
