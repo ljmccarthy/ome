@@ -102,16 +102,12 @@ class CPreParser(BaseParser):
         refs, code = refparser.parse()
         return BuiltInMethod(tag_name, symbol, argnames, refs, code)
 
-    def parse(self):
+    def parse(self, builtin):
         unparsed = []
-        self.methods = []
-        self.constant_names = []
-        self.opaque_names = []
-        self.pointer_names = []
-        tag_types = {
-            'constant': self.constant_names,
-            'opaque': self.opaque_names,
-            'pointer': self.pointer_names
+        tag_names = {
+            'constant': builtin.constant_names,
+            'opaque': builtin.opaque_names,
+            'pointer': builtin.pointer_names
         }
         for leading, m in self.search_iter(re_command):
             unparsed.append(leading)
@@ -119,10 +115,10 @@ class CPreParser(BaseParser):
             m = self.expect_token(re_name, 'expected type name after #{}'.format(command))
             name = m.group()
             if command == 'method':
-                self.methods.append(self.method(name))
+                builtin.methods.append(self.method(name))
             else:
                 if not self.match(re_space_to_eol):
                     self.error('unexpected tokens after #{} {}'.format(command, name))
-                tag_types[command].append(name)
+                tag_names[command].append(name)
         unparsed.append(self.trailing())
         self.unparsed = remove_empty_lines(''.join(unparsed))

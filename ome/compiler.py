@@ -32,22 +32,20 @@ class Program(object):
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
-        self.builtins = target.get_builtins()
-        self.ids = IdAllocator()
-        self.ids.add_builtins(self.builtins)
+        self.builtin = target.get_builtin()
+        self.ids = IdAllocator(self.builtin)
 
-        self.builtin_block = BuiltInBlock()
+        self.builtin_block = BuiltInBlock(self.builtin.methods)
         self.builtin_block.tag_id = self.ids.tags['BuiltIn']
         self.builtin_block.constant_id = self.ids.constants['BuiltIn']
-        self.builtin_block.add_methods(self.builtins.methods)
 
         ast = Method('', [], ast)
         ast = ast.resolve_free_vars(self.builtin_block)
         ast = ast.resolve_block_refs(self.builtin_block)
         self.toplevel_method = ast
-        self.block_list = collect_nodes_of_type(ast, Block)
         self.send_list = collect_nodes_of_type(ast, Send)
-        self.ids.allocate_ids(self.block_list)
+        self.block_list = collect_nodes_of_type(ast, Block)
+        self.ids.allocate_block_ids(self.block_list)
 
         toplevel_block = ast.expr
         if isinstance(toplevel_block, Sequence):
@@ -104,7 +102,7 @@ class Program(object):
             (send.receiver_block.tag_id, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
-        for method in self.builtins.methods:
+        for method in self.builtin.methods:
             if method.tag_name not in self.ids.tags:
                 raise OmeError("Unknown tag name '{}' in built-in method '{}'".format(method.tag_name, method.symbol))
             method_tag = self.ids.tags[method.tag_name]
@@ -121,11 +119,11 @@ class Program(object):
     def build_code_table(self):
         methods = {}
 
-        for method in self.builtins.methods:
-            if self.should_include_method(method, self.builtin_block.tag_id):
+        for method in self.builtin.methods:
+            method_tag = self.ids.tags[method.tag_name]
+            if self.should_include_method(method, method_tag):
                 if method.symbol not in methods:
                     methods[method.symbol] = []
-                method_tag = self.ids.tags[method.tag_name]
                 methods[method.symbol].append((method_tag, method))
 
         for block in self.block_list:
@@ -143,13 +141,14 @@ class Program(object):
         for name, value in sorted(constants.__dict__.items()):
             if isinstance(value, int):
                 self.target.emit_constant(out, name, value)
-        for name, value in self.ids.tag_list:
-            self.target.emit_constant(out, 'Tag_' + name.replace('-', '_'), value)
+        for name in self.ids.tag_names:
+            self.target.emit_constant(out, 'Tag_' + name.replace('-', '_'), self.ids.tags[name])
         self.target.emit_constant(out, 'Pointer_Tag', self.ids.pointer_tag_id)
-        for name, value in self.ids.constant_list:
-            self.target.emit_constant(out, 'Constant_' + name.replace('-', '_'), value)
+        for name in self.ids.constant_names:
+            self.target.emit_constant(out, 'Constant_' + name.replace('-', '_'), self.ids.constants[name])
         out.write('\n')
-        self.target.emit_constant_declarations(out, self.ids.constant_list)
+        self.target.emit_builtin_header(out, self.builtin)
+        out.write('\n')
 
     def emit_data(self, out):
         self.data_table.emit(out)
@@ -199,7 +198,7 @@ class Program(object):
         code = self.toplevel_method.generate_code(self)
         out.write(code.generate_target_code('OME_toplevel', self.target))
         out.write('\n')
-        self.target.emit_toplevel(out)
+        self.target.emit_builtin_main(out)
 
     def emit_program_text(self, out):
         self.emit_constants(out)

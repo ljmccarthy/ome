@@ -3,6 +3,13 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 */
 
+#constant Stack-Overflow
+#constant Not-Understood
+#constant Type-Error
+#constant Index-Error
+#constant Overflow
+#constant Divide-By-Zero
+
 #method BuiltIn argv
 {
     return OME_tag_pointer(OME_Tag_Array, OME_argv);

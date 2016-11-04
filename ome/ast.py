@@ -404,10 +404,8 @@ class BuiltInBlock(object):
     is_constant = True
     constant_ref = Constant('BuiltIn')
 
-    def __init__(self):
+    def __init__(self, methods):
         self.symbols = {}
-
-    def add_methods(self, methods):
         for method in methods:
             if method.tag_name == 'BuiltIn':
                 self.symbols[method.symbol] = method

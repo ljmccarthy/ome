@@ -1,6 +1,13 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+class BuiltIn(object):
+    def __init__(self):
+        self.methods = []
+        self.constant_names = ['False', 'True', 'Empty', 'BuiltIn']
+        self.opaque_names = ['Constant', 'Small-Integer', 'Small-Decimal']
+        self.pointer_names = ['String', 'Array']
+
 class BuiltInMethod(object):
     def __init__(self, tag_name, symbol, arg_names, sent_messages, code):
         self.tag_name = tag_name
