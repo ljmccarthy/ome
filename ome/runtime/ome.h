@@ -196,6 +196,11 @@ static int OME_is_true(OME_Value value)
     return value._bits == OME_boolean(1)._bits;
 }
 
+static int OME_is_boolean(OME_Value value)
+{
+    return OME_is_false(value) || OME_is_true(value);
+}
+
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
 
 #define OME_ENTER_OR_RETURN(stack_size, retval)\
