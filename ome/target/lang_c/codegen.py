@@ -13,13 +13,16 @@ comment_format = '// {}'
 define_label_format = '{}:'
 indent = '    '
 
-def format_function_defn_with_arg_names(name, argnames):
+def literal_integer(value):
+    return '{}{}'.format(value, '' if -0x80000000 <= value <= 0x7fffffff else 'L')
+
+def format_function_definition_with_arg_names(name, argnames):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value {}'.format(arg) for arg in argnames))
 
-def format_function_defn(name, num_args):
-    return format_function_defn_with_arg_names(name, ('_{}'.format(n) for n in range(num_args)))
+def format_function_definition(name, num_args):
+    return format_function_definition_with_arg_names(name, ('_{}'.format(n) for n in range(num_args)))
 
-def format_function_decl(name, num_args):
+def format_function_declaration(name, num_args):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value' for n in range(num_args)))
 
 def format_dispatch_call(name, num_args):
@@ -42,7 +45,7 @@ class ProcedureCodegen(object):
         self.has_stack = self.stack_size > 0 or any(isinstance(ins, CONCAT) for ins in code.instructions)
 
     def begin(self, name, num_args, instructions):
-        self.emit(format_function_defn(name, num_args))
+        self.emit(format_function_definition(name, num_args))
         self.emit('{')
         self.emit.indent()
         if self.has_stack:
@@ -143,7 +146,7 @@ class DispatchCodegen(object):
         self.emit = emitter
 
     def begin(self, name, num_args):
-        self.emit(format_function_defn(name, num_args))
+        self.emit(format_function_definition(name, num_args))
         self.emit('{')
         self.emit.indent()
 
@@ -212,7 +215,8 @@ class DataTable(object):
 def emit_traceback_table(out, traceback_entries):
     out.write('static const OME_Traceback_Entry OME_traceback_table[] = {\n')
     for tb in traceback_entries:
-        out.write('{{{}, {}, {}, {}, {}, {}}},\n'.format(
+        out.write('{}{{{}, {}, {}, {}, {}, {}}},\n'.format(
+            indent,
             literal_c_string(tb.method_name),
             literal_c_string(tb.stream_name),
             literal_c_string(tb.source_line),
@@ -222,10 +226,10 @@ def emit_traceback_table(out, traceback_entries):
     out.write('}; /* end of OME_traceback_table */\n')
 
 def emit_constant(out, name, value):
-    out.write('#define OME_{} {}\n'.format(name, value))
+    out.write('#define OME_{} {}\n'.format(name, literal_integer(value)))
 
 def emit_function_declaration(out, name, num_args):
-    out.write(format_function_decl(name, num_args))
+    out.write(format_function_declaration(name, num_args))
     out.write(';\n')
 
 def emit_lookup_declaration(out, name, num_args):
@@ -241,4 +245,4 @@ def emit_method_declarations(out, messages, methods):
         emit_lookup_declaration(out, make_lookup_label(symbol), symbol_arity(symbol))
 
 def generate_builtin_method(label, argnames, code):
-    return '{}\n{{{}}}\n'.format(format_function_defn_with_arg_names(label, argnames), code)
+    return '{}\n{{{}}}\n'.format(format_function_definition_with_arg_names(label, argnames), code)
