@@ -262,6 +262,7 @@ class BuildOptions(object):
         self.platform = options.platform.lower()
         self.debug = options.debug
         self.link = not options.make_object
+        self.static = options.static
         self.verbose = options.verbose_backend
         self.output = options.output
         self.include_dirs = []

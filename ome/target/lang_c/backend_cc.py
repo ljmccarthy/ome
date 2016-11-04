@@ -16,6 +16,8 @@ class CCArgsBuilder(object):
             args.append('-v')
         if not build_options.link:
             args.append('-c')
+        if build_options.static:
+            args.append('-static')
         args.extend(self.all)
         args.extend(self.debug if build_options.debug else self.release)
         if build_options.link:
