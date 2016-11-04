@@ -291,9 +291,9 @@ static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
     size_t start_bit = start % nbits;
 
     for (size_t bitmap_index = start / nbits; bitmap_index < heap->bitmap_size; bitmap_index++) {
-        unsigned long bits = heap->bitmap[bitmap_index];
-        for (size_t bit_index = start_bit; bit_index < nbits; bit_index++) {
-            if (bits & (1UL << bit_index)) {
+        unsigned long bits = heap->bitmap[bitmap_index] >> start_bit;
+        for (size_t bit_index = start_bit; bits && bit_index < nbits; bit_index++, bits >>= 1) {
+            if (bits & 1UL) {
                 return bitmap_index * nbits + bit_index;
             }
         }
@@ -518,6 +518,7 @@ static int OME_thread_main(void)
     printf("- compacting: %lu\n", context.heap.compact_time);
     printf("mutator time: %lu\n", time - gc_time);
     printf("total time:   %lu\n", time);
+    printf("gc overhead:  %lu%%\n", gc_time * 100 / time);
 #endif
 
     return OME_is_error(value) ? 1 : 0;
