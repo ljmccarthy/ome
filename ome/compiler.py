@@ -25,6 +25,23 @@ def collect_nodes_of_type(ast, node_type):
     ast.walk(append_block)
     return nodes
 
+def make_send_traceback_info(send, index):
+    ps = send.parse_state
+    line_unstripped = ps.current_line.rstrip()
+    line = line_unstripped.lstrip()
+    column = ps.column - (len(line_unstripped) - len(line))
+    underline = send.symbol.find(':') + 1
+    if underline < 1:
+        underline = max(len(send.symbol), 1)
+    return TraceBackInfo(
+        index = index,
+        method_name = send.method.symbol,
+        stream_name = ps.stream_name,
+        source_line = line,
+        line_number = ps.line_number,
+        column = column,
+        underline = underline)
+
 class Program(object):
     def __init__(self, ast, target, filename=''):
         self.target = target
@@ -76,20 +93,7 @@ class Program(object):
                 if key in self.traceback_table:
                     tbinfo = self.traceback_table[key]
                 else:
-                    line_unstripped = ps.current_line.rstrip()
-                    line = line_unstripped.lstrip()
-                    column = ps.column - (len(line_unstripped) - len(line))
-                    underline = send.symbol.find(':') + 1
-                    if underline < 1:
-                        underline = max(len(send.symbol), 1)
-                    tbinfo = TraceBackInfo(
-                        index = len(self.traceback_table),
-                        method_name = send.method.symbol,
-                        stream_name = ps.stream_name,
-                        source_line = line,
-                        line_number = ps.line_number,
-                        column = column,
-                        underline = underline)
+                    tbinfo = make_send_traceback_info(send, len(self.traceback_table))
                     self.traceback_table[key] = tbinfo
                 send.traceback_info = tbinfo
 
