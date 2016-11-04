@@ -5,7 +5,7 @@ import platform
 from argparse import ArgumentParser
 
 argparser = ArgumentParser('ome', add_help=False)
-argparser.add_argument('file', nargs='?')
+argparser.add_argument('file', nargs='*')
 argparser.add_argument('--version', action='store_true')
 argparser.add_argument('--verbose', '-v', action='store_true')
 argparser.add_argument('--verbose-backend', action='store_true')
@@ -22,3 +22,7 @@ argparser.add_argument('--print-code', action='store_true')
 argparser.add_argument('--output', '-o', action='store', default=None)
 
 command_args = argparser.parse_args()
+
+def print_verbose(*args, **kwargs):
+    if command_args.verbose:
+        print(*args, **kwargs)
