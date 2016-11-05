@@ -2,7 +2,7 @@ import sys
 import os
 
 ansi_colour_list = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
-ansi_colour_code = dict((name, str(code)) for code, name in enumerate(ansi_colour_list, 30))
+ansi_colour_code = dict((name, '{}m'.format(code)) for code, name in enumerate(ansi_colour_list, 30))
 
 def is_ansi_terminal(file):
     return ((sys.platform != 'win32' or 'ANSICON' in os.environ)
@@ -27,7 +27,7 @@ class MaybeAnsiTerminal(object):
         self.write_ansi_code('1m')
 
     def colour(self, name):
-        self.write_ansi_code(ansi_colour_code[name] + 'm')
+        self.write_ansi_code(ansi_colour_code[name])
 
 stdout = MaybeAnsiTerminal(sys.stdout)
 stderr = MaybeAnsiTerminal(sys.stderr)
