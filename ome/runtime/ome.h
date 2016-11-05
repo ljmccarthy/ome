@@ -35,10 +35,14 @@ union OME_Value {
 struct OME_Traceback_Entry {
     const char *method_name;
     const char *stream_name;
+#ifndef OME_NO_SOURCE_TRACEBACK
     const char *source_line;
+#endif
     uint32_t line_number;
+#ifndef OME_NO_SOURCE_TRACEBACK
     uint32_t column;
     uint32_t underline;
+#endif
 };
 
 union OME_Header {

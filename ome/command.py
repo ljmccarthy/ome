@@ -18,6 +18,8 @@ argparser.add_argument('--static', action='store_true')
 argparser.add_argument('--debug', '-g', action='store_true')
 argparser.add_argument('--debug-gc', action='store_true')
 argparser.add_argument('--gc-stats', action='store_true')
+argparser.add_argument('--no-traceback', action='store_true')
+argparser.add_argument('--no-source-traceback', action='store_true')
 argparser.add_argument('--print-code', action='store_true')
 argparser.add_argument('--output', '-o', action='store', default=None)
 

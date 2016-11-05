@@ -28,22 +28,27 @@ static void OME_print_value(FILE *out, OME_Value value)
 
 static void OME_append_traceback(uint32_t entry)
 {
+#ifndef OME_NO_TRACEBACK
     uint32_t *traceback = &OME_context->traceback[-1];
     if ((void *) traceback >= (void *) OME_context->stack_pointer) {
         *traceback = entry;
         OME_context->traceback = traceback;
     }
+#endif
 }
 
 static void OME_reset_traceback(void)
 {
+#ifndef OME_NO_TRACEBACK
     size_t size = (char *) OME_context->stack_limit - (char *) OME_context->traceback;
     memset(OME_context->traceback, 0, size);
     OME_context->traceback = (uint32_t *) OME_context->stack_limit;
+#endif
 }
 
 static void OME_print_traceback(FILE *out, OME_Value error)
 {
+#ifndef OME_NO_TRACEBACK
     uint32_t *cur = OME_context->traceback;
     uint32_t *end = (uint32_t *) OME_context->stack_limit;
 
@@ -52,8 +57,9 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     }
     for (; cur < end; cur++) {
         OME_Traceback_Entry const *tb = &OME_traceback_table[*cur];
-        fprintf(out, "  File \"%s\", line %d, in |%s|\n    %s\n    ",
-                tb->stream_name, tb->line_number, tb->method_name, tb->source_line);
+        fprintf(out, "  File \"%s\", line %d, in |%s|\n", tb->stream_name, tb->line_number, tb->method_name);
+#ifndef OME_NO_SOURCE_TRACEBACK
+        fprintf(out, "    %s\n    ", tb->source_line);
         for (uint32_t i = 0; i < tb->column; i++) {
             fputc(' ', out);
         }
@@ -61,7 +67,9 @@ static void OME_print_traceback(FILE *out, OME_Value error)
             fputc('^', out);
         }
         fputc('\n', out);
+#endif // OME_NO_SOURCE_TRACEBACK
     }
+#endif // OME_NO_TRACEBACK
     fputs("Error: ", out);
     OME_print_value(out, OME_strip_error(error));
     fputc('\n', out);

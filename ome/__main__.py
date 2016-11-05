@@ -19,7 +19,7 @@ def main():
 
         from . import compiler
         target = compiler.get_target(command_args.target)
-        build_options = compiler.BuildOptions(target, command_args)
+        options = compiler.BuildOptions(target, command_args)
         backend = compiler.get_backend(target, command_args.platform, command_args.backend, command_args.backend_command)
 
         print_verbose('ome: using target {}'.format(target.name))
@@ -33,9 +33,9 @@ def main():
         filename = command_args.file[0]
         print_verbose('ome: compiling {}'.format(filename))
         if command_args.print_code:
-            print(compiler.compile_file(filename, target).decode(target.encoding))
+            print(compiler.compile_file(filename, target, options).decode(target.encoding))
         else:
-            build_options.make_output(filename, backend)
+            options.make_output(filename, backend)
     except OmeError as error:
         error.write_ansi(stderr)
         stderr.reset()

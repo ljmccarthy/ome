@@ -212,17 +212,24 @@ class DataTable(object):
         for string, index in sorted(self.strings.items(), key=lambda x: x[1]):
             out.write('OME_STATIC_STRING(OME_static_string_{}, {});\n'.format(index, literal_c_string(string)))
 
-def emit_traceback_table(out, traceback_entries):
+def emit_traceback_table(out, traceback_entries, include_source=True):
     out.write('static const OME_Traceback_Entry OME_traceback_table[] = {\n')
     for tb in traceback_entries:
-        out.write('{}{{{}, {}, {}, {}, {}, {}}},\n'.format(
-            indent,
-            literal_c_string(tb.method_name),
-            literal_c_string(tb.stream_name),
-            literal_c_string(tb.source_line),
-            tb.line_number,
-            tb.column,
-            tb.underline))
+        if include_source:
+            out.write('{}{{{}, {}, {}, {}, {}, {}}},\n'.format(
+                indent,
+                literal_c_string(tb.method_name),
+                literal_c_string(tb.stream_name),
+                literal_c_string(tb.source_line),
+                tb.line_number,
+                tb.column,
+                tb.underline))
+        else:
+            out.write('{}{{{}, {}, {}}},\n'.format(
+                indent,
+                literal_c_string(tb.method_name),
+                literal_c_string(tb.stream_name),
+                tb.line_number))
     out.write('}; /* end of OME_traceback_table */\n')
 
 def emit_constant(out, name, value):

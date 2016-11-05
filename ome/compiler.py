@@ -42,10 +42,18 @@ def make_send_traceback_info(send, index):
         column = column,
         underline = underline)
 
+class CompileOptions(object):
+    def __init__(self):
+        self.traceback = True
+        self.source_traceback = True
+
+default_compile_options = CompileOptions()
+
 class Program(object):
-    def __init__(self, ast, target, filename=''):
+    def __init__(self, ast, target, filename='', options=default_compile_options):
         self.target = target
         self.filename = filename
+        self.options = options
         self.code_table = []  # list of (symbol, [list of (tag, method)])
         self.data_table = target.DataTable()
         self.traceback_table = {}
@@ -70,7 +78,9 @@ class Program(object):
         if 'main' not in toplevel_block.symbols:
             self.error('no main method defined')
 
-        self.compile_traceback_info()
+        if self.options.traceback:
+            self.compile_traceback_info()
+
         self.find_used_methods()
         self.build_code_table()
 
@@ -157,9 +167,10 @@ class Program(object):
     def emit_data(self, out):
         self.data_table.emit(out)
         out.write('\n')
-        traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
-        self.target.emit_traceback_table(out, traceback_entries)
-        out.write('\n')
+        if self.options.traceback:
+            traceback_entries = sorted(self.traceback_table.values(), key=lambda tb: tb.index)
+            self.target.emit_traceback_table(out, traceback_entries, self.options.source_traceback)
+            out.write('\n')
 
     def emit_code_declarations(self, out):
         methods_set = set()
@@ -232,13 +243,13 @@ def parse_file(filename):
         raise OmeError(str(e), filename)
     return parse_string(source, filename)
 
-def compile_string(string, target, filename='<string>'):
+def compile_string(string, target, filename='<string>', options=default_compile_options):
     ast = parse_string(string, filename)
-    return Program(ast, target, filename).get_program_text()
+    return Program(ast, target, filename, options).get_program_text()
 
-def compile_file(filename, target):
+def compile_file(filename, target, options=default_compile_options):
     ast = parse_file(filename)
-    return Program(ast, target, filename).get_program_text()
+    return Program(ast, target, filename, options).get_program_text()
 
 def run_shell_command(args, input=None, output=None):
     if len(args) == 1 and isinstance(args[0], (list, tuple)):
@@ -260,7 +271,7 @@ class BuildShell(object):
 
 shell = BuildShell()
 
-class BuildOptions(object):
+class BuildOptions(CompileOptions):
     def __init__(self, target, options):
         self.target = target
         self.platform = options.platform.lower()
@@ -269,6 +280,8 @@ class BuildOptions(object):
         self.static = options.static
         self.verbose = options.verbose_backend
         self.output = options.output
+        self.traceback = not options.no_traceback
+        self.source_traceback = not options.no_source_traceback
         self.include_dirs = []
         self.lib_dirs = []
         self.dynamic_libs = []
@@ -283,11 +296,15 @@ class BuildOptions(object):
             self.defines.append(('OME_GC_DEBUG', ''))
         if options.gc_stats:
             self.defines.append(('OME_GC_STATS', ''))
+        if options.no_traceback:
+            self.defines.append(('OME_NO_TRACEBACK', ''))
+        if options.no_source_traceback:
+            self.defines.append(('OME_NO_SOURCE_TRACEBACK', ''))
 
     def make_output(self, filename, backend):
         if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:
             raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, self.platform))
-        code = compile_file(filename, self.target)
+        code = compile_file(filename, self.target, self)
         outfile = backend.output_name(filename, self) if self.output is None else self.output
         backend.make_output(shell, code, outfile, self)
 
