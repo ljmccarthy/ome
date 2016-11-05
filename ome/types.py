@@ -31,3 +31,8 @@ class TraceBackInfo(object):
         self.line_number = line_number
         self.column = column
         self.underline = underline
+
+class CompileOptions(object):
+    def __init__(self):
+        self.traceback = True
+        self.source_traceback = True

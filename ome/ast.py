@@ -1,8 +1,8 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
-from .builder import MethodCodeBuilder
 from .constants import *
+from .emit import MethodCodeBuilder
 from .error import OmeError
 from .instructions import *
 from .labels import *
