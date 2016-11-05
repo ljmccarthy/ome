@@ -2,6 +2,18 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import os
+from ...error import OmeError
+
+def find_musl_path(path):
+    if path:
+        return path
+    path = os.environ.get('MUSL_PATH')
+    if path:
+        return path
+    for path in ['/usr/local/lib/musl', '/usr/lib/musl']:
+        if os.path.isdir(path):
+            return path
+    raise OmeError('could not find musl path, please specify with --musl-path')
 
 class CCArgsBuilder(object):
     all = []
@@ -10,8 +22,15 @@ class CCArgsBuilder(object):
     release_link = []
     debug_link = []
 
+    def get_musl_args(self, built_options, musl_path):
+        raise OmeError("musl is not supported for this backend")
+
     def __call__(self, build_options, infile, outfile):
         args = []
+        tail_args = []
+        if build_options.use_musl:
+            musl_path = find_musl_path(build_options.musl_path)
+            args, tail_args = self.get_musl_args(build_options, musl_path)
         if build_options.verbose:
             args.append('-v')
         if not build_options.link:
@@ -35,6 +54,7 @@ class CCArgsBuilder(object):
         args.append(infile)
         args.append('-o')
         args.append(outfile)
+        args.extend(tail_args)
         return args
 
 class CCBuilder(object):

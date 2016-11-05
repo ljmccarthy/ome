@@ -252,8 +252,6 @@ def compile_file(filename, target, options=default_compile_options):
     return Program(ast, target, filename, options).get_program_text()
 
 def run_shell_command(args, input=None, output=None):
-    if len(args) == 1 and isinstance(args[0], (list, tuple)):
-        args = args[0]
     process = subprocess.Popen(args,
         stdin = input and subprocess.PIPE,
         stdout = output and subprocess.PIPE)
@@ -262,14 +260,28 @@ def run_shell_command(args, input=None, output=None):
         raise OmeError('command failed with return code {}'.format(process.returncode))
     return outs
 
+def get_args_list(args):
+    if len(args) == 1 and isinstance(args[0], (list, tuple)):
+        args = args[0]
+    return args
+
 class BuildShell(object):
+    def __init__(self, show_commands=False):
+        self.show_commands = show_commands
+
+    def print_command(self, args):
+        if self.show_commands:
+            print(' '.join(args))
+
     def run(self, *args, input=None):
+        args = get_args_list(args)
+        self.print_command(args)
         run_shell_command(args, input)
 
     def run_output(self, *args, input=None):
+        args = get_args_list(args)
+        self.print_command(args)
         return run_shell_command(args, input, True)
-
-shell = BuildShell()
 
 class BuildOptions(CompileOptions):
     def __init__(self, target, options):
@@ -279,9 +291,12 @@ class BuildOptions(CompileOptions):
         self.link = not options.make_object
         self.static = options.static
         self.verbose = options.verbose_backend
+        self.show_commands = options.show_build_commands
         self.output = options.output
         self.traceback = not options.no_traceback
         self.source_traceback = not options.no_source_traceback
+        self.use_musl = options.use_musl
+        self.musl_path = options.musl_path
         self.include_dirs = []
         self.lib_dirs = []
         self.dynamic_libs = []
@@ -306,6 +321,7 @@ class BuildOptions(CompileOptions):
             raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, self.platform))
         code = compile_file(filename, self.target, self)
         outfile = backend.output_name(filename, self) if self.output is None else self.output
+        shell = BuildShell(self.show_commands)
         backend.make_output(shell, code, outfile, self)
 
 def get_target(target_name):
