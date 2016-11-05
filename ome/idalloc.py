@@ -43,6 +43,9 @@ class IdAllocator(object):
                 block.tag_id = constant_id_to_tag_id(constant_id)
                 constant_id += 1
 
+        self.num_tag_ids = tag_id
+        self.num_constant_ids = constant_id
+
         if tag_id > MAX_TAG:
             raise OmeError('exhausted all tag IDs')
         if constant_id > MAX_CONSTANT:

@@ -64,6 +64,9 @@ class Program(object):
         self.block_list = collect_nodes_of_type(ast, Block)
         self.ids.allocate_block_ids(self.block_list)
 
+        self.message('allocated {} tag IDs, {} constant IDs'.format(
+            self.ids.num_tag_ids, self.ids.num_constant_ids))
+
         toplevel_block = ast.expr
         if isinstance(toplevel_block, Sequence):
             toplevel_block = self.toplevel_block.statements[-1]
@@ -75,6 +78,10 @@ class Program(object):
 
         self.find_used_methods()
         self.build_code_table()
+
+    def message(self, message):
+        if self.options.verbose:
+            print('ome:', message)
 
     def error(self, message):
         raise OmeError(message, self.filename)

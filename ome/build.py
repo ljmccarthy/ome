@@ -3,6 +3,7 @@
 
 import re
 import subprocess
+import time
 from .target import target_map
 from .types import CompileOptions
 
@@ -91,7 +92,8 @@ class BuildOptions(CompileOptions):
         self.debug = options.debug
         self.link = not options.make_object
         self.static = options.static
-        self.verbose = options.verbose_backend
+        self.verbose = options.verbose
+        self.verbose_backend = options.verbose_backend
         self.traceback = not options.no_traceback
         self.source_traceback = not options.no_source_traceback
         self.use_musl = options.use_musl

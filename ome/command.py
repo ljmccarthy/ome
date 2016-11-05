@@ -28,6 +28,6 @@ argparser.add_argument('--output', '-o', action='store', default=None)
 
 command_args = argparser.parse_args()
 
-def print_verbose(*args, **kwargs):
+def print_verbose(*args):
     if command_args.verbose:
-        print(*args, **kwargs)
+        print('ome:', *args)

@@ -31,7 +31,7 @@ class CCArgsBuilder(object):
         if build_options.use_musl:
             musl_path = find_musl_path(build_options.musl_path)
             args, tail_args = self.get_musl_args(build_options, musl_path)
-        if build_options.verbose:
+        if build_options.verbose_backend:
             args.append('-v')
         if not build_options.link:
             args.append('-c')

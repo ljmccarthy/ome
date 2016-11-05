@@ -34,5 +34,6 @@ class TraceBackInfo(object):
 
 class CompileOptions(object):
     def __init__(self):
+        self.verbose = False
         self.traceback = True
         self.source_traceback = True
