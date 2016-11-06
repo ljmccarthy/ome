@@ -7,10 +7,25 @@ from .error import OmeError
 from .instructions import *
 from .labels import *
 
-def format_list(xs):
-    return ' ' + ' '.join(str(x) for x in xs) if xs else ''
+def format_sexpr(node, indent_level=0, max_width=80):
+    if not isinstance(node, (list, tuple)):
+        return str(node)
+    if len(node) == 0:
+        return '()'
+    xs = [format_sexpr(x, indent_level, max_width) for x in node]
+    width = indent_level + (len(xs) - 1) + sum(len(x) for x in xs)
+    if width < max_width:
+        return '(' + ' '.join(xs) + ')'
+    else:
+        line_indent = '\n' + ' ' * ((indent_level + 1) * 2)
+        xs = [format_sexpr(x, indent_level + 1, max_width) for x in node]
+        return '(' + line_indent.join(xs) + ')'
 
-class Send(object):
+class ASTNode(object):
+    def __str__(self):
+        return format_sexpr(self.sexpr())
+
+class Send(ASTNode):
     def __init__(self, receiver, symbol, args, parse_state=None):
         self.receiver = receiver
         self.symbol = symbol
@@ -19,9 +34,10 @@ class Send(object):
         self.receiver_block = None
         self.traceback_info = None
 
-    def __str__(self):
-        args = format_list(self.args)
-        return '(send %s %s%s)' % (self.symbol, self.receiver or '<free>', args)
+    def sexpr(self):
+        receiver = self.receiver.sexpr() if self.receiver else '<free>'
+        args = tuple(arg.sexpr() for arg in self.args)
+        return ('send', self.symbol, receiver) + args
 
     def error(self, message):
         if self.parse_state:
@@ -91,6 +107,9 @@ class Concat(Send):
     def __init__(self, args, parse_state=None):
         super(Concat, self).__init__(None, '', args, parse_state)
 
+    def sexpr(self):
+        return ('concat',) + tuple(arg.sexpr() for arg in self.args)
+
     def generate_code(self, code):
         args = [arg.generate_code(code) for arg in self.args]
         dest = code.add_temp()
@@ -109,7 +128,7 @@ class BlockVariable(object):
     def generate_code(self, code):
         return self.init_ref.generate_code(code)
 
-class Block(object):
+class Block(ASTNode):
     def __init__(self, slots, methods):
         self.slots = slots  # list of BlockVariables for instance vars, closure vars and block references
         self.methods = methods
@@ -130,9 +149,13 @@ class Block(object):
                 if var.mutable:
                     self.methods.append(Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, []))))
 
-    def __str__(self):
-        args = ' (' + ' '.join('%s %s' % (var.name, var.init_ref) for var in self.slots) + ')' if self.slots else ''
-        return '(block%s%s)' % (args, format_list(self.methods))
+    def sexpr(self):
+        methods = tuple(method.sexpr() for method in self.methods)
+        slots = tuple(slot.name for slot in self.slots)
+        if slots:
+            return ('block', ('slots',) + slots) + methods
+        else:
+            return ('block',) + methods
 
     @property
     def is_constant(self):
@@ -202,13 +225,13 @@ class Block(object):
                 code.add_instruction(SET_SLOT(dest, index, value))
         return dest
 
-class LocalVariable(object):
+class LocalVariable(ASTNode):
     def __init__(self, name, expr):
         self.name = name
         self.expr = expr
 
-    def __str__(self):
-        return '(let %s %s)' % (self.name, self.expr)
+    def sexpr(self):
+        return ('local', self.name, self.expr.sexpr())
 
     def resolve_free_vars(self, parent):
         self.expr = self.expr.resolve_free_vars(parent)
@@ -229,7 +252,7 @@ class LocalVariable(object):
         code.add_instruction(ALIAS(local, expr))
         return local
 
-class Method(object):
+class Method(ASTNode):
     def __init__(self, symbol, args, expr):
         self.symbol = symbol
         self.locals = []
@@ -241,8 +264,8 @@ class Method(object):
             self.vars[arg] = ref
         self.expr = expr
 
-    def __str__(self):
-        return '(define (%s%s) %s)' % (self.symbol, format_list(self.args), self.expr)
+    def sexpr(self):
+        return ('method', (self.symbol,) + tuple(self.args), self.expr.sexpr())
 
     def add_local(self):
         ref = LocalGet(len(self.locals))
@@ -284,12 +307,12 @@ class Method(object):
         code.add_instruction(RETURN(self.expr.generate_code(code)))
         return code.get_code()
 
-class Sequence(object):
+class Sequence(ASTNode):
     def __init__(self, statements):
         self.statements = statements
 
-    def __str__(self):
-        return '(begin%s)' % format_list(self.statements)
+    def sexpr(self):
+        return ('begin',) + tuple(statement.sexpr() for statement in self.statements)
 
     def add_local(self, name):
         ref = self.method.add_local()
@@ -336,12 +359,12 @@ class Sequence(object):
             statement.generate_code(code)
         return self.statements[-1].generate_code(code)
 
-class Array(object):
+class Array(ASTNode):
     def __init__(self, elems):
         self.elems = elems
 
-    def __str__(self):
-        return '(array%s)' % format_list(self.elems)
+    def sexpr(self):
+        return ('array',) + tuple(elem.sexpr() for elem in self.elems)
 
     def resolve_free_vars(self, parent):
         for i, elem in enumerate(self.elems):
@@ -366,7 +389,7 @@ class Array(object):
             code.add_instruction(SET_ELEM(dest, index, value))
         return dest
 
-class TerminalNode(object):
+class TerminalNode(ASTNode):
     def resolve_free_vars(self, parent):
         return self
 
@@ -380,7 +403,7 @@ class Constant(TerminalNode):
     def __init__(self, constant_name):
         self.constant_name = constant_name
 
-    def __str__(self):
+    def sexpr(self):
         return self.constant_name
 
     def generate_code(self, code):
@@ -392,8 +415,8 @@ class ConstantBlock(TerminalNode):
     def __init__(self, block):
         self.block = block
 
-    def __str__(self):
-        return '<constant-block>'
+    def sexpr(self):
+        return ('constant', self.block.constant_id)
 
     def generate_code(self, code):
         dest = code.add_temp()
@@ -421,7 +444,7 @@ class BuiltInBlock(object):
         pass
 
 class Self(TerminalNode):
-    def __str__(self):
+    def sexpr(self):
         return 'self'
 
     def generate_code(self, code):
@@ -431,20 +454,20 @@ class LocalGet(TerminalNode):
     def __init__(self, index):
         self.local_index = index
 
-    def __str__(self):
-        return '(local-get %d)' % self.local_index
+    def sexpr(self):
+        return ('local-get', self.local_index)
 
     def generate_code(self, code):
         return self.local_index + 1
 
-class SlotGet(object):
+class SlotGet(ASTNode):
     def __init__(self, obj_expr, slot_index, mutable):
         self.obj_expr = obj_expr
         self.slot_index = slot_index
         self.mutable = mutable
 
-    def __str__(self):
-        return '(slot-get %s %d)' % (self.obj_expr, self.slot_index)
+    def sexpr(self):
+        return ('slot-get', self.obj_expr.sexpr(), self.slot_index)
 
     def setter(self, set_expr):
         return SlotSet(self.obj_expr, self.slot_index, set_expr)
@@ -467,14 +490,14 @@ class SlotGet(object):
         code.add_instruction(GET_SLOT(dest, object, self.slot_index))
         return dest
 
-class SlotSet(object):
+class SlotSet(ASTNode):
     def __init__(self, obj_expr, slot_index, set_expr):
         self.obj_expr = obj_expr
         self.slot_index = slot_index
         self.set_expr = set_expr
 
-    def __str__(self):
-        return '(slot-set! %s %d %s)' % (self.obj_expr, self.slot_index, self.set_expr)
+    def sexpr(self):
+        return ('slot-set!', self.obj_expr.sexpr(), self.slot_index, self.set_expr.sexpr())
 
     def resolve_free_vars(self, parent):
         self.obj_expr = self.obj_expr.resolve_free_vars(parent)
@@ -503,8 +526,8 @@ class Number(TerminalNode):
         self.exponent = exponent
         self.parse_state = parse_state
 
-    def __str__(self):
-        return '(number %s%s)' % (self.significand, 'e%s' % self.exponent if self.exponent else '')
+    def sexpr(self):
+        return str(self.significand) + ('e%s' % self.exponent if self.exponent else '')
 
     def encode_value(self, code):
         if self.exponent >= 0:
@@ -529,8 +552,8 @@ class String(TerminalNode):
     def __init__(self, string):
         self.string = string
 
-    def __str__(self):
-        return "(string '" + self.string + "')"
+    def sexpr(self):
+        return repr(self.string)
 
     def generate_code(self, code):
         dest = code.add_temp()
