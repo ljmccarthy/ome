@@ -416,7 +416,10 @@ class ConstantBlock(TerminalNode):
         self.block = block
 
     def sexpr(self):
-        return ('constant', self.block.constant_id)
+        if hasattr(self.block, 'constant_id'):
+            return ('constant', self.block.constant_id)
+        else:
+            return '<constant>'
 
     def generate_code(self, code):
         dest = code.add_temp()

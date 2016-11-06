@@ -25,6 +25,7 @@ argparser.add_argument('--no-traceback', action='store_true')
 argparser.add_argument('--no-source-traceback', action='store_true')
 argparser.add_argument('--print-code', action='store_true')
 argparser.add_argument('--print-ast', action='store_true')
+argparser.add_argument('--print-resolved-ast', action='store_true')
 argparser.add_argument('--output', '-o', action='store', default=None)
 
 command_args = argparser.parse_args()

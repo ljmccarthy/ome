@@ -5,6 +5,7 @@ import sys
 import time
 from . import build
 from . import compiler
+from .ast import BuiltInBlock
 from .command import command_args, print_verbose
 from .error import OmeError
 from .terminal import stderr
@@ -40,6 +41,12 @@ def main():
 
         ast = compiler.parse_file(filename)
         if command_args.print_ast:
+            print(ast)
+            sys.exit()
+        if command_args.print_resolved_ast:
+            builtin_block = BuiltInBlock(target.get_builtin().methods)
+            ast = ast.resolve_free_vars(builtin_block)
+            ast = ast.resolve_block_refs(builtin_block)
             print(ast)
             sys.exit()
 
