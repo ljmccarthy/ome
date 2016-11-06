@@ -19,7 +19,10 @@ def format_sexpr(node, indent_level=0, max_width=80):
     else:
         line_indent = '\n' + ' ' * ((indent_level + 1) * 2)
         xs = [format_sexpr(x, indent_level + 1, max_width) for x in node]
-        return '(' + line_indent.join(xs) + ')'
+        if node[0] in ('method', 'send'):
+            return '(' + node[0] + ' ' + xs[1].lstrip() + line_indent + line_indent.join(xs[2:]) + ')'
+        else:
+            return '(' + line_indent.join(xs) + ')'
 
 class ASTNode(object):
     def __str__(self):
