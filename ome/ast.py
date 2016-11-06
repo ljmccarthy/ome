@@ -262,7 +262,7 @@ class Method(ASTNode):
         self.args = args
         self.vars = {}
         for index, arg in enumerate(args):
-            ref = LocalGet(index)
+            ref = LocalGet(index, arg)
             self.locals.append(ref)
             self.vars[arg] = ref
         self.expr = expr
@@ -270,8 +270,8 @@ class Method(ASTNode):
     def sexpr(self):
         return ('method', (self.symbol,) + tuple(self.args), self.expr.sexpr())
 
-    def add_local(self):
-        ref = LocalGet(len(self.locals))
+    def add_local(self, name):
+        ref = LocalGet(len(self.locals), name)
         self.locals.append(ref)
         return ref
 
@@ -318,7 +318,7 @@ class Sequence(ASTNode):
         return ('begin',) + tuple(statement.sexpr() for statement in self.statements)
 
     def add_local(self, name):
-        ref = self.method.add_local()
+        ref = self.method.add_local(name)
         self.vars[name] = ref
         return ref
 
@@ -457,11 +457,12 @@ class Self(TerminalNode):
         return 0
 
 class LocalGet(TerminalNode):
-    def __init__(self, index):
+    def __init__(self, index, name):
         self.local_index = index
+        self.name = name
 
     def sexpr(self):
-        return ('local-get', self.local_index)
+        return self.name
 
     def generate_code(self, code):
         return self.local_index + 1
