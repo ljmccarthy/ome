@@ -4,8 +4,8 @@
 import sys
 import time
 from . import build
+from . import compiler
 from .command import command_args, print_verbose
-from .compiler import compile_file
 from .error import OmeError
 from .terminal import stderr
 from .version import version
@@ -37,18 +37,25 @@ def main():
         filename = command_args.file[0]
         outfile = command_args.output or backend.output_name(filename, options)
         print_verbose('compiling {}'.format(filename))
-        input = compile_file(filename, target, options)
+
+        ast = compiler.parse_file(filename)
+        if command_args.print_ast:
+            print(ast)
+            sys.exit()
+
+        input = compiler.compile_ast(ast, target, filename, options)
         compile_time = time.time() - compile_start_time
         print_verbose('frontend compilation completed in %.2fs' % compile_time)
 
         if command_args.print_code:
             print(input.decode(target.encoding))
-        else:
-            print_verbose('building output', outfile)
-            build_start_time = time.time()
-            options.make_output(input, outfile, backend)
-            build_time = time.time() - build_start_time
-            print_verbose('backend build completed in %.2fs' % build_time)
+            sys.exit()
+
+        print_verbose('building output', outfile)
+        build_start_time = time.time()
+        options.make_output(input, outfile, backend)
+        build_time = time.time() - build_start_time
+        print_verbose('backend build completed in %.2fs' % build_time)
 
         total_time = time.time() - start_time
         print_verbose('completed in %.2fs' % total_time)

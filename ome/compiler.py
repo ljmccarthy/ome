@@ -235,17 +235,18 @@ def parse_file(filename):
         with open(filename) as f:
             source = f.read()
     except FileNotFoundError:
-        raise OmeError('file does not exist: ' + filename)
+        raise OmeError('file does not exist', filename)
     except UnicodeDecodeError as e:
         raise OmeError('utf-8 decoding failed at position {0.start}: {0.reason}'.format(e), filename)
     except Exception as e:
         raise OmeError(str(e), filename)
     return parse_string(source, filename)
 
-def compile_string(string, target, filename='<string>', options=default_compile_options):
-    ast = parse_string(string, filename)
+def compile_ast(ast, target, filename, options):
     return Program(ast, target, filename, options).get_program_text()
 
+def compile_string(string, target, filename='<string>', options=default_compile_options):
+    return compile_ast(parse_string(string, filename), target, filename, options)
+
 def compile_file(filename, target, options=default_compile_options):
-    ast = parse_file(filename)
-    return Program(ast, target, filename, options).get_program_text()
+    return compile_ast(parse_file(filename), target, filename, options)
