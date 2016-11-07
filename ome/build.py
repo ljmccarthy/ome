@@ -86,6 +86,10 @@ class BuildShell(object):
         self.print_command(args)
         return run_shell_command(args, input, True)
 
+platform_aliases = {
+    'linux': ['posix'],
+}
+
 class BuildOptions(CompileOptions):
     def __init__(self, target, options):
         self.target = target
@@ -108,6 +112,8 @@ class BuildOptions(CompileOptions):
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
+        for platform_alias in platform_aliases.get(self.platform):
+            self.defines.append(('OME_PLATFORM_' + platform_alias.upper(), ''))
         if not options.debug:
             self.defines.append(('NDEBUG', ''))
         if options.debug_gc:
