@@ -5,10 +5,11 @@ import sys
 import time
 from . import build
 from . import compiler
+from . import optimise
 from .ast import BuiltInBlock
 from .command import command_args, print_verbose
-from .labels import make_method_label
 from .error import OmeError
+from .labels import make_method_label
 from .terminal import stderr
 from .version import version
 
@@ -57,7 +58,11 @@ def main():
             for block in sorted(program.block_list, key=lambda block: block.tag_id):
                 for method in sorted(block.methods, key=lambda method: method.symbol):
                     print('{}:'.format(make_method_label(block.tag_id, method.symbol)))
-                    for ins in method.generate_code(program).instructions:
+                    code = method.generate_code(program)
+                    code.instructions = optimise.eliminate_aliases(code.instructions)
+                    code.instructions = optimise.move_constants_to_usage_points(code.instructions, code.num_args)
+                    optimise.renumber_locals(code.instructions, code.num_args)
+                    for ins in code.instructions:
                         print('    ' + str(ins))
             sys.exit()
 
