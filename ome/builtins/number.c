@@ -58,27 +58,40 @@
 
 #method Small-Integer == rhs
 {
-    uintptr_t result = OME_untag_signed(self) == OME_untag_signed(rhs);
-    if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_False;
-    }
-    return OME_boolean(result);
+    return OME_boolean(OME_get_tag(rhs) == OME_Tag_Small_Integer
+                    && OME_untag_signed(self) == OME_untag_signed(rhs));
+}
+
+#method Small-Integer != rhs
+{
+    return OME_boolean(OME_get_tag(rhs) != OME_Tag_Small_Integer
+                    || OME_untag_signed(self) != OME_untag_signed(rhs));
 }
 
 #method Small-Integer < rhs
 {
-    uintptr_t result = OME_untag_signed(self) < OME_untag_signed(rhs);
-    if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
-    }
-    return OME_boolean(result);
+    return OME_get_tag(rhs) == OME_Tag_Small_Integer
+          ? OME_boolean(OME_untag_signed(self) < OME_untag_signed(rhs))
+          : OME_error_constant(OME_Constant_Type_Error);
 }
 
 #method Small-Integer <= rhs
 {
-    uintptr_t result = OME_untag_signed(self) <= OME_untag_signed(rhs);
-    if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
-    }
-    return OME_boolean(result);
+    return OME_get_tag(rhs) == OME_Tag_Small_Integer
+          ? OME_boolean(OME_untag_signed(self) <= OME_untag_signed(rhs))
+          : OME_error_constant(OME_Constant_Type_Error);
+}
+
+#method Small-Integer > rhs
+{
+    return OME_get_tag(rhs) == OME_Tag_Small_Integer
+          ? OME_boolean(OME_untag_signed(self) > OME_untag_signed(rhs))
+          : OME_error_constant(OME_Constant_Type_Error);
+}
+
+#method Small-Integer >= rhs
+{
+    return OME_get_tag(rhs) == OME_Tag_Small_Integer
+          ? OME_boolean(OME_untag_signed(self) >= OME_untag_signed(rhs))
+          : OME_error_constant(OME_Constant_Type_Error);
 }
