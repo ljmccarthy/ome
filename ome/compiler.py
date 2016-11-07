@@ -198,7 +198,7 @@ class Program(object):
                 out.write('\n')
                 dispatchers.add(symbol)
 
-        optional_messages = ['return']
+        optional_messages = ['return', 'catch', 'catch:']
         for symbol in sorted(self.sent_messages):
             if symbol not in dispatchers:
                 if symbol not in optional_messages:
