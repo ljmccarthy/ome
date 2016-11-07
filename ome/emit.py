@@ -88,7 +88,6 @@ class MethodCodeBuilder(object):
         self.num_locals = num_args + num_locals + 1
         self.program = program
         self.instructions = []
-        self.dest = self.add_temp()
 
     def add_temp(self):
         local = self.num_locals
