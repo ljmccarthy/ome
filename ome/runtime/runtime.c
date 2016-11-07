@@ -52,6 +52,12 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     uint32_t *cur = OME_context->traceback;
     uint32_t *end = (uint32_t *) OME_context->stack_limit;
 
+#ifdef OME_PLATFORM_POSIX
+    const int use_ansi = isatty(fileno(out));
+#else
+    const int use_ansi = 0;
+#endif
+
     if (cur < end) {
         fputs("Traceback (most recent call last):\n", out);
     }
@@ -59,13 +65,12 @@ static void OME_print_traceback(FILE *out, OME_Value error)
         OME_Traceback_Entry const *tb = &OME_traceback_table[*cur];
         fprintf(out, "  File \"%s\", line %d, in |%s|\n", tb->stream_name, tb->line_number, tb->method_name);
 #ifndef OME_NO_SOURCE_TRACEBACK
+        if (use_ansi) fputs("\x1b[1m", out);
         fprintf(out, "    %s\n    ", tb->source_line);
-        for (uint32_t i = 0; i < tb->column; i++) {
-            fputc(' ', out);
-        }
-        for (uint32_t i = 0; i < tb->underline; i++) {
-            fputc('^', out);
-        }
+        for (uint32_t i = 0; i < tb->column; i++) fputc(' ', out);
+        if (use_ansi) fputs("\x1b[31m", out);
+        for (uint32_t i = 0; i < tb->underline; i++) fputc('^', out);
+        if (use_ansi) fputs("\x1b[0m", out);
         fputc('\n', out);
 #endif // OME_NO_SOURCE_TRACEBACK
     }
