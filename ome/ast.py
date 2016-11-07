@@ -25,7 +25,7 @@ def format_sexpr(node, indent_level=0, max_width=80):
     else:
         line_indent = '\n' + ' ' * (indent_level + 2)
         xs = [format_sexpr(x, indent_level + 2, max_width) for x in node]
-        if node[0] in ('method', 'send', 'call'):
+        if node[0] in ('method', 'send', 'call', 'local'):
             return ('(' + node[0] + ' ' + format_sexpr_flat(node[1])
                  + line_indent + line_indent.join(xs[2:]) + ')')
         else:
@@ -269,7 +269,7 @@ class Method(ASTNode):
         self.locals = []
         self.args = args
         self.vars = {}
-        for index, arg in enumerate(args):
+        for index, arg in enumerate(args, 1):
             ref = LocalGet(index, arg)
             self.locals.append(ref)
             self.vars[arg] = ref
@@ -279,7 +279,7 @@ class Method(ASTNode):
         return ('method', (self.symbol,) + tuple(self.args), self.expr.sexpr())
 
     def add_local(self, name):
-        ref = LocalGet(len(self.locals), name)
+        ref = LocalGet(len(self.locals) + 1, name)
         self.locals.append(ref)
         return ref
 
@@ -457,13 +457,6 @@ class BuiltInBlock(object):
     def get_block_ref(self, block):
         pass
 
-class Self(TerminalNode):
-    def sexpr(self):
-        return 'self'
-
-    def generate_code(self, code):
-        return 0
-
 class LocalGet(TerminalNode):
     def __init__(self, index, name):
         self.local_index = index
@@ -473,7 +466,7 @@ class LocalGet(TerminalNode):
         return self.name
 
     def generate_code(self, code):
-        return self.local_index + 1
+        return self.local_index
 
 class SlotGet(ASTNode):
     def __init__(self, obj_expr, slot_index, mutable):
@@ -577,7 +570,7 @@ class String(TerminalNode):
         return dest
 
 EmptyBlock = Constant('Empty')
-Self = Self()
+Self = LocalGet(0, 'self')
 
 reserved_names = {
     'self': Self,
