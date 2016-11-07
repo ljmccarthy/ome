@@ -35,7 +35,7 @@
     return OME_tag_signed(OME_Tag_Small_Integer, result);
 }
 
-#method Small-Integer × rhs
+#method Small-Integer * rhs
 {
     __int128_t result = (__int128_t) OME_untag_signed(self) * OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
@@ -74,7 +74,7 @@
     return OME_boolean(result);
 }
 
-#method Small-Integer ≤ rhs
+#method Small-Integer <= rhs
 {
     uintptr_t result = OME_untag_signed(self) <= OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {

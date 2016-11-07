@@ -25,11 +25,11 @@ re_multiplication_operator = re.compile(r'\*|/|×|÷')
 re_end_token = re.compile(r'[|)}\]]')
 
 operator_aliases = {
-    '*' : '×',
-    '/' : '÷',
-    '!=': '≠',
-    '<=': '≤',
-    '>=': '≥',
+    '×' : '*',
+    '÷' : '/',
+    '≠' : '!=',
+    '≤' : '<=',
+    '≥' : '>=',
     '&&': 'then:',
     '||': 'else:',
 }

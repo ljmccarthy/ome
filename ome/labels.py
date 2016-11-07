@@ -8,14 +8,14 @@ re_symbol_part = re.compile(r'([~]?[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)(:,*)?
 operator_labels = {
     '+' : '__ADD',
     '-' : '__SUB',
-    '×' : '__MUL',
-    '÷' : '__DIV',
+    '*' : '__MUL',
+    '/' : '__DIV',
     '==': '__EQ',
-    '≠' : '__NE',
+    '!=': '__NE',
     '<' : '__LT',
-    '≤' : '__LE',
+    '<=': '__LE',
     '>' : '__GT',
-    '≥' : '__GE',
+    '>=': '__GE',
 }
 
 re_hyphen_or_tilde = re.compile(r'[~-]')
