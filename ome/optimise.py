@@ -51,7 +51,7 @@ def renumber_locals(instructions, num_args):
 
     for ins in instructions:
         for i, arg in enumerate(ins.args):
-            ins.args[i] = locals_map.get(arg, arg)
+            ins.args[i] = locals_map[arg]
         if hasattr(ins, 'dest'):
             assert ins.dest not in locals_map
             new_dest = len(locals_map)
