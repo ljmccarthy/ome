@@ -2,7 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 def format_instruction_args(args):
-    return ' ' + ' '.join('%{}'.format(x) for x in args) if args else ''
+    return ', '.join('%{}'.format(x) for x in args)
 
 class Instruction(object):
     args = ()
@@ -26,7 +26,7 @@ class ALLOC(Instruction):
         self.tag = tag
 
     def __str__(self):
-        return '{} = ALLOC size:{} tag:{}'.format(self.dest, self.size, self.tag)
+        return '%{} = ALLOC(size:{}, tag:{})'.format(self.dest, self.size, self.tag)
 
 class ARRAY(Instruction):
     is_leaf = False
@@ -38,7 +38,7 @@ class ARRAY(Instruction):
         self.tag = tag
 
     def __str__(self):
-        return '{} = ARRAY size:{} tag:{}'.format(self.dest, self.size, self.tag)
+        return '%{} = ARRAY(size: {}, tag: {})'.format(self.dest, self.size, self.tag)
 
 class CALL(Instruction):
     is_leaf = False
@@ -53,7 +53,7 @@ class CALL(Instruction):
 
     def __str__(self):
         dest = '%{} = '.format(self.dest) if self.dest else ''
-        return '{}CALL {}{}'.format(dest, self.call_label, format_instruction_args(self.args))
+        return '{}CALL {}({})'.format(dest, self.call_label, format_instruction_args(self.args))
 
 class CONCAT(Instruction):
     is_leaf = False
@@ -65,7 +65,7 @@ class CONCAT(Instruction):
         self.traceback_info = traceback_info
 
     def __str__(self):
-        return '{} = CONCAT{}'.format(self.dest, format_instruction_args(self.args))
+        return '%{} = CONCAT({})'.format(self.dest, format_instruction_args(self.args))
 
 class LOAD_VALUE(Instruction):
     def __init__(self, dest, tag, value):
@@ -74,7 +74,7 @@ class LOAD_VALUE(Instruction):
         self.value = value
 
     def __str__(self):
-        return '%{} = ${}:{}'.format(self.dest, self.tag, self.value)
+        return '%{} = TAG({}, {})'.format(self.dest, self.tag, self.value)
 
 class LOAD_LABEL(Instruction):
     def __init__(self, dest, tag, label):
@@ -83,7 +83,7 @@ class LOAD_LABEL(Instruction):
         self.label = label
 
     def __str__(self):
-        return '%{} = {}:{}'.format(self.dest, self.tag, self.label)
+        return '%{} = TAG({}, {})'.format(self.dest, self.tag, self.label)
 
 class GET_SLOT(Instruction):
     dest_from_heap = True
@@ -94,7 +94,7 @@ class GET_SLOT(Instruction):
         self.slot_index = slot_index
 
     def __str__(self):
-        return '%{} = %{}[{}]'.format(self.dest, self.object, self.slot_index)
+        return '%{} = GETSLOT(%{}, {})'.format(self.dest, self.object, self.slot_index)
 
     @property
     def object(self):
@@ -114,7 +114,7 @@ class SET_SLOT(Instruction):
         return self.args[1]
 
     def __str__(self):
-        return '%{}[{}] := %{}'.format(self.object, self.slot_index, self.value)
+        return 'SETSLOT(%{}, {}, %{})'.format(self.object, self.slot_index, self.value)
 
 class SET_ELEM(Instruction):
     def __init__(self, array, elem_index, value):
@@ -130,7 +130,7 @@ class SET_ELEM(Instruction):
         return self.args[1]
 
     def __str__(self):
-        return '%{}[{}] := %{}'.format(self.array, self.elem_index, self.value)
+        return 'SETELEM(%{}, {}, %{})'.format(self.array, self.elem_index, self.value)
 
 class RETURN(Instruction):
     def __init__(self, source):
@@ -141,7 +141,7 @@ class RETURN(Instruction):
         return self.args[0]
 
     def __str__(self):
-        return 'RETURN' + format_instruction_args(self.args)
+        return 'RETURN %{}'.format(self.source)
 
 class ALIAS(Instruction):
     def __init__(self, dest, source):

@@ -7,6 +7,7 @@ from . import build
 from . import compiler
 from .ast import BuiltInBlock
 from .command import command_args, print_verbose
+from .labels import make_method_label
 from .error import OmeError
 from .terminal import stderr
 from .version import version
@@ -43,6 +44,7 @@ def main():
         if command_args.print_ast:
             print(ast)
             sys.exit()
+
         if command_args.print_resolved_ast:
             builtin_block = BuiltInBlock(target.get_builtin().methods)
             ast = ast.resolve_free_vars(builtin_block)
@@ -50,11 +52,20 @@ def main():
             print(ast)
             sys.exit()
 
+        if command_args.print_intermediate_code:
+            program = compiler.Program(ast, target, filename, options)
+            for block in sorted(program.block_list, key=lambda block: block.tag_id):
+                for method in sorted(block.methods, key=lambda method: method.symbol):
+                    print('{}:'.format(make_method_label(block.tag_id, method.symbol)))
+                    for ins in method.generate_code(program).instructions:
+                        print('    ' + str(ins))
+            sys.exit()
+
         input = compiler.compile_ast(ast, target, filename, options)
         compile_time = time.time() - compile_start_time
         print_verbose('frontend compilation completed in %.2fs' % compile_time)
 
-        if command_args.print_code:
+        if command_args.print_target_code:
             print(input.decode(target.encoding))
             sys.exit()
 
