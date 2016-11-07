@@ -7,6 +7,12 @@ from .error import OmeError
 from .instructions import *
 from .labels import *
 
+def format_sexpr_flat(node):
+    if not isinstance(node, (list, tuple)):
+        return str(node)
+    else:
+        return '(' + ' '.join(format_sexpr_flat(x) for x in node) + ')'
+
 def format_sexpr(node, indent_level=0, max_width=80):
     if not isinstance(node, (list, tuple)):
         return str(node)
@@ -19,8 +25,9 @@ def format_sexpr(node, indent_level=0, max_width=80):
     else:
         line_indent = '\n' + ' ' * (indent_level + 2)
         xs = [format_sexpr(x, indent_level + 2, max_width) for x in node]
-        if node[0] in ('method', 'send'):
-            return '(' + node[0] + ' ' + xs[1].lstrip() + line_indent + line_indent.join(xs[2:]) + ')'
+        if node[0] in ('method', 'send', 'call'):
+            return ('(' + node[0] + ' ' + format_sexpr_flat(node[1])
+                 + line_indent + line_indent.join(xs[2:]) + ')')
         else:
             return '(' + line_indent.join(xs) + ')'
 
@@ -38,9 +45,10 @@ class Send(ASTNode):
         self.traceback_info = None
 
     def sexpr(self):
+        call = 'call' if self.receiver_block else 'send'
         receiver = self.receiver.sexpr() if self.receiver else '<free>'
         args = tuple(arg.sexpr() for arg in self.args)
-        return ('send', self.symbol, receiver) + args
+        return (call, self.symbol, receiver) + args
 
     def error(self, message):
         if self.parse_state:

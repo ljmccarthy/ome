@@ -1,62 +1,62 @@
 0
-(number 0)
+0
 
 123
-(number 123)
+123
 
 0123
-(number 123)
+123
 
 0000123
-(number 123)
+123
 
 123000
-(number 123e3)
+123e3
 
 123000e-3
-(number 123)
+123
 
 -0
-(number 0)
+0
 
 -1
-(number -1)
+-1
 
 -01
-(number -1)
+-1
 
 -123
-(number -123)
+-123
 
 1.2
-(number 12e-1)
+12e-1
 
 0.12
-(number 12e-2)
+12e-2
 
 0.000012
-(number 12e-6)
+12e-6
 
 0e0
-(number 0)
+0
 
 1e0
-(number 1)
+1
 
 1e0001
-(number 1e1)
+1e1
 
 1e-1
-(number 1e-1)
+1e-1
 
 1e+1
-(number 1e1)
+1e1
 
 123e-456
-(number 123e-456)
+123e-456
 
 0.0000123e-003
-(number 123e-10)
+123e-10
 
 0.0000123e+7
-(number 123)
+123

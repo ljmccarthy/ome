@@ -4,6 +4,7 @@ import os
 tests_dir = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(tests_dir, '..')))
 
+from ome.ast import format_sexpr_flat
 from ome.parser import Parser
 from ome.terminal import stderr
 
@@ -37,7 +38,7 @@ def run_tests(filename, test_func):
             fail(filename, n*3 + 1, input, expected, actual)
 
 def test_parse_expr(input, expected):
-    return str(Parser(input, '').expr())
+    return format_sexpr_flat(Parser(input, '').expr().sexpr())
 
 def run_all_tests():
     run_tests('parse_expr.txt', test_parse_expr)

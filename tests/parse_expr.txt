@@ -53,16 +53,16 @@ a + (b c)
 (send c (send + (send a <free>) (send b <free>)))
 
 a + b * c
-(send + (send a <free>) (send × (send b <free>) (send c <free>)))
+(send + (send a <free>) (send * (send b <free>) (send c <free>)))
 
 a + (b * c)
-(send + (send a <free>) (send × (send b <free>) (send c <free>)))
+(send + (send a <free>) (send * (send b <free>) (send c <free>)))
 
 (a + b) * c
-(send × (send + (send a <free>) (send b <free>)) (send c <free>))
+(send * (send + (send a <free>) (send b <free>)) (send c <free>))
 
 a * b + c * d
-(send + (send × (send a <free>) (send b <free>)) (send × (send c <free>) (send d <free>)))
+(send + (send * (send a <free>) (send b <free>)) (send * (send c <free>) (send d <free>)))
 
 a b + c d
 (send + (send b (send a <free>)) (send d (send c <free>)))
