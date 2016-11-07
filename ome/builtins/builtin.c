@@ -10,15 +10,43 @@
 #constant Overflow
 #constant Divide-By-Zero
 
-#method BuiltIn argv
+#method BuiltIn error: value
 {
-    return OME_tag_pointer(OME_Tag_Array, OME_argv);
+    OME_reset_traceback();
+    return OME_error(value);
 }
 
-#method BuiltIn print: value
+#method BuiltIn catch: block
 {
-    OME_print_value(stdout, value);
-    return OME_Empty;
+    OME_Value result = @message("do")(block);
+    OME_reset_traceback();
+    return OME_strip_error(result);
+}
+
+#method BuiltIn try: block
+{
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, block);
+    OME_Method_0 catch0_method = NULL;
+    OME_Method_1 catch1_method = @lookup("catch:")(block);
+    if (!catch1_method) {
+        catch0_method = @lookup("catch")(block);
+        if (!catch0_method) {
+            OME_ERROR(Not_Understood);
+        }
+    }
+    OME_Value result = @message("do")(block);
+    if (OME_is_error(result)) {
+        OME_reset_traceback();
+        OME_LOAD_LOCAL(0, block);
+        if (catch1_method) {
+            OME_RETURN(catch1_method(block, OME_strip_error(result)));
+        }
+        else {
+            OME_RETURN(catch0_method(block));
+        }
+    }
+    OME_RETURN(result);
 }
 
 #method BuiltIn for: block
@@ -47,4 +75,22 @@
         OME_RETURN_ERROR(do_method(block));
         OME_SAVE_LOCAL(0, block);
     }
+}
+
+#method BuiltIn argv
+{
+    return OME_tag_pointer(OME_Tag_Array, OME_argv);
+}
+
+#method BuiltIn print: value
+{
+    OME_print_value(stdout, value);
+    return OME_Empty;
+}
+
+#method BuiltIn print-line: value
+{
+    OME_print_value(stdout, value);
+    fputc('\n', stdout);
+    return OME_Empty;
 }
