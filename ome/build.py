@@ -4,6 +4,7 @@
 import re
 import subprocess
 import time
+from .error import OmeError
 from .target import target_map
 from .types import CompileOptions
 
