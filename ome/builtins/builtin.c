@@ -23,8 +23,8 @@
 
 #method BuiltIn for: block
 {
-    OME_ENTER(1);
-    stack[0] = block;
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, block);
     OME_Method_0 while_method = @lookup("while")(block);
     OME_Method_0 do_method = @lookup("do")(block);
     if (!while_method || !do_method) {
@@ -33,7 +33,7 @@
     while (1) {
         OME_Value cond = while_method(block);
         OME_RETURN_ERROR(cond);
-        block = stack[0];
+        OME_LOAD_LOCAL(0, block);
         if (OME_is_false(cond)) {
             OME_Method_0 return_method = @lookup("return")(block);
             if (return_method) {
@@ -45,6 +45,6 @@
             OME_ERROR(Type_Error);
         }
         OME_RETURN_ERROR(do_method(block));
-        block = stack[0];
+        OME_SAVE_LOCAL(0, block);
     }
 }

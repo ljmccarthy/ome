@@ -64,7 +64,14 @@ struct OME_Heap_Relocation {
 struct OME_Heap {
     char *pointer;
     char *base;
-    char *limit;
+    union {
+        char *limit;
+        OME_Value *big_objects;
+    };
+    union {
+        char *end;
+        OME_Value *big_objects_end;
+    };
     OME_Heap_Relocation *relocs;
     unsigned long *bitmap;
     size_t size;
@@ -215,21 +222,29 @@ static int OME_is_boolean(OME_Value value)
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
 
 #define OME_ENTER_OR_RETURN(stack_size, retval)\
-    OME_Value * const _OME_stack = OME_context->stack_pointer;\
-    OME_Value * const stack = _OME_stack;\
+    OME_Value * const _OME_local_stack = OME_context->stack_pointer;\
     do {\
-        OME_Value * const _stack_next = &_OME_stack[(stack_size)+1];\
+        OME_Value * const _stack_next = &_OME_local_stack[(stack_size)+1];\
         if (_stack_next >= OME_context->stack_limit) {\
             return (retval);\
         }\
         OME_context->stack_pointer = _stack_next;\
     } while (0)
 
-#define OME_ENTER(stack_size)\
+#define OME_LOCALS(stack_size)\
     OME_ENTER_OR_RETURN(stack_size, OME_error_constant(OME_Constant_Stack_Overflow))
 
+#define OME_SAVE_LOCAL(stack_slot, name)\
+    do { _OME_local_stack[stack_slot] = name; } while (0)
+
+#define OME_FORGET_LOCAL(stack_slot)\
+    do { _OME_local_stack[stack_slot] = OME_boolean(0); } while (0)
+
+#define OME_LOAD_LOCAL(stack_slot, name)\
+    do { name = _OME_local_stack[stack_slot]; } while (0)
+
 #define OME_RETURN(retval)\
-    do { OME_context->stack_pointer = _OME_stack; return (retval); } while (0)
+    do { OME_context->stack_pointer = _OME_local_stack; return (retval); } while (0)
 
 #define OME_ERROR(error)\
     OME_RETURN(OME_error_constant(OME_Constant_##error))

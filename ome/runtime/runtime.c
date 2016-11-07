@@ -90,8 +90,9 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     size_t metadata_size = OME_heap_align(relocs_size * sizeof(OME_Heap_Relocation) + bitmap_size * sizeof(unsigned long));
     heap->base = heap_base;
     heap->pointer = heap_base;
-    heap->limit = heap_base + size - metadata_size;
-    heap->relocs = (OME_Heap_Relocation *) heap->limit;
+    heap->end = heap_base + size - metadata_size;
+    heap->limit = heap->end;
+    heap->relocs = (OME_Heap_Relocation *) heap->end;
     heap->bitmap = (unsigned long *) (heap->relocs + relocs_size);
     heap->size = size;
     heap->relocs_size = relocs_size;
