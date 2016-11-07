@@ -78,9 +78,15 @@ struct OME_Heap {
 
 struct OME_Context {
     OME_Value *stack_pointer;
-    OME_Value *stack_limit;
+    union {
+        OME_Value *stack_limit;
+        uint32_t *traceback;
+    };
     OME_Value *stack_base;
-    uint32_t *traceback;
+    union {
+        OME_Value *stack_end;
+        uint32_t *traceback_end;
+    };
     OME_Heap heap;
 };
 
@@ -212,7 +218,7 @@ static int OME_is_boolean(OME_Value value)
     OME_Value * const _OME_stack = OME_context->stack_pointer;\
     OME_Value * const stack = _OME_stack;\
     do {\
-        OME_Value * const _stack_next = &_OME_stack[stack_size];\
+        OME_Value * const _stack_next = &_OME_stack[(stack_size)+1];\
         if (_stack_next >= OME_context->stack_limit) {\
             return (retval);\
         }\

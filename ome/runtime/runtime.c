@@ -40,9 +40,9 @@ static void OME_append_traceback(uint32_t entry)
 static void OME_reset_traceback(void)
 {
 #ifndef OME_NO_TRACEBACK
-    size_t size = (char *) OME_context->stack_limit - (char *) OME_context->traceback;
+    size_t size = OME_context->stack_end - OME_context->stack_limit;
     memset(OME_context->traceback, 0, size);
-    OME_context->traceback = (uint32_t *) OME_context->stack_limit;
+    OME_context->traceback = OME_context->traceback_end;
 #endif
 }
 
@@ -50,7 +50,7 @@ static void OME_print_traceback(FILE *out, OME_Value error)
 {
 #ifndef OME_NO_TRACEBACK
     uint32_t *cur = OME_context->traceback;
-    uint32_t *end = (uint32_t *) OME_context->stack_limit;
+    uint32_t *end = OME_context->traceback_end;
 
 #ifdef OME_PLATFORM_POSIX
     const int use_ansi = isatty(fileno(out));
@@ -508,7 +508,7 @@ static int OME_thread_main(void)
         .stack_pointer = stack,
         .stack_limit = stack + OME_STACK_SIZE,
         .stack_base = stack,
-        .traceback = (uint32_t *) (stack + OME_STACK_SIZE),
+        .stack_end = stack + OME_STACK_SIZE,
     };
 
     OME_initialize_heap(&context.heap);

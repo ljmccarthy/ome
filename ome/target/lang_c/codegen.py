@@ -51,7 +51,7 @@ class ProcedureCodegen(object):
         if self.has_stack:
             self.emit('OME_Value * const _stack = OME_context->stack_pointer;')
             if self.stack_size > 0:
-                self.emit('if (&_stack[{}] >= (OME_Value *) OME_context->traceback - 1) {{'.format(self.stack_size))
+                self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(self.stack_size + 1))
                 with self.emit.indented():
                     self.emit('return OME_error_constant(OME_Constant_Stack_Overflow);')
                 self.emit('}')
@@ -114,7 +114,7 @@ class ProcedureCodegen(object):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
         stack_size = self.stack_size + len(ins.args)
-        self.emit('if (&_stack[{}] >= (OME_Value *) OME_context->traceback - 1) {{'.format(stack_size))
+        self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(stack_size + 1))
         with self.emit.indented():
             self.emit_return('OME_error_constant(OME_Constant_Stack_Overflow)')
         self.emit('}')
