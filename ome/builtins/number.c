@@ -1,6 +1,6 @@
 /*
     ome - Object Message Expressions
-    Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+    Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 */
 
 #method Small-Integer string
@@ -20,7 +20,7 @@
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
         return OME_error_constant(OME_Constant_Overflow);
     }
-    return OME_tag_signed(OME_Tag_Small_Integer, result);
+    return OME_tag_integer(result);
 }
 
 #method Small-Integer - rhs
@@ -32,7 +32,7 @@
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
         return OME_error_constant(OME_Constant_Overflow);
     }
-    return OME_tag_signed(OME_Tag_Small_Integer, result);
+    return OME_tag_integer(result);
 }
 
 #method Small-Integer * rhs
@@ -44,7 +44,7 @@
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
         return OME_error_constant(OME_Constant_Overflow);
     }
-    return OME_tag_signed(OME_Tag_Small_Integer, (intptr_t) result);
+    return OME_tag_integer(result);
 }
 
 #method Small-Integer mod: rhs
@@ -53,7 +53,7 @@
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
         return OME_error_constant(OME_Constant_Type_Error);
     }
-    return OME_tag_signed(OME_Tag_Small_Integer, result);
+    return OME_tag_integer(result);
 }
 
 #method Small-Integer == rhs

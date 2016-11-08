@@ -1,25 +1,25 @@
 /*
     ome - Object Message Expressions
-    Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
+    Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 */
 
 #method Array size
 {
     OME_Array *array = OME_untag_pointer(self);
-    return OME_tag_signed(OME_Tag_Small_Integer, array->size);
+    return OME_tag_integer(array->size);
 }
 
-#method Array at: t_index
+#method Array at: index
 {
     OME_Array *array = OME_untag_pointer(self);
-    intptr_t index = OME_untag_signed(t_index);
-    if (OME_get_tag(t_index) != OME_Tag_Small_Integer) {
+    intptr_t u_index = OME_untag_signed(index);
+    if (OME_get_tag(index) != OME_Tag_Small_Integer) {
         return OME_error(OME_Type_Error);
     }
-    if (index < 0 || index >= array->size) {
+    if (u_index < 0 || u_index >= array->size) {
         return OME_error(OME_Index_Error);
     }
-    return array->elems[index];
+    return array->elems[u_index];
 }
 
 #method Array each: block
@@ -54,7 +54,7 @@
     OME_Array *array = OME_untag_pointer(self);
     size_t size = array->size;
     for (size_t index = 0; index < size; index++) {
-        OME_Value t_index = OME_tag_signed(OME_Tag_Small_Integer, index);
+        OME_Value t_index = OME_tag_integer(index);
         OME_RETURN_ERROR(item_index_method(block, array->elems[index], t_index));
         OME_LOAD_LOCAL(0, self);
         OME_LOAD_LOCAL(1, block);
@@ -68,12 +68,17 @@
     if (OME_get_tag(rhs) != OME_Tag_Array) {
         return OME_error_constant(OME_Constant_Type_Error);
     }
-    size_t size = (size_t) OME_untag_array(self)->size + (size_t) OME_untag_array(rhs)->size;
-    if (size != (uint32_t) size) {
-        return OME_error_constant(OME_Constant_Size_Error);
-    }
-    if (size == 0) {
+    size_t lsize = OME_untag_array(self)->size;
+    size_t rsize = OME_untag_array(rhs)->size;
+    if (rsize == 0) {
         return self;
+    }
+    if (lsize == 0) {
+        return rhs;
+    }
+    size_t size = lsize + rsize;
+    if (size > UINT32_MAX) {
+        return OME_error_constant(OME_Constant_Size_Error);
     }
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);

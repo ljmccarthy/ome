@@ -129,6 +129,16 @@ static OME_Value OME_tag_pointer(OME_Tag tag, const void *pointer)
     return (OME_Value) {._udata = (uintptr_t) pointer >> OME_HEAP_ALIGNMENT_SHIFT, ._utag = tag};
 }
 
+static OME_Value OME_retag(OME_Tag tag, OME_Value value)
+{
+    return (OME_Value) {._udata = value._udata, ._utag = tag};
+}
+
+static OME_Value OME_tag_integer(intptr_t n)
+{
+    return OME_tag_signed(OME_Tag_Small_Integer, n);
+}
+
 static OME_Value OME_constant(uintptr_t constant)
 {
     return OME_tag_unsigned(OME_Tag_Constant, constant);
@@ -247,6 +257,9 @@ static int OME_is_boolean(OME_Value value)
 
 #define OME_LOAD_LOCAL(stack_slot, name)\
     do { name = _OME_local_stack[stack_slot]; } while (0)
+
+#define OME_LEAVE\
+    do { OME_context->stack_pointer = _OME_local_stack; } while (0)
 
 #define OME_RETURN(retval)\
     do { OME_context->stack_pointer = _OME_local_stack; return (retval); } while (0)
