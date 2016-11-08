@@ -72,6 +72,9 @@
     if (size != (uint32_t) size) {
         return OME_error_constant(OME_Constant_Size_Error);
     }
+    if (size == 0) {
+        return self;
+    }
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_SAVE_LOCAL(1, rhs);
