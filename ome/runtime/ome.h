@@ -263,7 +263,7 @@ static int OME_is_boolean(OME_Value value)
     } while (0)
 
 #define OME_STATIC_STRING(name, string)\
-    static const OME_String name OME_ALIGNED = {sizeof(string), {string}}
+    static const OME_String name OME_ALIGNED = {sizeof(string)-1, {string}}
 
 static __thread OME_Context *OME_context;
 static OME_Array *OME_argv;
