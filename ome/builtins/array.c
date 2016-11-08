@@ -62,3 +62,25 @@
     }
     OME_RETURN(OME_Empty);
 }
+
+#method Array + rhs
+{
+    if (OME_get_tag(rhs) != OME_Tag_Array) {
+        return OME_error_constant(OME_Constant_Type_Error);
+    }
+    size_t size = (size_t) OME_untag_array(self)->size + (size_t) OME_untag_array(rhs)->size;
+    if (size != (uint32_t) size) {
+        return OME_error_constant(OME_Constant_Size_Error);
+    }
+    OME_LOCALS(2);
+    OME_SAVE_LOCAL(0, self);
+    OME_SAVE_LOCAL(1, rhs);
+    OME_Array *dst = OME_allocate_array(size);
+    OME_LOAD_LOCAL(0, self);
+    OME_LOAD_LOCAL(1, rhs);
+    OME_Array *src1 = OME_untag_pointer(self);
+    OME_Array *src2 = OME_untag_pointer(rhs);
+    memcpy(dst->elems, src1->elems, src1->size * sizeof(OME_Value));
+    memcpy(dst->elems + src1->size, src2->elems, src2->size * sizeof(OME_Value));
+    OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
+}
