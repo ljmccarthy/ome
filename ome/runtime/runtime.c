@@ -406,12 +406,10 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
     size_t alloc_size = object_size + sizeof(OME_Header);
     size_t padded_size = alloc_size + sizeof(OME_Header);
 
-#ifdef OME_GC_DEBUG
     if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
-        OME_GC_PRINT("error: invalid object size %u\n", object_size);
+        fprintf(stderr, "error: invalid object size %u\n", object_size);
         exit(1);
     }
-#endif
 
     if (heap->pointer + padded_size >= heap->limit) {
         OME_collect(heap);
