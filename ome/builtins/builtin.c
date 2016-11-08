@@ -7,6 +7,7 @@
 #constant Not-Understood
 #constant Type-Error
 #constant Index-Error
+#constant Size-Error
 #constant Overflow
 #constant Divide-By-Zero
 

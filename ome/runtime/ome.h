@@ -156,7 +156,12 @@ static OME_Value *OME_untag_slots(OME_Value value)
 
 static OME_String *OME_untag_string(OME_Value value)
 {
-    return (OME_String *) OME_untag_pointer(value);
+    return OME_untag_pointer(value);
+}
+
+static OME_Array *OME_untag_array(OME_Value value)
+{
+    return OME_untag_pointer(value);
 }
 
 static OME_Tag OME_get_tag(OME_Value value)
