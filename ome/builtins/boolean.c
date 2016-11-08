@@ -3,6 +3,16 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>. All rights reserved.
 */
 
+#method True not
+{
+    return OME_False;
+}
+
+#method False not
+{
+    return OME_True;
+}
+
 #method True or: rhs
 {
     return self;
