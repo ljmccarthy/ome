@@ -8,7 +8,8 @@ from .parser import re_name, re_keyword, re_operator
 from .types import BuiltInMethod
 
 re_name_or_operator = re.compile(re_name.pattern + '|' + re_operator.pattern)
-re_empty_lines = re.compile(r'(?: *(?:\r\n|\r|\n))+')
+re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n))+')
+re_comments = re.compile(r'/\*(?:[^*]*(?:\*[^/][^*]*)*)\*/|//[^\r\n]*(?=\r\n|\r|\n|$)')
 re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method)', re.M)
 re_space_to_eol = re.compile(r'\s*$', re.M)
 re_start_method = re.compile(r'^{', re.M)
@@ -16,8 +17,9 @@ re_end_method = re.compile(r'^}', re.M)
 re_c_name = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 re_method_ref = re.compile(r'@(message|lookup)')
 
-def remove_empty_lines(s):
-    return re_empty_lines.sub('\n', s.strip())
+def remove_empty_lines_and_comments(s):
+    s = re_comments.sub('', s)
+    return re_empty_lines.sub('\n', s).strip()
 
 class CMethodRefParser(BaseParser):
     make_label = {'message': make_message_label, 'lookup': make_lookup_label}
@@ -121,4 +123,8 @@ class CPreParser(BaseParser):
                     self.error('unexpected tokens after #{} {}'.format(command, name))
                 tag_names[command].append(name)
         unparsed.append(self.trailing())
-        self.unparsed = remove_empty_lines(''.join(unparsed))
+        code = remove_empty_lines_and_comments(''.join(unparsed))
+        if code:
+            builtin.code.append('// begin included from {}\n'.format(self.stream_name))
+            builtin.code.append(code)
+            builtin.code.append('\n// end included from {}\n\n'.format(self.stream_name))

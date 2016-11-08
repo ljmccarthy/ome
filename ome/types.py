@@ -3,6 +3,7 @@
 
 class BuiltIn(object):
     def __init__(self):
+        self.code = []
         self.methods = []
         self.constant_names = ['False', 'True', 'Empty', 'BuiltIn']
         self.opaque_names = ['Constant', 'Small-Integer', 'Small-Decimal']

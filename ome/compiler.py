@@ -185,6 +185,9 @@ class Program(object):
         self.target.emit_builtin_code(out)
         out.write('\n')
 
+        for s in self.builtin.code:
+            out.write(s)
+
         dispatchers = set()
         for symbol, methods in self.code_table:
             for tag, code in methods:
