@@ -85,13 +85,12 @@
 
 #method BuiltIn print: value
 {
-    OME_print_value(stdout, value);
-    return OME_Empty;
+    return OME_print(stdout, value);
 }
 
 #method BuiltIn print-line: value
 {
-    OME_print_value(stdout, value);
+    OME_Value result = OME_print(stdout, value);
     fputc('\n', stdout);
-    return OME_Empty;
+    return result;
 }

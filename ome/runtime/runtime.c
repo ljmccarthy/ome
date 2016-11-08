@@ -12,18 +12,27 @@
     #define OME_GC_CLOCK(name)
 #endif
 
-static void OME_print_value(FILE *out, OME_Value value)
+static OME_Value OME_print(FILE *out, OME_Value value)
 {
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, value);
+    OME_Value string = value;
     if (OME_get_tag(value) != OME_Tag_String) {
-        value = OME_message_string__0(value);
+        OME_Method_0 string_method = OME_lookup_string__0(value);
+        if (string_method) {
+            string = string_method(value);
+            OME_RETURN_ERROR(string);
+        }
     }
-    if (OME_get_tag(value) == OME_Tag_String) {
-        OME_String *string = OME_untag_string(value);
-        fwrite(string->data, 1, string->size, out);
+    if (OME_get_tag(string) == OME_Tag_String) {
+        OME_String *p_string = OME_untag_string(string);
+        fwrite(p_string->data, 1, p_string->size, out);
     }
     else {
+        OME_LOAD_LOCAL(0, value);
         fprintf(out, "#<%ld:%ld>", (long) OME_get_tag(value), (long) OME_untag_unsigned(value));
     }
+    OME_RETURN(OME_Empty);
 }
 
 static void OME_append_traceback(uint32_t entry)
@@ -76,7 +85,7 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     }
 #endif // OME_NO_TRACEBACK
     fputs("Error: ", out);
-    OME_print_value(out, OME_strip_error(error));
+    OME_print(out, OME_strip_error(error));
     fputc('\n', out);
     fflush(out);
 }
