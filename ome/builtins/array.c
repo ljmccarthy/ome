@@ -93,27 +93,66 @@
     OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
 }
 
-static int OME_compare_values(const void *pa, const void *pb)
+static int OME_qsort_compare(const void *pa, const void *pb)
 {
-    OME_Value a = *(OME_Value *) pa;
-    OME_Value b = *(OME_Value *) pb;
-    if (OME_equal(a, b) || OME_is_true(OME_message___EQ(a, b))) {
+    OME_Value OME_message___EQ(OME_Value, OME_Value);
+    OME_Value OME_message___LT(OME_Value, OME_Value);
+
+    if (OME_is_error(*OME_context->error)) {
         return 0;
     }
-    return OME_is_true(OME_message___LT(a, b)) ? -1 : 1;
+    OME_Value a = *(OME_Value *) pa;
+    OME_Value b = *(OME_Value *) pb;
+    if (OME_equal(a, b)) {
+        return 0;
+    }
+    OME_Value eq = OME_message___EQ(a, b);
+    if (OME_is_error(eq)) {
+        *OME_context->error = eq;
+        return 0;
+    }
+    if (OME_is_true(eq)) return 0;
+    if (!OME_is_false(eq)) {
+        *OME_context->error = OME_error(OME_Type_Error);
+        return 0;
+    }
+    OME_Value lt = OME_message___LT(a, b);
+    if (OME_is_error(lt)) {
+        *OME_context->error = lt;
+        return 0;
+    }
+    if (OME_is_true(lt)) return -1;
+    if (OME_is_false(lt)) return 1;
+    *OME_context->error = OME_error(OME_Type_Error);
+    return 0;
 }
 
 #method Array sorted
 {
-    (void) @message("==");
-    (void) @message("<");
+    // @message("==")
+    // @message("<")
+
     OME_Array *src = OME_untag_pointer(self);
     size_t size = src->size;
+    if (size < 2) {
+        return self;
+    }
+
+    OME_Value error = OME_False;
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, error);
+    OME_Value *old_error = OME_context->error;
+    OME_context->error = &_OME_local_stack[0];
+
     OME_Array *tmp = malloc(sizeof(OME_Value) * size);
     memcpy(tmp, src->elems, size * sizeof(OME_Value));
-    qsort(tmp, size, sizeof(OME_Value), OME_compare_values);
+    qsort(tmp, size, sizeof(OME_Value), OME_qsort_compare);
     OME_Array *dst = OME_allocate_array(size);
     memcpy(dst->elems, tmp, sizeof(OME_Value) * size);
     free(tmp);
-    return OME_tag_pointer(OME_Tag_Array, dst);
+
+    OME_context->error = old_error;
+    OME_LOAD_LOCAL(0, error);
+    OME_RETURN_ERROR(error);
+    OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
 }

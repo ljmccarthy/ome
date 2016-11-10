@@ -94,6 +94,7 @@ struct OME_Context {
         OME_Value *stack_end;
         uint32_t *traceback_end;
     };
+    OME_Value *error;
     OME_Heap heap;
 };
 
