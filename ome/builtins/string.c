@@ -43,3 +43,43 @@
     }
     return OME_tag_integer(string->data[u_index]);
 }
+
+#method String == rhs
+{
+    if (OME_equal(self, rhs)) {
+        return OME_True;
+    }
+    if (OME_get_tag(rhs) != OME_Tag_String) {
+        return OME_error(OME_Type_Error);
+    }
+    OME_String *l = OME_untag_pointer(self);
+    OME_String *r = OME_untag_pointer(rhs);
+    if (l->size != r->size) {
+        return OME_False;
+    }
+    if (l->size == 0) {
+        return OME_True;
+    }
+    return OME_boolean(memcmp(l->data, r->data, l->size) == 0);
+}
+
+#method String < rhs
+{
+    if (OME_equal(self, rhs)) {
+        return OME_False;
+    }
+    if (OME_get_tag(rhs) != OME_Tag_String) {
+        return OME_error(OME_Type_Error);
+    }
+    OME_String *l = OME_untag_pointer(self);
+    OME_String *r = OME_untag_pointer(rhs);
+    if (l->size == 0) {
+        return OME_boolean(r->size > 0);
+    }
+    if (r->size == 0) {
+        return OME_False;
+    }
+    size_t size = l->size < r->size ? l->size : r->size;
+    int cmp = memcmp(l->data, r->data, size);
+    return OME_boolean(cmp == 0 ? l->size < r->size : cmp < 0);
+}
