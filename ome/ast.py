@@ -43,6 +43,7 @@ class Send(ASTNode):
         self.parse_state = parse_state
         self.receiver_block = None
         self.traceback_info = None
+        self.private_receiver_block = None
 
     def sexpr(self):
         call = 'call' if self.receiver_block else 'send'
@@ -62,6 +63,11 @@ class Send(ASTNode):
             self.args[i] = arg.resolve_free_vars(parent)
         if self.receiver:
             self.receiver = self.receiver.resolve_free_vars(parent)
+            if is_private_symbol(self.symbol):
+                receiver_block = parent.lookup_receiver(self.symbol, False)
+                if not receiver_block:
+                    self.error("receiver could not be resolved for '%s'" % self.symbol)
+                self.private_receiver_block = receiver_block
         else:
             if len(self.args) == 0:
                 ref = parent.lookup_var(self.symbol)
@@ -78,6 +84,8 @@ class Send(ASTNode):
             self.args[i] = arg.resolve_block_refs(parent)
         if self.receiver:
             self.receiver = self.receiver.resolve_block_refs(parent)
+            if is_private_symbol(self.symbol):
+                self.check_tag_block = parent.find_block()
         elif self.receiver_block:
             block = self.receiver_block
             if block.is_constant and block != parent.find_block():
@@ -106,12 +114,15 @@ class Send(ASTNode):
         args = [arg.generate_code(code) for arg in self.args]
         dest = code.add_temp()
 
+        check_tag = None
         if self.receiver_block:
             label = make_method_label(self.receiver_block.tag_id, self.symbol)
         else:
             label = make_message_label(self.symbol)
+            if self.private_receiver_block:
+                check_tag = self.private_receiver_block.tag_id
 
-        code.add_instruction(CALL(dest, [receiver] + args, label, self.traceback_info))
+        code.add_instruction(CALL(dest, [receiver] + args, label, self.traceback_info, check_tag=check_tag))
         return dest
 
 class Concat(Send):
@@ -131,7 +142,6 @@ class BlockVariable(object):
     def __init__(self, name, mutable, index, init_ref=None):
         self.name = name
         self.mutable = mutable
-        self.private = name[0] == '~'
         self.slot_index = index
         self.init_ref = init_ref
         self.self_ref = SlotGet(Self, index, mutable)
@@ -155,10 +165,9 @@ class Block(ASTNode):
             setter = var.name + ':'
             if var.mutable:
                 self.symbols.add(setter)
-            if not var.private:
-                self.methods.append(Method(var.name, [], var.self_ref))
-                if var.mutable:
-                    self.methods.append(Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, []))))
+            self.methods.append(Method(var.name, [], var.self_ref))
+            if var.mutable:
+                self.methods.append(Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, []))))
 
     def sexpr(self):
         methods = tuple(method.sexpr() for method in self.methods)
@@ -201,11 +210,11 @@ class Block(ASTNode):
                 self.slots.append(var)
                 return var.self_ref
 
-    def lookup_receiver(self, symbol):
+    def lookup_receiver(self, symbol, add_blocks_needed=True):
         if symbol in self.symbols:
             return self
-        block = self.parent.lookup_receiver(symbol)
-        if block:
+        block = self.parent.lookup_receiver(symbol, add_blocks_needed)
+        if block and add_blocks_needed:
             self.blocks_needed.add(block)
         return block
 
@@ -303,8 +312,8 @@ class Method(ASTNode):
             return self.vars[symbol]
         return self.parent.lookup_var(symbol)
 
-    def lookup_receiver(self, symbol):
-        return self.parent.lookup_receiver(symbol)
+    def lookup_receiver(self, symbol, add_blocks_needed=True):
+        return self.parent.lookup_receiver(symbol, add_blocks_needed)
 
     def get_block_ref(self, block):
         return self.parent.get_block_ref(block)
@@ -354,8 +363,8 @@ class Sequence(ASTNode):
             return self.vars[symbol]
         return self.parent.lookup_var(symbol)
 
-    def lookup_receiver(self, symbol):
-        return self.parent.lookup_receiver(symbol)
+    def lookup_receiver(self, symbol, add_blocks_needed=True):
+        return self.parent.lookup_receiver(symbol, add_blocks_needed)
 
     def get_block_ref(self, block):
         return self.parent.get_block_ref(block)
@@ -450,7 +459,7 @@ class BuiltInBlock(object):
     def lookup_var(self, symbol):
         pass
 
-    def lookup_receiver(self, symbol):
+    def lookup_receiver(self, symbol, add_blocks_needed=True):
         if symbol in self.symbols:
             return self
 

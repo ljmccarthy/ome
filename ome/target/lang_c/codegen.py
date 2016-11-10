@@ -3,6 +3,7 @@
 
 import struct
 from ... import optimise
+from ...constants import MIN_CONSTANT_TAG
 from ...instructions import CONCAT
 from ...labels import *
 from .cstring import literal_c_string
@@ -76,11 +77,14 @@ class ProcedureCodegen(object):
             self.emit('OME_context->stack_pointer = _stack;')
         self.emit('return {};'.format(ret))
 
+    def emit_append_traceback(self, traceback_info):
+        if traceback_info:
+            self.emit('OME_append_traceback({});'.format(traceback_info.index))
+
     def emit_error_check(self, error, traceback_info=None):
         self.emit('if (OME_is_error(_{})) {{'.format(error))
         with self.emit.indented():
-            if traceback_info:
-                self.emit('OME_append_traceback({});'.format(traceback_info.index))
+            self.emit_append_traceback(traceback_info)
             self.emit_return('_{}'.format(error))
         self.emit('}')
 
@@ -103,6 +107,18 @@ class ProcedureCodegen(object):
     def CALL(self, ins):
         self.emit_save_list(ins)
         self.emit_load_list(ins)
+        if ins.check_tag is not None:
+            self.emit('{')
+            with self.emit.indented():
+                self.emit('OME_Tag _tag = OME_get_tag(_{});'.format(ins.args[0]))
+                if ins.check_tag >= MIN_CONSTANT_TAG:
+                    self.emit('if (_tag == OME_Tag_Constant) {{ _tag = OME_untag_unsigned(_{}) + OME_MIN_CONSTANT_TAG; }}'.format(ins.args[0]))
+                self.emit('if (_tag != {}) {{'.format(ins.check_tag))
+                with self.emit.indented():
+                    self.emit_append_traceback(ins.traceback_info)
+                    self.emit_return('OME_error(OME_Type_Error)')
+                self.emit('}')
+            self.emit('}')
         self.emit('OME_Value _{} = {}({});'.format(
             ins.dest,
             ins.call_label,
@@ -162,7 +178,7 @@ class DispatchCodegen(object):
     def emit_dispatch(self, any_constant_tags):
         self.emit('OME_Tag _tag = OME_get_tag(_0);')
         if any_constant_tags:
-            self.emit('if (_tag == OME_Tag_Constant) {{ _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }}')
+            self.emit('if (_tag == OME_Tag_Constant) { _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }')
 
     def emit_compare_gte(self, tag, gte_label):
         self.emit('if (_tag >= {}) goto {};'.format(tag, gte_label))

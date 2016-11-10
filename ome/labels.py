@@ -55,6 +55,9 @@ def symbol_arity(symbol):
         return 2
     return symbol.count(':') + symbol.count(',') + 1
 
+def is_private_symbol(name):
+    return name.startswith('~')
+
 __all__ = [
     'symbol_to_label',
     'make_message_label',
@@ -62,4 +65,5 @@ __all__ = [
     'make_method_label_format',
     'make_method_label',
     'symbol_arity',
+    'is_private_symbol',
 ]

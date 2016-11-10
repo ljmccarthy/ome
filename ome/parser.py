@@ -5,6 +5,7 @@ import re
 from . import ast
 from .constants import *
 from .error import OmeParseError
+from .labels import is_private_symbol
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
@@ -213,7 +214,7 @@ class Parser(ParserState):
         symbol = ''
         for m in self.repeat_token(re_keyword):
             part = m.group()
-            if part[0] == '~' and symbol:
+            if is_private_symbol(part) and symbol:
                 self.error('expected keyword')
             symbol += part
             parse_state = self.copy_state()
@@ -313,7 +314,7 @@ class Parser(ParserState):
             if m:
                 if m.group() == ':=':
                     self.error('mutable variables are only allowed in blocks')
-                if name[0] == '~':
+                if is_private_symbol(name):
                     parse_state.error('local variables cannot be private')
                 self.check_name(name, parse_state)
                 return ast.LocalVariable(name, self.expr())
@@ -350,11 +351,8 @@ class Parser(ParserState):
         kw_parse_state = parse_state
         for m in self.repeat_expr_token(re_keyword):
             part = m.group()
-            if part[0] == '~':
-                if symbol:
-                    kw_parse_state.error('expected keyword')
-                if expr:
-                    kw_parse_state.error('private message sent to an explicit receiver')
+            if is_private_symbol(part) and symbol:
+                kw_parse_state.error('expected keyword')
             symbol += part
             args.append(self.cmpexpr())
             for m in self.repeat_expr_token(','):
@@ -426,8 +424,6 @@ class Parser(ParserState):
             if not m:
                 break
             name = m.group()
-            if name[0] == '~':
-                parse_state.error('private message sent to an explicit receiver')
             expr = ast.Send(expr, name, [], parse_state)
         return expr
 

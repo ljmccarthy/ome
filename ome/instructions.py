@@ -44,12 +44,13 @@ class CALL(Instruction):
     is_leaf = False
     dest_from_heap = True
 
-    def __init__(self, dest, args, call_label, traceback_info, check_error=True):
+    def __init__(self, dest, args, call_label, traceback_info, check_error=True, check_tag=None):
         self.dest = dest
         self.args = args
         self.call_label = call_label
         self.traceback_info = traceback_info
         self.check_error = check_error
+        self.check_tag = check_tag
 
     def __str__(self):
         dest = '%{} = '.format(self.dest) if self.dest else ''
