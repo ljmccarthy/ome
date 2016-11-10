@@ -31,7 +31,7 @@ class GCCArgsBuilder(CCArgsBuilder):
         return [], ['-specs', specs_file]
 
 class GCCBuilder(CCBuilder):
-    name = 'GCC'
+    name = 'gcc'
     default_command = 'gcc'
     supported_platforms = frozenset(['linux'])
     version_args = ['--version']

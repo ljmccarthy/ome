@@ -46,7 +46,7 @@ class ClangArgsBuilder(CCArgsBuilder):
         return args, tail_args
 
 class ClangBuilder(CCBuilder):
-    name = 'Clang'
+    name = 'clang'
     default_command = 'clang'
     supported_platforms = frozenset(['linux'])
     version_args = ['--version']
