@@ -456,7 +456,7 @@ static void *OME_allocate_slots(uint32_t num_slots)
 static OME_Array *OME_allocate_array(uint32_t num_elems)
 {
     size_t size = sizeof(OME_Array) + sizeof(OME_Value[num_elems]);
-    OME_Array *array = OME_allocate(size, sizeof(OME_Array) / sizeof(OME_Value), num_elems);
+    OME_Array *array = OME_allocate(size, offsetof(OME_Array, elems) / sizeof(OME_Value), num_elems);
     array->size = num_elems;
     return array;
 }
