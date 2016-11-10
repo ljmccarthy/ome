@@ -12,12 +12,12 @@
 
 #method String + rhs
 {
+    if (OME_get_tag(rhs) != OME_Tag_String) {
+        return OME_error(OME_Type_Error);
+    }
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_SAVE_LOCAL(1, rhs);
-    if (OME_get_tag(rhs) != OME_Tag_String) {
-        OME_ERROR(Type_Error);
-    }
     OME_RETURN(OME_concat(_OME_local_stack, 2));
 }
 
@@ -33,10 +33,10 @@
 
 #method Byte-Array at: index
 {
-    intptr_t u_index = OME_untag_signed(index);
     if (OME_get_tag(index) != OME_Tag_Small_Integer) {
         return OME_error(OME_Type_Error);
     }
+    intptr_t u_index = OME_untag_signed(index);
     OME_String *string = OME_untag_pointer(self);
     if (u_index < 0 || u_index >= string->size) {
         return OME_error(OME_Index_Error);

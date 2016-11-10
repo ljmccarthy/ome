@@ -53,7 +53,7 @@ class ProcedureCodegen(object):
             if self.stack_size > 0:
                 self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(self.stack_size + 1))
                 with self.emit.indented():
-                    self.emit('return OME_error_constant(OME_Constant_Stack_Overflow);')
+                    self.emit('return OME_error(OME_Stack_Overflow);')
                 self.emit('}')
                 self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
 
@@ -116,7 +116,7 @@ class ProcedureCodegen(object):
         stack_size = self.stack_size + len(ins.args)
         self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(stack_size + 1))
         with self.emit.indented():
-            self.emit_return('OME_error_constant(OME_Constant_Stack_Overflow)')
+            self.emit_return('OME_error(OME_Stack_Overflow)')
         self.emit('}')
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(stack_size))
         for index, arg in enumerate(ins.args):
@@ -155,7 +155,7 @@ class DispatchCodegen(object):
         self.end_empty_dispatch()
 
     def end_empty_dispatch(self):
-        self.emit('return OME_error_constant(OME_Constant_Not_Understood);')
+        self.emit('return OME_error(OME_Not_Understood);')
         self.emit.dedent()
         self.emit.end('}')
 

@@ -66,7 +66,7 @@
 #method Array + rhs
 {
     if (OME_get_tag(rhs) != OME_Tag_Array) {
-        return OME_error_constant(OME_Constant_Type_Error);
+        return OME_error(OME_Type_Error);
     }
     size_t lsize = OME_untag_array(self)->size;
     size_t rsize = OME_untag_array(rhs)->size;
@@ -78,7 +78,7 @@
     }
     size_t size = lsize + rsize;
     if (size > UINT32_MAX) {
-        return OME_error_constant(OME_Constant_Size_Error);
+        return OME_error(OME_Size_Error);
     }
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);

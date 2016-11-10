@@ -15,10 +15,10 @@
 {
     intptr_t result = OME_untag_signed(self) + OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
+        return OME_error(OME_Type_Error);
     }
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
-        return OME_error_constant(OME_Constant_Overflow);
+        return OME_error(OME_Overflow);
     }
     return OME_tag_integer(result);
 }
@@ -27,10 +27,10 @@
 {
     intptr_t result = OME_untag_signed(self) - OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
+        return OME_error(OME_Type_Error);
     }
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
-        return OME_error_constant(OME_Constant_Overflow);
+        return OME_error(OME_Overflow);
     }
     return OME_tag_integer(result);
 }
@@ -39,10 +39,10 @@
 {
     __int128_t result = (__int128_t) OME_untag_signed(self) * OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
+        return OME_error(OME_Type_Error);
     }
     if (result < OME_MIN_SMALL_INTEGER || result > OME_MAX_SMALL_INTEGER) {
-        return OME_error_constant(OME_Constant_Overflow);
+        return OME_error(OME_Overflow);
     }
     return OME_tag_integer(result);
 }
@@ -51,7 +51,7 @@
 {
     intptr_t result = OME_untag_signed(self) % OME_untag_signed(rhs);
     if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
-        return OME_error_constant(OME_Constant_Type_Error);
+        return OME_error(OME_Type_Error);
     }
     return OME_tag_integer(result);
 }
@@ -72,26 +72,26 @@
 {
     return OME_get_tag(rhs) == OME_Tag_Small_Integer
           ? OME_boolean(OME_untag_signed(self) < OME_untag_signed(rhs))
-          : OME_error_constant(OME_Constant_Type_Error);
+          : OME_error(OME_Type_Error);
 }
 
 #method Small-Integer <= rhs
 {
     return OME_get_tag(rhs) == OME_Tag_Small_Integer
           ? OME_boolean(OME_untag_signed(self) <= OME_untag_signed(rhs))
-          : OME_error_constant(OME_Constant_Type_Error);
+          : OME_error(OME_Type_Error);
 }
 
 #method Small-Integer > rhs
 {
     return OME_get_tag(rhs) == OME_Tag_Small_Integer
           ? OME_boolean(OME_untag_signed(self) > OME_untag_signed(rhs))
-          : OME_error_constant(OME_Constant_Type_Error);
+          : OME_error(OME_Type_Error);
 }
 
 #method Small-Integer >= rhs
 {
     return OME_get_tag(rhs) == OME_Tag_Small_Integer
           ? OME_boolean(OME_untag_signed(self) >= OME_untag_signed(rhs))
-          : OME_error_constant(OME_Constant_Type_Error);
+          : OME_error(OME_Type_Error);
 }

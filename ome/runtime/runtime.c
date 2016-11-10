@@ -113,12 +113,18 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     OME_GC_PRINT("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
 }
 
+static void *OME_memory_allocate(size_t size)
+{
+    void *p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    return p != MAP_FAILED ? p : NULL;
+}
+
 static void OME_initialize_heap(OME_Heap *heap)
 {
     size_t heap_size = 0x8000;
-    char *heap_base = mmap(NULL, heap_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    char *heap_base = OME_memory_allocate(heap_size);
     if (heap_base == MAP_FAILED) {
-        perror("mmap");
+        perror("OME_memory_allocate");
         exit(1);
     }
     OME_set_heap_base(heap, heap_base, heap_size);
@@ -401,15 +407,19 @@ static void OME_collect(OME_Heap *heap)
 #endif
 }
 
-static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
+static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t scan_size)
 {
-    size_t alloc_size = object_size + sizeof(OME_Header);
-    size_t padded_size = alloc_size + sizeof(OME_Header);
+    OME_Heap *heap = &OME_context->heap;
+    object_size = (object_size + 7) & ~7;
 
     if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
-        fprintf(stderr, "error: invalid object size %u\n", object_size);
-        exit(1);
+        // TODO add to object list
+        char *body = OME_memory_allocate(object_size);
+        return body;
     }
+
+    size_t alloc_size = object_size + sizeof(OME_Header);
+    size_t padded_size = alloc_size + sizeof(OME_Header);
 
     if (heap->pointer + padded_size >= heap->limit) {
         OME_collect(heap);
@@ -425,19 +435,12 @@ static OME_Header *OME_reserve_allocation(OME_Heap *heap, uint32_t object_size)
         header->bits = 0;
         header++;
     }
-    heap->pointer = (char *) header + alloc_size;
-    return header;
-}
 
-static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t scan_size)
-{
-    OME_Heap *heap = &OME_context->heap;
-    object_size = (object_size + 7) & ~7;
-
-    OME_Header *header = OME_reserve_allocation(heap, object_size);
     header->size = object_size / sizeof(OME_Value);
     header->scan_offset = scan_offset;
     header->scan_size = scan_size;
+
+    heap->pointer = (char *) header + alloc_size;
     heap->num_allocated++;
 
     void *body = header + 1;
@@ -476,9 +479,12 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
             strings[i] = string;
         }
         if (OME_get_tag(string) != OME_Tag_String) {
-            return OME_error_constant(OME_Constant_Type_Error);
+            return OME_error(OME_Type_Error);
         }
-        size += OME_untag_string(string)->size; // TODO check overflow
+        size += OME_untag_string(string)->size;
+        if (size > UINT32_MAX) {
+            return OME_error(OME_Size_Error);
+        }
     }
 
     OME_String *output = OME_allocate_data(sizeof(OME_String) + size + 1);

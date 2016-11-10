@@ -184,11 +184,6 @@ static OME_Value OME_error(OME_Value value)
     return (OME_Value) {._udata = value._udata, ._utag = value._utag | OME_ERROR_BIT};
 }
 
-static OME_Value OME_error_constant(uintptr_t constant)
-{
-    return OME_tag_unsigned(OME_Tag_Constant | OME_ERROR_BIT, constant);
-}
-
 static OME_Value OME_strip_error(OME_Value value)
 {
     return (OME_Value) {._udata = value._udata, ._utag = value._utag & ~OME_ERROR_BIT};
@@ -247,7 +242,7 @@ static int OME_is_boolean(OME_Value value)
     } while (0)
 
 #define OME_LOCALS(stack_size)\
-    OME_ENTER_OR_RETURN(stack_size, OME_error_constant(OME_Constant_Stack_Overflow))
+    OME_ENTER_OR_RETURN(stack_size, OME_error(OME_Stack_Overflow))
 
 #define OME_SAVE_LOCAL(stack_slot, name)\
     do { _OME_local_stack[stack_slot] = name; } while (0)
@@ -265,7 +260,7 @@ static int OME_is_boolean(OME_Value value)
     do { OME_context->stack_pointer = _OME_local_stack; return (retval); } while (0)
 
 #define OME_ERROR(error)\
-    OME_RETURN(OME_error_constant(OME_Constant_##error))
+    OME_RETURN(OME_error(OME_##error))
 
 #define OME_RETURN_ERROR(value)\
     do {\
