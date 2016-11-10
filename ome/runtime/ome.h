@@ -204,6 +204,11 @@ static int OME_is_header_aligned(void *header)
     return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
 }
 
+static int OME_equal(OME_Value a, OME_Value b)
+{
+    return a._bits == b._bits;
+}
+
 static OME_Value OME_boolean(int boolean)
 {
     return OME_tag_unsigned(OME_Tag_Constant, boolean ? OME_Constant_True : OME_Constant_False);
@@ -211,12 +216,12 @@ static OME_Value OME_boolean(int boolean)
 
 static int OME_is_false(OME_Value value)
 {
-    return value._bits == OME_boolean(0)._bits;
+    return OME_equal(value, OME_boolean(0));
 }
 
 static int OME_is_true(OME_Value value)
 {
-    return value._bits == OME_boolean(1)._bits;
+    return OME_equal(value, OME_boolean(1));
 }
 
 static int OME_is_boolean(OME_Value value)

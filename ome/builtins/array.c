@@ -92,3 +92,28 @@
     memcpy(dst->elems + src1->size, src2->elems, src2->size * sizeof(OME_Value));
     OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
 }
+
+static int OME_compare_values(const void *pa, const void *pb)
+{
+    OME_Value a = *(OME_Value *) pa;
+    OME_Value b = *(OME_Value *) pb;
+    if (OME_equal(a, b) || OME_is_true(OME_message___EQ(a, b))) {
+        return 0;
+    }
+    return OME_is_true(OME_message___LT(a, b)) ? -1 : 1;
+}
+
+#method Array sorted
+{
+    (void) @message("==");
+    (void) @message("<");
+    OME_Array *src = OME_untag_pointer(self);
+    size_t size = src->size;
+    OME_Array *tmp = malloc(sizeof(OME_Value) * size);
+    memcpy(tmp, src->elems, size * sizeof(OME_Value));
+    qsort(tmp, size, sizeof(OME_Value), OME_compare_values);
+    OME_Array *dst = OME_allocate_array(size);
+    memcpy(dst->elems, tmp, sizeof(OME_Value) * size);
+    free(tmp);
+    return OME_tag_pointer(OME_Tag_Array, dst);
+}
