@@ -13,7 +13,7 @@ class DispatcherGenerator(object):
         self.codegen = codegen_class(self.emit)
         self.codegen.begin(name, self.num_args)
         if tags:
-            any_constant_tags = any(tag > MIN_CONSTANT_TAG for tag in tags)
+            any_constant_tags = any(tag >= MIN_CONSTANT_TAG for tag in tags)
             self.codegen.emit_dispatch(any_constant_tags)
             self.split_tag_range(make_method_label_format(symbol), tags, 0, 1 << NUM_DATA_BITS)
             self.codegen.end()
