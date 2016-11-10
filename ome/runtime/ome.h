@@ -139,11 +139,6 @@ static OME_Value OME_tag_integer(intptr_t n)
     return OME_tag_signed(OME_Tag_Small_Integer, n);
 }
 
-static OME_Value OME_constant(uintptr_t constant)
-{
-    return OME_tag_unsigned(OME_Tag_Constant, constant);
-}
-
 static uintptr_t OME_untag_unsigned(OME_Value value)
 {
     return (uintptr_t) value._udata;
@@ -161,7 +156,7 @@ static void *OME_untag_pointer(OME_Value value)
 
 static OME_Value *OME_untag_slots(OME_Value value)
 {
-    return (OME_Value *) OME_untag_pointer(value);
+    return OME_untag_pointer(value);
 }
 
 static OME_String *OME_untag_string(OME_Value value)
