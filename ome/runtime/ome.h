@@ -144,7 +144,7 @@ static uintptr_t OME_untag_unsigned(OME_Value value)
     return (uintptr_t) value._udata;
 }
 
-static uintptr_t OME_untag_signed(OME_Value value)
+static intptr_t OME_untag_signed(OME_Value value)
 {
     return (intptr_t) value._sdata;
 }
