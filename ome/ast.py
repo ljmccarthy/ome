@@ -63,20 +63,25 @@ class Send(ASTNode):
             self.args[i] = arg.resolve_free_vars(parent)
         if self.receiver:
             self.receiver = self.receiver.resolve_free_vars(parent)
+            if self.symbol == 'self':
+                return self.receiver
             if is_private_symbol(self.symbol):
                 receiver_block = parent.lookup_receiver(self.symbol, False)
                 if not receiver_block:
                     self.error("receiver could not be resolved for '%s'" % self.symbol)
                 self.private_receiver_block = receiver_block
-        else:
+        elif self.symbol:
+            if self.symbol == 'self':
+                return Self
             if len(self.args) == 0:
                 ref = parent.lookup_var(self.symbol)
                 if ref:
                     return ref
-            if self.symbol:
-                self.receiver_block = parent.lookup_receiver(self.symbol)
-                if not self.receiver_block:
-                    self.error("receiver could not be resolved for '%s'" % self.symbol)
+            self.receiver_block = parent.lookup_receiver(self.symbol)
+            if not self.receiver_block:
+                if self.symbol in builtin_constants:
+                    return builtin_constants[self.symbol]
+                self.error("receiver could not be resolved for '%s'" % self.symbol)
         return self
 
     def resolve_block_refs(self, parent):
@@ -581,8 +586,7 @@ class String(TerminalNode):
 EmptyBlock = Constant('Empty')
 Self = LocalGet(0, 'self')
 
-reserved_names = {
-    'self': Self,
-    'False': Constant('False'),
-    'True': Constant('True'),
-}
+builtin_constants = {name: Constant(name) for name in [
+    'False',
+    'True',
+]}

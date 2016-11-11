@@ -197,7 +197,7 @@ class Parser(ParserState):
             yield m
 
     def check_name(self, name, parse_state):
-        if name in ast.reserved_names:
+        if name == 'self':
             parse_state.error('%s is a reserved name' % name)
         return name
 
@@ -443,8 +443,6 @@ class Parser(ParserState):
         m = self.expr_token(re_name)
         if m:
             name = m.group()
-            if name in ast.reserved_names:
-                return ast.reserved_names[name]
             return ast.Send(None, name, [], parse_state)
         m = self.expr_token(re_number)
         if m:
@@ -473,10 +471,7 @@ class Parser(ParserState):
                     parse_state = self.copy_state()
                     m = self.expect_token(re_name, 'expected name or expression')
                     name = m.group()
-                    if name in ast.reserved_names:
-                        exprs.append(ast.reserved_names[name])
-                    else:
-                        exprs.append(ast.Send(None, name, [], parse_state))
+                    exprs.append(ast.Send(None, name, [], parse_state))
                 parse_state = self.copy_state()
                 m = self.match(re_string_next)
                 if not m:
