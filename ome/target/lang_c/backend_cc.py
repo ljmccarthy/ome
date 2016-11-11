@@ -22,7 +22,7 @@ class CCArgsBuilder(object):
     release_link = []
     debug_link = []
 
-    def get_musl_args(self, built_options, musl_path):
+    def get_musl_args(self, build_options, musl_path):
         raise OmeError("musl is not supported for this backend")
 
     def __call__(self, build_options, infile, outfile):

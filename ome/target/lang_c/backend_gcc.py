@@ -24,7 +24,7 @@ class GCCArgsBuilder(CCArgsBuilder):
         '-Wl,--gc-sections',
     ]
 
-    def get_musl_args(self, built_options, musl_path):
+    def get_musl_args(self, build_options, musl_path):
         specs_file = os.path.join(musl_path, 'lib', 'musl-gcc.specs')
         if not os.path.isfile(specs_file):
             raise OmeError('could not find GCC specs file for musl: ' + specs_file)
