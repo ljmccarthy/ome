@@ -14,7 +14,9 @@
 #message == rhs
 {
     if (@lookup("equals:")(self)) {
-        return @message("equals:")(self, rhs);
+        OME_Value eq = @message("equals:")(self, rhs);
+        if (OME_is_boolean(eq) || OME_is_error(eq)) { return eq; }
+        return OME_error(OME_Type_Error);
     }
     OME_Value cmp = @message("compare:")(self, rhs);
     if (OME_equal(cmp, OME_Equal)) { return OME_True; }
