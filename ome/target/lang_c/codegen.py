@@ -5,7 +5,7 @@ import struct
 from ... import optimise
 from ...constants import MIN_CONSTANT_TAG
 from ...instructions import CONCAT
-from ...labels import *
+from ...symbol import symbol_to_label, symbol_arity
 from .cstring import literal_c_string
 from .stackalloc import allocate_stack_slots
 
@@ -13,6 +13,15 @@ encoding = 'ascii'
 comment_format = '// {}'
 define_label_format = '{}:'
 indent = '    '
+
+def make_message_label(symbol):
+    return 'OME_message_' + symbol_to_label(symbol)
+
+def make_lookup_label(symbol):
+    return 'OME_lookup_' + symbol_to_label(symbol)
+
+def make_method_label(tag, symbol):
+    return 'OME_method_{}_{}'.format(tag, symbol_to_label(symbol))
 
 def literal_integer(value):
     return '{}{}'.format(value, '' if -0x80000000 <= value <= 0x7fffffff else 'L')
@@ -45,7 +54,7 @@ class ProcedureCodegen(object):
             self.stack_size = 0
         self.has_stack = self.stack_size > 0 or any(isinstance(ins, CONCAT) for ins in code.instructions)
 
-    def begin(self, name, num_args, instructions):
+    def begin(self, name, num_args):
         self.emit(format_function_definition(name, num_args))
         self.emit('{')
         self.emit.indent()
@@ -158,11 +167,13 @@ class ProcedureCodegen(object):
         self.emit_return('_{}'.format(ins.source))
 
 class DispatchCodegen(object):
-    def __init__(self, emitter):
+    def __init__(self, emitter, symbol):
         self.emit = emitter
+        self.symbol = symbol
+        self.num_args = symbol_arity(symbol)
 
-    def begin(self, name, num_args):
-        self.emit(format_function_definition(name, num_args))
+    def begin(self):
+        self.emit(format_function_definition(make_message_label(self.symbol), self.num_args))
         self.emit('{')
         self.emit.indent()
 
@@ -183,16 +194,18 @@ class DispatchCodegen(object):
     def emit_compare_gte(self, tag, gte_label):
         self.emit('if (_tag >= {}) goto {};'.format(tag, gte_label))
 
-    def emit_call_method(self, method_name, num_args):
-        self.emit('return {};'.format(format_dispatch_call(method_name, num_args)))
+    def emit_call_method(self, tag):
+        method_name = make_method_label(tag, self.symbol)
+        self.emit('return {};'.format(format_dispatch_call(method_name, self.num_args)))
 
-    def emit_maybe_call_method(self, method_name, num_args, tag):
-        self.emit('if (_tag == {}) return {};'.format(tag, format_dispatch_call(method_name, num_args)))
+    def emit_maybe_call_method(self, tag):
+        method_name = make_method_label(tag, self.symbol)
+        self.emit('if (_tag == {}) return {};'.format(tag, format_dispatch_call(method_name, self.num_args)))
         self.emit('goto not_understood;')
 
 class LookupDispatchCodegen(DispatchCodegen):
-    def begin(self, name, num_args):
-        self.emit('static OME_Method_{} {}(OME_Value _0)'.format(num_args - 1, name))
+    def begin(self):
+        self.emit('static OME_Method_{} {}(OME_Value _0)'.format(self.num_args - 1, make_lookup_label(self.symbol)))
         self.emit('{')
         self.emit.indent()
 
@@ -201,11 +214,11 @@ class LookupDispatchCodegen(DispatchCodegen):
         self.emit.dedent()
         self.emit.end('}')
 
-    def emit_call_method(self, method_name, num_args):
-        self.emit('return {};'.format(method_name))
+    def emit_call_method(self, tag):
+        self.emit('return {};'.format(make_method_label(tag, self.symbol)))
 
-    def emit_maybe_call_method(self, method_name, num_args, tag):
-        self.emit('if (_tag == {}) return {};'.format(tag, method_name))
+    def emit_maybe_call_method(self, tag):
+        self.emit('if (_tag == {}) return {};'.format(tag, make_method_label(tag, self.symbol)))
         self.emit('goto not_understood;')
 
 class DataTable(object):

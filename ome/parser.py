@@ -3,9 +3,8 @@
 
 import re
 from . import ast
-from .constants import *
 from .error import OmeParseError
-from .labels import is_private_symbol
+from .symbol import is_private_symbol
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')

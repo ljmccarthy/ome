@@ -5,7 +5,7 @@ from .constants import *
 from .emit import MethodCodeBuilder
 from .error import OmeError
 from .instructions import *
-from .labels import *
+from .symbol import is_private_symbol
 
 def format_sexpr_flat(node):
     if not isinstance(node, (list, tuple)):
@@ -116,9 +116,9 @@ class Send(ASTNode):
 
         check_tag = None
         if self.receiver_block:
-            label = make_method_label(self.receiver_block.tag_id, self.symbol)
+            label = code.make_method_label(self.receiver_block.tag_id, self.symbol)
         else:
-            label = make_message_label(self.symbol)
+            label = code.make_message_label(self.symbol)
             if self.private_receiver_block:
                 check_tag = self.private_receiver_block.tag_id
 

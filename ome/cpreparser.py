@@ -3,9 +3,9 @@
 
 import re
 from .baseparser import BaseParser
-from .labels import make_message_label, make_lookup_label
 from .parser import re_name, re_keyword, re_operator
 from .types import BuiltInMethod
+from .target.lang_c.codegen import make_message_label, make_lookup_label
 
 re_name_or_operator = re.compile(re_name.pattern + '|' + re_operator.pattern)
 re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n))+')

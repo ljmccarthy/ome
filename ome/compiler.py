@@ -9,7 +9,6 @@ from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .idalloc import IdAllocator
-from .labels import make_method_label
 from .parser import Parser
 from .terminal import stderr
 from .types import CompileOptions, TraceBackInfo
@@ -191,7 +190,7 @@ class Program(object):
         dispatchers = set()
         for symbol, methods in self.code_table:
             for tag, code in methods:
-                out.write(code.generate_target_code(make_method_label(tag, symbol), self.target))
+                out.write(code.generate_target_code(self.target.make_method_label(tag, symbol), self.target))
                 out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]

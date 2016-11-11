@@ -1,7 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
-from io import StringIO
+import io
 from contextlib import contextmanager
 
 class CodeEmitter(object):
@@ -58,7 +58,7 @@ class ProcedureCodeEmitter(CodeEmitter):
         self.end_output.append(self.indent_str + line)
 
     def get_output(self):
-        buf = StringIO()
+        buf = io.StringIO()
         self.write_to(buf)
         for emitter in self.tail_emitters:
             emitter.write_to(buf)
@@ -76,7 +76,7 @@ class MethodCode(object):
         emit = ProcedureCodeEmitter(target)
         codegen = target.ProcedureCodegen(emit)
         codegen.optimise(self)
-        codegen.begin(label, self.num_args, self.instructions)
+        codegen.begin(label, self.num_args)
         for ins in self.instructions:
             ins.emit(codegen)
         codegen.end()
@@ -105,6 +105,15 @@ class MethodCodeBuilder(object):
 
     def get_constant(self, constant_name):
         return self.program.ids.constants[constant_name]
+
+    def make_message_label(self, symbol):
+        return self.program.target.make_message_label(symbol)
+
+    def make_lookup_label(self, symbol):
+        return self.program.target.make_lookup_label(symbol)
+
+    def make_method_label(self, tag, symbol):
+        return self.program.target.make_method_label(tag, symbol)
 
     def get_code(self):
         return MethodCode(self.instructions, self.num_args)

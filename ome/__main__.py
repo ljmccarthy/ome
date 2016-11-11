@@ -9,7 +9,6 @@ from . import optimise
 from .ast import BuiltInBlock
 from .command import command_args, print_verbose
 from .error import OmeError
-from .labels import make_method_label
 from .terminal import stderr
 from .version import version
 
@@ -57,7 +56,7 @@ def main():
             program = compiler.Program(ast, target, filename, options)
             for block in sorted(program.block_list, key=lambda block: block.tag_id):
                 for method in sorted(block.methods, key=lambda method: method.symbol):
-                    print('{}:'.format(make_method_label(block.tag_id, method.symbol)))
+                    print('{}:'.format(target.make_method_label(block.tag_id, method.symbol)))
                     code = method.generate_code(program)
                     code.instructions = optimise.eliminate_aliases(code.instructions)
                     code.instructions = optimise.move_constants_to_usage_points(code.instructions, code.num_args)
