@@ -17,10 +17,10 @@
         return @message("equals:")(self, rhs);
     }
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(OME_equal(cmp, OME_Equal));
+    if (OME_equal(cmp, OME_Equal)) { return OME_True; }
+    if (OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Greater)) { return OME_False; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #message != rhs
@@ -29,49 +29,50 @@
         OME_Value eq = @message("equals:")(self, rhs);
         if (OME_is_true(eq)) { return OME_False; }
         if (OME_is_false(eq)) { return OME_True; }
-        return eq;
+        if (OME_is_error(eq)) { return eq; }
+        return OME_error(OME_Type_Error);
     }
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(!OME_equal(cmp, OME_Equal));
+    if (OME_equal(cmp, OME_Equal)) { return OME_False; }
+    if (OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Greater)) { return OME_True; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #message < rhs
 {
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(OME_equal(cmp, OME_Less));
+    if (OME_equal(cmp, OME_Less)) { return OME_True; }
+    if (OME_equal(cmp, OME_Greater) || OME_equal(cmp, OME_Equal)) { return OME_False; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #message <= rhs
 {
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Equal));
+    if (OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Equal)) { return OME_True; }
+    if (OME_equal(cmp, OME_Greater)) { return OME_False; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #message > rhs
 {
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(OME_equal(cmp, OME_Greater));
+    if (OME_equal(cmp, OME_Greater)) { return OME_True; }
+    if (OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Equal)) { return OME_False; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #message >= rhs
 {
     OME_Value cmp = @message("compare:")(self, rhs);
-    if (OME_is_error(cmp)) {
-        return cmp;
-    }
-    return OME_boolean(OME_equal(cmp, OME_Greater) || OME_equal(cmp, OME_Equal));
+    if (OME_equal(cmp, OME_Greater) || OME_equal(cmp, OME_Equal)) { return OME_True; }
+    if (OME_equal(cmp, OME_Less)) { return OME_False; }
+    if (OME_is_error(cmp)) { return cmp; }
+    return OME_error(OME_Type_Error);
 }
 
 #method BuiltIn error: value
