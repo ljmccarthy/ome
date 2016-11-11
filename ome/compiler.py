@@ -114,6 +114,10 @@ class Program(object):
             (send.receiver_block.tag_id, send.symbol) for send in self.send_list
             if send.receiver_block and send.symbol not in self.sent_messages)
 
+        for method in self.builtin.messages:
+            if method.sent_messages and method.symbol in self.sent_messages:
+                self.sent_messages.update(method.sent_messages)
+
         for method in self.builtin.methods:
             if method.tag_name not in self.ids.tags:
                 raise OmeError("Unknown tag name '{}' in built-in method '{}'".format(method.tag_name, method.symbol))
@@ -188,6 +192,13 @@ class Program(object):
             out.write(s)
 
         dispatchers = set()
+
+        for method in self.builtin.messages:
+            if method.symbol in self.sent_messages:
+                out.write(method.generate_target_code(self.target.make_message_label(method.symbol), self.target))
+                out.write('\n')
+                dispatchers.add(method.symbol)
+
         for symbol, methods in self.code_table:
             for tag, code in methods:
                 out.write(code.generate_target_code(self.target.make_method_label(tag, symbol), self.target))
@@ -200,7 +211,7 @@ class Program(object):
                 out.write('\n')
                 dispatchers.add(symbol)
 
-        optional_messages = ['return', 'catch', 'catch:']
+        optional_messages = frozenset(['return', 'catch', 'catch:'])
         for symbol in sorted(self.sent_messages):
             if symbol not in dispatchers:
                 if symbol not in optional_messages:

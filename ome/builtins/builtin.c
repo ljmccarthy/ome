@@ -11,6 +11,69 @@
 #constant Overflow
 #constant Divide-By-Zero
 
+#message == rhs
+{
+    if (@lookup("equals:")(self)) {
+        return @message("equals:")(self, rhs);
+    }
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(OME_equal(cmp, OME_Equal));
+}
+
+#message != rhs
+{
+    if (@lookup("equals:")(self)) {
+        OME_Value eq = @message("equals:")(self, rhs);
+        if (OME_is_true(eq)) { return OME_False; }
+        if (OME_is_false(eq)) { return OME_True; }
+        return eq;
+    }
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(!OME_equal(cmp, OME_Equal));
+}
+
+#message < rhs
+{
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(OME_equal(cmp, OME_Less));
+}
+
+#message <= rhs
+{
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(OME_equal(cmp, OME_Less) || OME_equal(cmp, OME_Equal));
+}
+
+#message > rhs
+{
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(OME_equal(cmp, OME_Greater));
+}
+
+#message >= rhs
+{
+    OME_Value cmp = @message("compare:")(self, rhs);
+    if (OME_is_error(cmp)) {
+        return cmp;
+    }
+    return OME_boolean(OME_equal(cmp, OME_Greater) || OME_equal(cmp, OME_Equal));
+}
+
 #method BuiltIn error: value
 {
     OME_reset_traceback();

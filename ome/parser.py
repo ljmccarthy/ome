@@ -229,12 +229,14 @@ class Parser(ParserState):
                     parse_state.error("duplicate parameter name '%s'" % name)
                 argnames.append(name)
         if not symbol:
+            parse_state = self.copy_state()
             m = self.match(re_operator)
             if m:
                 argnames.append(self.argument_name())
                 symbol = operator_aliases.get(m.group(), m.group())
+                if re_comparison_operator.match(symbol):
+                    parse_state.error("define compare: or equals: to overload comparison operator")
             else:
-                parse_state = self.copy_state()
                 m = self.expect_token(re_name, 'expected name or keyword')
                 symbol = self.check_name(m.group(), parse_state)
         self.check_num_params(len(argnames), self)

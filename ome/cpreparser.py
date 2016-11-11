@@ -10,7 +10,7 @@ from .target.lang_c.codegen import make_message_label, make_lookup_label
 re_name_or_operator = re.compile(re_name.pattern + '|' + re_operator.pattern)
 re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n))+')
 re_comments = re.compile(r'/\*(?:[^*]*(?:\*[^/][^*]*)*)\*/|//[^\r\n]*(?=\r\n|\r|\n|$)')
-re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method)', re.M)
+re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method|message)', re.M)
 re_space_to_eol = re.compile(r'\s*$', re.M)
 re_start_method = re.compile(r'^{', re.M)
 re_end_method = re.compile(r'^}', re.M)
@@ -114,14 +114,17 @@ class CPreParser(BaseParser):
         for leading, m in self.search_iter(re_command):
             unparsed.append(leading)
             command = m.group(1)
-            m = self.expect_token(re_name, 'expected type name after #{}'.format(command))
-            name = m.group()
-            if command == 'method':
-                builtin.methods.append(self.method(name))
+            if command == 'message':
+                builtin.messages.append(self.method(None))
             else:
-                if not self.match(re_space_to_eol):
-                    self.error('unexpected tokens after #{} {}'.format(command, name))
-                tag_names[command].append(name)
+                m = self.expect_token(re_name, 'expected type name after #{}'.format(command))
+                name = m.group()
+                if command == 'method':
+                    builtin.methods.append(self.method(name))
+                else:
+                    if not self.match(re_space_to_eol):
+                        self.error('unexpected tokens after #{} {}'.format(command, name))
+                    tag_names[command].append(name)
         unparsed.append(self.trailing())
         code = remove_empty_lines_and_comments(''.join(unparsed))
         if code:

@@ -95,42 +95,28 @@
 
 static int OME_qsort_compare(const void *pa, const void *pb)
 {
-    OME_Value OME_message___EQ(OME_Value, OME_Value);
-    OME_Value OME_message___LT(OME_Value, OME_Value);
+    OME_Value OME_message_compare__1(OME_Value, OME_Value);
 
     if (OME_is_error(*OME_context->error)) {
         return 0;
     }
     OME_Value a = *(OME_Value *) pa;
     OME_Value b = *(OME_Value *) pb;
-    if (OME_equal(a, b)) {
+    OME_Value cmp = OME_message_compare__1(a, b);
+    if (OME_is_error(cmp)) {
+        *OME_context->error = cmp;
         return 0;
     }
-    OME_Value eq = OME_message___EQ(a, b);
-    if (OME_is_error(eq)) {
-        *OME_context->error = eq;
-        return 0;
-    }
-    if (OME_is_true(eq)) return 0;
-    if (!OME_is_false(eq)) {
-        *OME_context->error = OME_error(OME_Type_Error);
-        return 0;
-    }
-    OME_Value lt = OME_message___LT(a, b);
-    if (OME_is_error(lt)) {
-        *OME_context->error = lt;
-        return 0;
-    }
-    if (OME_is_true(lt)) return -1;
-    if (OME_is_false(lt)) return 1;
+    if (OME_equal(cmp, OME_Less)) return -1;
+    if (OME_equal(cmp, OME_Greater)) return 1;
+    if (OME_equal(cmp, OME_Equal)) return 0;
     *OME_context->error = OME_error(OME_Type_Error);
     return 0;
 }
 
 #method Array sorted
 {
-    // @message("==")
-    // @message("<")
+    // @message("compare:")
 
     OME_Array *src = OME_untag_pointer(self);
     size_t size = src->size;

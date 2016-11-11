@@ -589,4 +589,7 @@ Self = LocalGet(0, 'self')
 builtin_constants = {name: Constant(name) for name in [
     'False',
     'True',
+    'Less',
+    'Equal',
+    'Greater',
 ]}

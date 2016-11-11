@@ -11,6 +11,18 @@
     return OME_tag_pointer(OME_Tag_String, s);
 }
 
+#method Small-Integer equals: rhs
+{
+    return OME_boolean(OME_untag_signed(self) == OME_untag_signed(rhs));
+}
+
+#method Small-Integer compare: rhs
+{
+    intptr_t l = OME_untag_signed(self);
+    intptr_t r = OME_untag_signed(rhs);
+    return l < r ? OME_Less : (l > r ? OME_Greater : OME_Equal);
+}
+
 #method Small-Integer + rhs
 {
     intptr_t result = OME_untag_signed(self) + OME_untag_signed(rhs);
@@ -54,44 +66,4 @@
         return OME_error(OME_Type_Error);
     }
     return OME_tag_integer(result);
-}
-
-#method Small-Integer == rhs
-{
-    return OME_boolean(OME_get_tag(rhs) == OME_Tag_Small_Integer
-                    && OME_untag_signed(self) == OME_untag_signed(rhs));
-}
-
-#method Small-Integer != rhs
-{
-    return OME_boolean(OME_get_tag(rhs) != OME_Tag_Small_Integer
-                    || OME_untag_signed(self) != OME_untag_signed(rhs));
-}
-
-#method Small-Integer < rhs
-{
-    return OME_get_tag(rhs) == OME_Tag_Small_Integer
-          ? OME_boolean(OME_untag_signed(self) < OME_untag_signed(rhs))
-          : OME_error(OME_Type_Error);
-}
-
-#method Small-Integer <= rhs
-{
-    return OME_get_tag(rhs) == OME_Tag_Small_Integer
-          ? OME_boolean(OME_untag_signed(self) <= OME_untag_signed(rhs))
-          : OME_error(OME_Type_Error);
-}
-
-#method Small-Integer > rhs
-{
-    return OME_get_tag(rhs) == OME_Tag_Small_Integer
-          ? OME_boolean(OME_untag_signed(self) > OME_untag_signed(rhs))
-          : OME_error(OME_Type_Error);
-}
-
-#method Small-Integer >= rhs
-{
-    return OME_get_tag(rhs) == OME_Tag_Small_Integer
-          ? OME_boolean(OME_untag_signed(self) >= OME_untag_signed(rhs))
-          : OME_error(OME_Type_Error);
 }
