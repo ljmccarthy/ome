@@ -76,15 +76,10 @@ class BuildShell(object):
         if self.show_commands:
             print(' '.join(args))
 
-    def run(self, *args, input=None):
+    def run(self, *args, input=None, output=None):
         args = get_args_list(args)
         self.print_command(args)
-        run_shell_command(args, input)
-
-    def run_output(self, *args, input=None):
-        args = get_args_list(args)
-        self.print_command(args)
-        return run_shell_command(args, input, True)
+        return run_shell_command(args, input, output)
 
 platform_aliases = {
     'linux': ['posix'],
