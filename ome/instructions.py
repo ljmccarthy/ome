@@ -133,6 +133,20 @@ class SET_ELEM(Instruction):
     def __str__(self):
         return 'SETELEM(%{}, {}, %{})'.format(self.array, self.elem_index, self.value)
 
+class BEGIN_COMPARE(Instruction):
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __str__(self):
+        return 'BEGIN_COMPARE({})'.format(self.tag)
+
+class BEGIN_EQUALS(Instruction):
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __str__(self):
+        return 'BEGIN_EQUALS({})'.format(self.tag)
+
 class RETURN(Instruction):
     def __init__(self, source):
         self.args = [source]
