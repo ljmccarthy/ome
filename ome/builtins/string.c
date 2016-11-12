@@ -62,12 +62,6 @@
 
 #method String compare: rhs
 {
-    if (OME_get_tag(rhs) != OME_Tag_String) {
-        return OME_error(OME_Type_Error);
-    }
-    if (OME_equal(self, rhs)) {
-        return OME_Equal;
-    }
     OME_String *l = OME_untag_pointer(self);
     OME_String *r = OME_untag_pointer(rhs);
     if (l->size == 0) {
