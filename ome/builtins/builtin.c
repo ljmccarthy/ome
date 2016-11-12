@@ -13,6 +13,12 @@
 
 #message == rhs
 {
+    if (OME_equal(self, rhs)) {
+        return OME_True;
+    }
+    if (OME_get_tag(self) != OME_get_tag(rhs) || OME_get_tag(self) == OME_Tag_Constant) {
+        return OME_False;
+    }
     if (@lookup("equals:")(self)) {
         OME_Value eq = @message("equals:")(self, rhs);
         if (OME_is_boolean(eq) || OME_is_error(eq)) { return eq; }
@@ -27,6 +33,12 @@
 
 #message != rhs
 {
+    if (OME_equal(self, rhs)) {
+        return OME_False;
+    }
+    if (OME_get_tag(self) != OME_get_tag(rhs) || OME_get_tag(self) == OME_Tag_Constant) {
+        return OME_True;
+    }
     if (@lookup("equals:")(self)) {
         OME_Value eq = @message("equals:")(self, rhs);
         if (OME_is_true(eq)) { return OME_False; }
