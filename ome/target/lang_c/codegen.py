@@ -210,14 +210,13 @@ class DispatchCodegen(object):
         self.emit('OME_Tag _tag = OME_get_tag(_0);')
         if self.symbol == 'equals:':
             self.emit('if (OME_equal(_0, _1)) { return OME_True; }')
-            self.emit('if (_tag != OME_get_tag(_1)) { return OME_False; }')
-            self.emit('if (_tag < OME_Pointer_Tag) { return OME_False; }')
+            self.emit('if (_tag != OME_get_tag(_1) || _tag == OME_Tag_Constant) { return OME_False; }')
         elif self.symbol == 'compare:':
-            self.emit('if (OME_equal(_0, _1)) { return OME_Equal; }')
             self.emit('if (_tag != OME_get_tag(_1) || _tag == OME_Tag_Constant) {')
             with self.emit.indented():
                 self.emit('return OME_error(OME_Type_Error);')
             self.emit('}')
+            self.emit('if (OME_equal(_0, _1)) { return OME_Equal; }')
         if any_constant_tags:
             self.emit('if (_tag == OME_Tag_Constant) { _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }')
 
