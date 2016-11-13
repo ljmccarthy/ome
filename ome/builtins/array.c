@@ -8,7 +8,13 @@
     OME_LOCALS(1);
     OME_SAVE_LOCAL(0, self);
     OME_Array *array = OME_untag_pointer(self);
-    return OME_concat(array->elems, array->size, "[", "; ", "]");
+    size_t size = array->size;
+    OME_Value *strings = OME_allocate_slots(size);
+    OME_LOAD_LOCAL(0, self);
+    OME_SAVE_LOCAL(0, OME_tag_pointer(OME_Pointer_Tag, strings));
+    array = OME_untag_pointer(self);
+    memcpy(strings, array->elems, size * sizeof(OME_Value));
+    return OME_concat(strings, size, "[", "; ", "]");
 }
 
 #method Array size
