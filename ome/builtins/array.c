@@ -203,6 +203,7 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     OME_LOAD_LOCAL(1, error);
     if (OME_is_error(error)) {
         free(indices);
+        OME_POP_CALLBACK_STACK();
         OME_RETURN(error);
     }
 
