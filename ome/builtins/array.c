@@ -5,17 +5,23 @@
 
 #method Array string
 {
-    OME_LOCALS(2);
-    OME_SAVE_LOCAL(0, self);
+    OME_STATIC_STRING(empty, "[]");
+
     OME_Array *array = OME_untag_pointer(self);
     size_t array_size = array->size;
+    if (array_size == 0) {
+        return OME_tag_pointer(OME_Tag_String, &empty);
+    }
+
+    OME_LOCALS(2);
+    OME_SAVE_LOCAL(0, self);
     OME_Value *strings = OME_allocate_slots(array_size);
     OME_Value t_strings = OME_tag_pointer(OME_Pointer_Tag, strings);
     OME_SAVE_LOCAL(1, t_strings);
     OME_LOAD_LOCAL(0, self);
     array = OME_untag_pointer(self);
 
-    size_t size = 2 + (array_size > 0 ? 2 * (array_size - 1) : 0);
+    size_t size = 2 + 2 * (array_size - 1);
     for (size_t i = 0; i < array_size; i++) {
         OME_Value s = @message("string")(array->elems[i]);
         OME_RETURN_ERROR(s);
