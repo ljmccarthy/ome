@@ -1,16 +1,23 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import os
 import sys
 import time
 from . import build
 from . import compiler
 from . import optimise
-from .ast import BuiltInBlock
+from .ast import BuiltInBlock, format_sexpr
 from .command import command_args, print_verbose
 from .error import OmeError
 from .terminal import stderr
 from .version import version
+
+def get_terminal_width():
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
 
 def main():
     start_time = time.time()
@@ -42,14 +49,14 @@ def main():
 
         ast = compiler.parse_file(filename)
         if command_args.print_ast:
-            print(ast)
+            print(format_sexpr(ast.sexpr(), max_width=get_terminal_width()))
             sys.exit()
 
         if command_args.print_resolved_ast:
             builtin_block = BuiltInBlock(target.get_builtin().methods)
             ast = ast.resolve_free_vars(builtin_block)
             ast = ast.resolve_block_refs(builtin_block)
-            print(ast)
+            print(format_sexpr(ast.sexpr(), max_width=get_terminal_width()))
             sys.exit()
 
         if command_args.print_intermediate_code:
