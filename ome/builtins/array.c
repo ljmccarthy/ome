@@ -153,23 +153,28 @@ static int OME_qsort_compare(const void *pi, const void *pj)
 {
     OME_Value OME_message_compare__1(OME_Value, OME_Value);
 
-    if (OME_is_error(OME_context->callback_stack[1])) {
+    OME_Value error;
+    OME_CALLBACK_LOAD_LOCAL(1, error);
+
+    if (OME_is_error(error)) {
         return 0;
     }
     uint32_t i = *(uint32_t *) pi;
     uint32_t j = *(uint32_t *) pj;
-    OME_Array *array = OME_untag_pointer(OME_context->callback_stack[0]);
+    OME_Value t_array;
+    OME_CALLBACK_LOAD_LOCAL(0, t_array);
+    OME_Array *array = OME_untag_pointer(t_array);
     OME_Value a = array->elems[i];
     OME_Value b = array->elems[j];
     OME_Value cmp = OME_message_compare__1(a, b);
     if (OME_is_error(cmp)) {
-        OME_context->callback_stack[1] = cmp;
+        OME_CALLBACK_SAVE_LOCAL(1, cmp);
         return 0;
     }
     if (OME_equal(cmp, OME_Less)) return -1;
     if (OME_equal(cmp, OME_Greater)) return 1;
     if (OME_equal(cmp, OME_Equal)) return 0;
-    OME_context->callback_stack[1] = OME_error(OME_Type_Error);
+    OME_CALLBACK_SAVE_LOCAL(1, OME_error(OME_Type_Error));
     return 0;
 }
 
@@ -178,7 +183,7 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     // @message("compare:")
 
     OME_Array *array = OME_untag_pointer(self);
-    size_t size = array->size;
+    uint32_t size = array->size;
     if (size < 2) {
         return self;
     }
@@ -187,9 +192,7 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_SAVE_LOCAL(1, error);
-
-    OME_Value *old_callback_stack = OME_context->callback_stack;
-    OME_context->callback_stack = _OME_local_stack;
+    OME_PUSH_CALLBACK_STACK();
 
     uint32_t *indices = malloc(sizeof(uint32_t) * size);
     for (uint32_t i = 0; i < size; i++) {
@@ -212,6 +215,6 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     }
     free(indices);
 
-    OME_context->callback_stack = old_callback_stack;
+    OME_POP_CALLBACK_STACK();
     OME_RETURN(OME_tag_pointer(OME_Tag_Array, result));
 }

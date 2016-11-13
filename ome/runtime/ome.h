@@ -271,6 +271,19 @@ static int OME_is_boolean(OME_Value value)
         }\
     } while (0)
 
+#define OME_PUSH_CALLBACK_STACK()\
+    OME_Value *_OME_prev_callback_stack = OME_context->callback_stack;\
+    do { OME_context->callback_stack = _OME_local_stack; } while (0)
+
+#define OME_POP_CALLBACK_STACK()\
+    do { OME_context->callback_stack = _OME_prev_callback_stack; } while (0)
+
+#define OME_CALLBACK_LOAD_LOCAL(stack_slot, name)\
+    do { name = OME_context->callback_stack[stack_slot]; } while (0)
+
+#define OME_CALLBACK_SAVE_LOCAL(stack_slot, name)\
+    do { OME_context->callback_stack[stack_slot] = name; } while (0)
+
 #define OME_STATIC_STRING(name, string)\
     static const OME_String name OME_ALIGNED = {sizeof(string)-1, {string}}
 
