@@ -18,7 +18,7 @@
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_SAVE_LOCAL(1, rhs);
-    OME_RETURN(OME_concat(_OME_local_stack, 2, "", "", ""));
+    OME_RETURN(OME_concat(_OME_local_stack, 2));
 }
 
 #method String utf8-bytes

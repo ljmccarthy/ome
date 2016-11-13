@@ -5,16 +5,52 @@
 
 #method Array string
 {
-    OME_LOCALS(1);
+    OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_Array *array = OME_untag_pointer(self);
-    size_t size = array->size;
-    OME_Value *strings = OME_allocate_slots(size);
+    size_t array_size = array->size;
+    OME_Value *strings = OME_allocate_slots(array_size);
+    OME_Value t_strings = OME_tag_pointer(OME_Pointer_Tag, strings);
+    OME_SAVE_LOCAL(1, t_strings);
     OME_LOAD_LOCAL(0, self);
-    OME_SAVE_LOCAL(0, OME_tag_pointer(OME_Pointer_Tag, strings));
     array = OME_untag_pointer(self);
-    memcpy(strings, array->elems, size * sizeof(OME_Value));
-    return OME_concat(strings, size, "[", "; ", "]");
+
+    size_t size = 2 + (array_size > 0 ? 2 * (array_size - 1) : 0);
+    for (size_t i = 0; i < array_size; i++) {
+        OME_Value s = @message("string")(array->elems[i]);
+        OME_RETURN_ERROR(s);
+        if (OME_get_tag(s) != OME_Tag_String) {
+            OME_RETURN(OME_error(OME_Type_Error));
+        }
+        OME_LOAD_LOCAL(0, self);
+        OME_LOAD_LOCAL(1, t_strings);
+        array = OME_untag_pointer(self);
+        strings = OME_untag_pointer(t_strings);
+        strings[i] = s;
+        size += OME_untag_string(s)->size;
+    }
+
+    OME_FORGET_LOCAL(0);
+
+    OME_String *output = OME_allocate_data(sizeof(OME_String) + size + 1);
+    output->size = size;
+    char *cur = output->data;
+    OME_LOAD_LOCAL(1, t_strings);
+    strings = OME_untag_pointer(t_strings);
+
+    *cur++ = '[';
+    for (size_t i = 0; i < array_size; i++) {
+        if (i > 0) {
+            *cur++ = ';';
+            *cur++ = ' ';
+        }
+        OME_String *s = OME_untag_pointer(strings[i]);
+        memcpy(cur, s->data, s->size);
+        cur += s->size;
+    }
+    *cur++ = ']';
+
+    OME_RETURN(OME_tag_pointer(OME_Tag_String, output));
 }
 
 #method Array size
