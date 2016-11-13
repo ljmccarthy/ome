@@ -192,18 +192,19 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     OME_LOCALS(2);
     OME_SAVE_LOCAL(0, self);
     OME_SAVE_LOCAL(1, error);
-    OME_PUSH_CALLBACK_STACK();
 
     uint32_t *indices = malloc(sizeof(uint32_t) * size);
     for (uint32_t i = 0; i < size; i++) {
         indices[i] = i;
     }
+
+    OME_PUSH_CALLBACK_STACK();
     qsort(indices, size, sizeof(uint32_t), OME_qsort_compare);
+    OME_POP_CALLBACK_STACK();
 
     OME_LOAD_LOCAL(1, error);
     if (OME_is_error(error)) {
         free(indices);
-        OME_POP_CALLBACK_STACK();
         OME_RETURN(error);
     }
 
@@ -214,8 +215,7 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     for (uint32_t i = 0; i < size; i++) {
         result->elems[i] = array->elems[indices[i]];
     }
-    free(indices);
 
-    OME_POP_CALLBACK_STACK();
+    free(indices);
     OME_RETURN(OME_tag_pointer(OME_Tag_Array, result));
 }
