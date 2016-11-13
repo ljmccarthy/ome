@@ -166,7 +166,7 @@ class ProcedureCodegen(object):
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(stack_size))
         for index, arg in enumerate(ins.args):
             self.emit('_stack[{}] = _{};'.format(index + self.stack_size, arg))
-        self.emit('OME_Value _{} = OME_concat(&_stack[{}], {});'.format(ins.dest, self.stack_size, len(ins.args)))
+        self.emit('OME_Value _{} = OME_concat(&_stack[{}], {}, "", "", "");'.format(ins.dest, self.stack_size, len(ins.args)))
         self.emit('OME_context->stack_pointer = &_stack[{}];'.format(self.stack_size))
         self.emit_error_check(ins.dest, ins.traceback_info)
 

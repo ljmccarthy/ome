@@ -466,9 +466,13 @@ static void *OME_allocate_data(size_t size)
     return OME_allocate(size, 0, 0);
 }
 
-static OME_Value OME_concat(OME_Value *strings, unsigned int count)
+static OME_Value OME_concat(OME_Value *strings, unsigned int count, const char *prefix, const char *sep, const char *suffix)
 {
-    size_t size = 0;
+    size_t prefix_len = strlen(prefix);
+    size_t suffix_len = strlen(suffix);
+    size_t sep_len = strlen(sep);
+    size_t size = prefix_len + suffix_len + (count > 0 ? sep_len * (count - 1) : 0);
+
     for (unsigned int i = 0; i < count; i++) {
         OME_Value string = strings[i];
         if (OME_get_tag(string) != OME_Tag_String) {
@@ -490,11 +494,19 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
     OME_String *output = OME_allocate_data(sizeof(OME_String) + size + 1);
     output->size = size;
     char *cur = &output->data[0];
+
+    memcpy(cur, prefix, prefix_len);
+    cur += prefix_len;
     for (unsigned int i = 0; i < count; i++) {
+        if (i != 0) {
+            memcpy(cur, sep, sep_len);
+            cur += sep_len;
+        }
         OME_String *string = OME_untag_string(strings[i]);
         memcpy(cur, string->data, string->size);
         cur += string->size;
     }
+    memcpy(cur, suffix, suffix_len);
 
     return OME_tag_pointer(OME_Tag_String, output);
 }

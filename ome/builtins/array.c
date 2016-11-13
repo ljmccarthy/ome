@@ -3,6 +3,14 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 */
 
+#method Array string
+{
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, self);
+    OME_Array *array = OME_untag_pointer(self);
+    return OME_concat(array->elems, array->size, "[", "; ", "]");
+}
+
 #method Array size
 {
     OME_Array *array = OME_untag_pointer(self);
