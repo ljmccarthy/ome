@@ -522,7 +522,7 @@ static int OME_thread_main(void)
         .stack_limit = stack + OME_STACK_SIZE,
         .stack_base = stack,
         .stack_end = stack + OME_STACK_SIZE,
-        .error = NULL,
+        .callback_stack = NULL,
     };
 
     OME_initialize_heap(&context.heap);

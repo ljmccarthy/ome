@@ -149,24 +149,27 @@
     OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
 }
 
-static int OME_qsort_compare(const void *pa, const void *pb)
+static int OME_qsort_compare(const void *pi, const void *pj)
 {
     OME_Value OME_message_compare__1(OME_Value, OME_Value);
 
-    if (OME_is_error(*OME_context->error)) {
+    if (OME_is_error(OME_context->callback_stack[1])) {
         return 0;
     }
-    OME_Value a = *(OME_Value *) pa;
-    OME_Value b = *(OME_Value *) pb;
+    uint32_t i = *(uint32_t *) pi;
+    uint32_t j = *(uint32_t *) pj;
+    OME_Array *array = OME_untag_pointer(OME_context->callback_stack[0]);
+    OME_Value a = array->elems[i];
+    OME_Value b = array->elems[j];
     OME_Value cmp = OME_message_compare__1(a, b);
     if (OME_is_error(cmp)) {
-        *OME_context->error = cmp;
+        OME_context->callback_stack[1] = cmp;
         return 0;
     }
     if (OME_equal(cmp, OME_Less)) return -1;
     if (OME_equal(cmp, OME_Greater)) return 1;
     if (OME_equal(cmp, OME_Equal)) return 0;
-    *OME_context->error = OME_error(OME_Type_Error);
+    OME_context->callback_stack[1] = OME_error(OME_Type_Error);
     return 0;
 }
 
@@ -174,27 +177,41 @@ static int OME_qsort_compare(const void *pa, const void *pb)
 {
     // @message("compare:")
 
-    OME_Array *src = OME_untag_pointer(self);
-    size_t size = src->size;
+    OME_Array *array = OME_untag_pointer(self);
+    size_t size = array->size;
     if (size < 2) {
         return self;
     }
 
     OME_Value error = OME_False;
-    OME_LOCALS(1);
-    OME_SAVE_LOCAL(0, error);
-    OME_Value *old_error = OME_context->error;
-    OME_context->error = &_OME_local_stack[0];
+    OME_LOCALS(2);
+    OME_SAVE_LOCAL(0, self);
+    OME_SAVE_LOCAL(1, error);
 
-    OME_Array *tmp = malloc(sizeof(OME_Value) * size);
-    memcpy(tmp, src->elems, size * sizeof(OME_Value));
-    qsort(tmp, size, sizeof(OME_Value), OME_qsort_compare);
-    OME_Array *dst = OME_allocate_array(size);
-    memcpy(dst->elems, tmp, sizeof(OME_Value) * size);
-    free(tmp);
+    OME_Value *old_callback_stack = OME_context->callback_stack;
+    OME_context->callback_stack = _OME_local_stack;
 
-    OME_context->error = old_error;
-    OME_LOAD_LOCAL(0, error);
-    OME_RETURN_ERROR(error);
-    OME_RETURN(OME_tag_pointer(OME_Tag_Array, dst));
+    uint32_t *indices = malloc(sizeof(uint32_t) * size);
+    for (uint32_t i = 0; i < size; i++) {
+        indices[i] = i;
+    }
+    qsort(indices, size, sizeof(uint32_t), OME_qsort_compare);
+
+    OME_LOAD_LOCAL(1, error);
+    if (OME_is_error(error)) {
+        free(indices);
+        OME_RETURN(error);
+    }
+
+    OME_Array *result = OME_allocate_array(size);
+    OME_LOAD_LOCAL(0, self);
+    array = OME_untag_pointer(self);
+
+    for (uint32_t i = 0; i < size; i++) {
+        result->elems[i] = array->elems[indices[i]];
+    }
+    free(indices);
+
+    OME_context->callback_stack = old_callback_stack;
+    OME_RETURN(OME_tag_pointer(OME_Tag_Array, result));
 }
