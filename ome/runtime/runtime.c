@@ -246,7 +246,6 @@ static void OME_free_big_objects(OME_Heap *heap)
 
     OME_Big_Object *big;
     for (big = heap->big_objects; big < heap->big_objects_end && !big->mark; big++) {
-        assert(!big->mark);
         OME_GC_PRINT("freeing big object %p (%ld bytes)\n", big->body, big->size);
         OME_memory_free(big->body, big->size);
     }
