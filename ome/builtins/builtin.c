@@ -152,7 +152,7 @@
             OME_ERROR(Type_Error);
         }
         OME_RETURN_ERROR(do_method(block));
-        OME_SAVE_LOCAL(0, block);
+        OME_LOAD_LOCAL(0, block);
     }
 }
 
