@@ -14,6 +14,7 @@ typedef uint32_t OME_Tag;
 typedef union OME_Value OME_Value;
 typedef struct OME_Traceback_Entry OME_Traceback_Entry;
 typedef union OME_Header OME_Header;
+typedef struct OME_Big_Object OME_Big_Object;
 typedef struct OME_Heap_Relocation OME_Heap_Relocation;
 typedef struct OME_Heap OME_Heap;
 typedef struct OME_Context OME_Context;
@@ -56,6 +57,14 @@ union OME_Header {
     };
 };
 
+struct OME_Big_Object {
+    void *body;
+    size_t mark : 1;
+    size_t scan_offset : sizeof(size_t) * 8 - 1;
+    size_t scan_size;
+    size_t size;
+};
+
 struct OME_Heap_Relocation {
     uint32_t src;
     uint32_t diff;
@@ -66,13 +75,12 @@ struct OME_Heap {
     char *base;
     union {
         char *limit;
-        OME_Value *big_objects;
+        OME_Big_Object *big_objects;
     };
     union {
-        char *end;
-        OME_Value *big_objects_end;
+        OME_Big_Object *big_objects_end;
+        OME_Heap_Relocation *relocs;
     };
-    OME_Heap_Relocation *relocs;
     unsigned long *bitmap;
     size_t size;
     size_t relocs_size;
@@ -81,6 +89,7 @@ struct OME_Heap {
     size_t num_collections;
     clock_t mark_time;
     clock_t compact_time;
+    uint32_t mark_list;
 };
 
 struct OME_Context {
@@ -258,7 +267,11 @@ static int OME_is_boolean(OME_Value value)
     do { OME_context->stack_pointer = _OME_local_stack; } while (0)
 
 #define OME_RETURN(retval)\
-    do { OME_context->stack_pointer = _OME_local_stack; return (retval); } while (0)
+    do {\
+        OME_Value _OME_return_value = (retval);\
+        OME_context->stack_pointer = _OME_local_stack;\
+        return _OME_return_value;\
+    } while (0)
 
 #define OME_ERROR(error)\
     OME_RETURN(OME_error(OME_##error))

@@ -7,9 +7,11 @@
 #endif
 
 #ifdef OME_GC_STATS
-    #define OME_GC_CLOCK(name) clock_t name = clock()
+    #define OME_GC_TIMER_START() clock_t _OME_gc_start_time = clock()
+    #define OME_GC_TIMER_END(timer) do { timer += clock() - _OME_gc_start_time; } while (0)
 #else
-    #define OME_GC_CLOCK(name)
+    #define OME_GC_TIMER_START()
+    #define OME_GC_TIMER_END(timer)
 #endif
 
 static OME_Value OME_print(FILE *out, OME_Value value)
@@ -90,6 +92,23 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     fflush(out);
 }
 
+static void *OME_memory_allocate(size_t size)
+{
+    void *p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    return p != MAP_FAILED ? p : NULL;
+}
+
+static void *OME_memory_reallocate(void *old_p, size_t old_size, size_t new_size)
+{
+    void *p = mremap(old_p, old_size, new_size, MREMAP_MAYMOVE);
+    return p != MAP_FAILED ? p : NULL;
+}
+
+static void OME_memory_free(void *addr, size_t size)
+{
+    munmap(addr, size);
+}
+
 static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 {
     size &= ~(OME_HEAP_ALIGNMENT - 1);
@@ -99,9 +118,8 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     size_t metadata_size = OME_heap_align(relocs_size * sizeof(OME_Heap_Relocation) + bitmap_size * sizeof(unsigned long));
     heap->base = heap_base;
     heap->pointer = heap_base;
-    heap->end = heap_base + size - metadata_size;
-    heap->limit = heap->end;
-    heap->relocs = (OME_Heap_Relocation *) heap->end;
+    heap->limit = heap_base + size - metadata_size;
+    heap->relocs = (OME_Heap_Relocation *) heap->limit;
     heap->bitmap = (unsigned long *) (heap->relocs + relocs_size);
     heap->size = size;
     heap->relocs_size = relocs_size;
@@ -111,12 +129,6 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     OME_GC_PRINT("metadata size: %lu bytes\n", metadata_size);
     OME_GC_PRINT("reloc buffer size: %lu bytes\n", relocs_size * sizeof(OME_Heap_Relocation));
     OME_GC_PRINT("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
-}
-
-static void *OME_memory_allocate(size_t size)
-{
-    void *p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-    return p != MAP_FAILED ? p : NULL;
 }
 
 static void OME_initialize_heap(OME_Heap *heap)
@@ -189,58 +201,110 @@ static void OME_resize_heap(OME_Heap *heap, size_t new_size)
 {
     OME_GC_ASSERT(new_size > heap->size);
     OME_GC_PRINT("resizing heap: %lu KB\n", new_size / 1024);
-    char *new_heap = mremap(heap->base, heap->size, new_size, MREMAP_MAYMOVE);
-    if (new_heap == MAP_FAILED) {
-        perror("mremap");
+    char *new_heap = OME_memory_reallocate(heap->base, heap->size, new_size);
+    if (!new_heap) {
+        perror("OME_memory_reallocate");
         exit(1);
     }
     OME_move_heap(heap, new_heap, new_size);
 }
 
-#define OME_MARK_LIST_NULL 0xFFFFFFFF
-
-static void OME_mark(void)
+static int OME_compare_big_object(const void *pa, const void *pb)
 {
-    OME_Context *context = OME_context;
-    OME_Heap *heap = &context->heap;
-    OME_Header *heap_base = (OME_Header *) heap->base;
-    OME_Header *heap_end = (OME_Header *) heap->pointer;
-    uint32_t mark_list = OME_MARK_LIST_NULL;
+    const OME_Big_Object *a = pa;
+    const OME_Big_Object *b = pb;
+    return a->body < b->body ? -1 : (a->body > b->body ? 1 : 0);
+}
 
-    memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
+static int OME_compare_big_object_mark(const void *pa, const void *pb)
+{
+    const OME_Big_Object *a = pa;
+    const OME_Big_Object *b = pb;
+    if (a->mark != b->mark) {
+        return a->mark < b->mark ? -1 : 1;
+    }
+    return a->body < b->body ? -1 : (a->body > b->body ? 1 : 0);
+}
 
-    for (OME_Value *cur = context->stack_base, *end = context->stack_pointer; cur < end; cur++) {
+static OME_Big_Object *OME_find_big_object(OME_Heap *heap, void *body)
+{
+    size_t num = heap->big_objects_end - heap->big_objects;
+    OME_Big_Object key = {.body = body};
+    return bsearch(&key, heap->big_objects, num, sizeof(OME_Big_Object), OME_compare_big_object);
+}
+
+static void OME_sort_big_objects(OME_Heap *heap)
+{
+    size_t num = heap->big_objects_end - heap->big_objects;
+    qsort(heap->big_objects, num, sizeof(OME_Big_Object), OME_compare_big_object);
+}
+
+static void OME_free_big_objects(OME_Heap *heap)
+{
+    size_t num = heap->big_objects_end - heap->big_objects;
+    qsort(heap->big_objects, num, sizeof(OME_Big_Object), OME_compare_big_object_mark);
+
+    OME_Big_Object *big;
+    for (big = heap->big_objects; big < heap->big_objects_end && !big->mark; big++) {
+        assert(!big->mark);
+        OME_GC_PRINT("freeing big object %p (%ld bytes)\n", big->body, big->size);
+        OME_memory_free(big->body, big->size);
+    }
+    heap->big_objects = big;
+    OME_GC_PRINT("%ld big objects allocated after collection\n", heap->big_objects_end - heap->big_objects);
+    for (; big < heap->big_objects_end; big++) {
+        big->mark = 0;
+    }
+}
+
+static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size_t scan_size)
+{
+    OME_Value *cur = (OME_Value *) body + scan_offset;
+    OME_Value *end = cur + scan_size;
+    for (; cur < end; cur++) {
         if (OME_is_pointer(*cur)) {
             char *body = OME_untag_pointer(*cur);
-            OME_Header *header = (OME_Header *) body - 1;
-            if (header >= heap_base && header <= heap_end && !OME_is_marked(heap, header)) {
-                OME_mark_bitmap(heap, header);
-                header->mark_next = mark_list;
-                mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
-                OME_GC_ASSERT((mark_list * OME_HEAP_ALIGNMENT) + heap->base == body);
-                //printf("marked %p %d\n", header, mark_list);
-            }
-        }
-    }
-    while (mark_list != OME_MARK_LIST_NULL) {
-        char *body = heap->base + (uintptr_t) mark_list * OME_HEAP_ALIGNMENT;
-        OME_Header *header = (OME_Header *) body - 1;
-        mark_list = header->mark_next;
-        OME_Value *cur = (OME_Value *) body + header->scan_offset;
-        OME_Value *end = cur + header->scan_size;
-        for (; cur < end; cur++) {
-            if (OME_is_pointer(*cur)) {
-                char *body = OME_untag_pointer(*cur);
+            if (body >= heap->base && body <= heap->pointer) {
                 OME_Header *header = (OME_Header *) body - 1;
-                if (header >= heap_base && header <= heap_end && !OME_is_marked(heap, header)) {
+                if (!OME_is_marked(heap, header)) {
                     OME_mark_bitmap(heap, header);
-                    header->mark_next = mark_list;
-                    mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
-                    //printf("marked %p %d\n", header, mark_list);
+                    header->mark_next = heap->mark_list;
+                    heap->mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
+                    //printf("marked %p %d\n", header, heap->mark_list);
+                }
+            }
+            else {
+                OME_Big_Object *big = OME_find_big_object(heap, body);
+                if (big && !big->mark) {
+                    //printf("marked big object %p\n", big->body);
+                    big->mark = 1;
+                    OME_mark_object(heap, big->body, big->scan_offset, big->scan_size);
                 }
             }
         }
     }
+}
+
+#define OME_MARK_LIST_NULL 0xFFFFFFFF
+
+static void OME_mark(OME_Heap *heap)
+{
+    OME_GC_TIMER_START();
+
+    heap->mark_list = OME_MARK_LIST_NULL;
+    memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
+    OME_sort_big_objects(heap);
+
+    OME_mark_object(heap, OME_context->stack_base, 0, OME_context->stack_pointer - OME_context->stack_base);
+
+    while (heap->mark_list != OME_MARK_LIST_NULL) {
+        char *body = heap->base + (uintptr_t) heap->mark_list * OME_HEAP_ALIGNMENT;
+        OME_Header *header = (OME_Header *) body - 1;
+        heap->mark_list = header->mark_next;
+        OME_mark_object(heap, body, header->scan_offset, header->scan_size);
+    }
+
+    OME_GC_TIMER_END(heap->mark_time);
 }
 
 static uintptr_t OME_find_relocation(char *body, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
@@ -314,6 +378,14 @@ static void OME_relocate_uncompacted(OME_Header *start, OME_Header *end, OME_Hea
     }
 }
 
+static void OME_relocate_big_objects(OME_Heap *heap, OME_Heap_Relocation *end_relocs)
+{
+    for (OME_Big_Object *big = heap->big_objects; big < heap->big_objects_end; big++) {
+        OME_Value *slot = (OME_Value *) big->body + big->scan_offset;
+        OME_relocate_slots(slot, slot + big->scan_size, heap, end_relocs);
+    }
+}
+
 static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
 {
     const size_t nbits = 8 * sizeof(unsigned long);
@@ -331,9 +403,12 @@ static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
     return ~0UL;
 }
 
-static void OME_compact(void)
+static void OME_compact(OME_Heap *heap)
 {
-    OME_Heap *heap = &OME_context->heap;
+    OME_GC_TIMER_START();
+
+    OME_free_big_objects(heap);
+
     char *dest = heap->base;
     OME_Header *end = (OME_Header *) heap->pointer;
     OME_Heap_Relocation *relocs_cur = heap->relocs;
@@ -371,6 +446,7 @@ static void OME_compact(void)
                 OME_relocate_stack(heap, relocs_cur);
                 OME_relocate_compacted((OME_Header *) heap->base, (OME_Header *) (dest + size), heap, relocs_cur);
                 OME_relocate_uncompacted(cur, end, heap, relocs_cur);
+                OME_relocate_big_objects(heap, relocs_cur);
                 relocs_cur = heap->relocs;
             }
         }
@@ -388,23 +464,28 @@ static void OME_compact(void)
     relocs_cur++;
     OME_relocate_stack(heap, relocs_cur);
     OME_relocate_compacted((OME_Header *) heap->base, (OME_Header *) heap->pointer, heap, relocs_cur);
+    OME_relocate_big_objects(heap, relocs_cur);
+
+    OME_GC_TIMER_END(heap->compact_time);
 }
 
 static void OME_collect(OME_Heap *heap)
 {
-    OME_GC_CLOCK(t0);
-    OME_mark();
-    OME_GC_CLOCK(t1);
-    OME_compact();
-    OME_GC_CLOCK(t2);
+    OME_mark(heap);
+    OME_compact(heap);
     OME_GC_PRINT("%lu bytes used after collection\n", heap->pointer - heap->base);
 
 #ifdef OME_GC_STATS
     heap->num_collections++;
-    heap->mark_time += t1 - t0;
-    heap->compact_time += t2 - t1;
-    //exit(0);
 #endif
+}
+
+static void OME_collect_big_objects(OME_Heap *heap)
+{
+    OME_mark(heap);
+    OME_GC_TIMER_START();
+    OME_free_big_objects(heap);
+    OME_GC_TIMER_END(heap->compact_time);
 }
 
 static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t scan_size)
@@ -413,8 +494,38 @@ static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t sca
     object_size = (object_size + 7) & ~7;
 
     if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
-        // TODO add to object list
+        if (object_size > OME_MAX_BIG_OBJECT_SIZE * sizeof(OME_Value)) {
+            fprintf(stderr, "ome: invalid object object size %ld\n", object_size);
+            exit(1);
+        }
+        OME_Big_Object *big_object = &heap->big_objects[-1];
+        if ((char *) big_object < heap->pointer) {
+            OME_collect(heap);
+            big_object = &heap->big_objects[-1];
+            if ((char *) big_object < heap->pointer) {
+                OME_resize_heap(heap, heap->size * 4);
+                big_object = &heap->big_objects[-1];
+            }
+        }
         char *body = OME_memory_allocate(object_size);
+        if (!body) {
+            OME_GC_PRINT("allocation failed, collecting big objects\n");
+            OME_collect_big_objects(heap);
+            body = OME_memory_allocate(object_size);
+            if (!body) {
+                perror("OME_memory_allocate");
+                exit(1);
+            }
+            big_object = &heap->big_objects[-1];
+        }
+        big_object->body = body;
+        big_object->mark = 0;
+        big_object->scan_offset = scan_offset;
+        big_object->scan_size = scan_size;
+        big_object->size = object_size;
+        heap->big_objects = big_object;
+        OME_GC_PRINT("allocated big object %p (%ld bytes)\n", big_object->body, big_object->size);
+        OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
         return body;
     }
 
@@ -466,6 +577,13 @@ static void *OME_allocate_data(size_t size)
     return OME_allocate(size, 0, 0);
 }
 
+static OME_String *OME_allocate_string(uint32_t size)
+{
+    OME_String *string = OME_allocate_data(sizeof(OME_String) + size + 1);
+    string->size = size;
+    return string;
+}
+
 static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 {
     size_t size = 0;
@@ -487,8 +605,7 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
         }
     }
 
-    OME_String *output = OME_allocate_data(sizeof(OME_String) + size + 1);
-    output->size = size;
+    OME_String *output = OME_allocate_string(size);
     char *cur = &output->data[0];
     for (unsigned int i = 0; i < count; i++) {
         OME_String *string = OME_untag_string(strings[i]);
@@ -528,7 +645,10 @@ static int OME_thread_main(void)
     OME_initialize_heap(&context.heap);
     context.heap.mark_time = 0;
     context.heap.compact_time = 0;
-    OME_GC_CLOCK(start);
+
+#ifdef OME_GC_STATS
+    clock_t start = clock();
+#endif
 
     OME_context = &context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
