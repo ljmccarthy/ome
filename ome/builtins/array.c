@@ -159,8 +159,8 @@ static int OME_qsort_compare(const void *pi, const void *pj)
     if (OME_is_error(error)) {
         return 0;
     }
-    uint32_t i = *(uint32_t *) pi;
-    uint32_t j = *(uint32_t *) pj;
+    uint32_t i = *(const uint32_t *) pi;
+    uint32_t j = *(const uint32_t *) pj;
     OME_Value t_array;
     OME_CALLBACK_LOAD_LOCAL(0, t_array);
     OME_Array *array = OME_untag_pointer(t_array);
