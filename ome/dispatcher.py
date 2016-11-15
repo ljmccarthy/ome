@@ -43,6 +43,6 @@ def generate_dispatcher(symbol, tags, target, default_method):
     gen = DispatcherGenerator(symbol, tags, default_method, target, target.DispatchCodegen)
     return gen.emit.get_output()
 
-def generate_lookup_dispatcher(symbol, tags, target):
-    gen = DispatcherGenerator(symbol, tags, None, target, target.LookupDispatchCodegen)
+def generate_lookup_dispatcher(symbol, tags, target, default_method):
+    gen = DispatcherGenerator(symbol, tags, default_method, target, target.LookupDispatchCodegen)
     return gen.emit.get_output()

@@ -208,7 +208,7 @@ class Program(object):
                 default_method = self.builtin.defaults.get(symbol)
                 out.write(generate_dispatcher(symbol, tags, self.target, default_method))
                 out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, tags, self.target))
+                out.write(generate_lookup_dispatcher(symbol, tags, self.target, default_method))
                 out.write('\n')
                 dispatchers.add(symbol)
 
@@ -220,7 +220,7 @@ class Program(object):
                 default_method = self.builtin.defaults.get(symbol)
                 out.write(generate_dispatcher(symbol, [], self.target, default_method))
                 out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, [], self.target))
+                out.write(generate_lookup_dispatcher(symbol, [], self.target, default_method))
                 out.write('\n')
 
     def emit_toplevel(self, out):

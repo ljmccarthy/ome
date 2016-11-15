@@ -201,12 +201,6 @@ class DispatchCodegen(object):
         if self.default_method:
             self.emit(format_function_definition_with_arg_names(default_name, self.default_method.arg_names))
             self.emit('{{{}}}\n'.format(self.default_method.code))
-        else:
-            self.emit(format_function_definition(default_name, self.num_args))
-            self.emit('{')
-            with self.emit.indented():
-                self.emit('return OME_error(OME_Not_Understood);')
-            self.emit('}\n')
 
         self.emit(format_function_definition(make_message_label(self.symbol), self.num_args))
         self.emit('{')
@@ -217,8 +211,11 @@ class DispatchCodegen(object):
         self.end_empty_dispatch()
 
     def end_empty_dispatch(self):
-        default_name = make_default_label(self.symbol)
-        self.emit('return {};'.format(format_dispatch_call(default_name, self.num_args)))
+        if self.default_method:
+            default_name = make_default_label(self.symbol)
+            self.emit('return {};'.format(format_dispatch_call(default_name, self.num_args)))
+        else:
+            self.emit('return OME_error(OME_Not_Understood);')
         self.emit.dedent()
         self.emit.end('}')
 
@@ -255,7 +252,10 @@ class LookupDispatchCodegen(DispatchCodegen):
         self.emit.indent()
 
     def end_empty_dispatch(self):
-        self.emit('return {};'.format(make_default_label(self.symbol)))
+        if self.default_method:
+            self.emit('return {};'.format(make_default_label(self.symbol)))
+        else:
+            self.emit('return NULL;')
         self.emit.dedent()
         self.emit.end('}')
 
