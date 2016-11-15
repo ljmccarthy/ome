@@ -172,15 +172,15 @@ class ProcedureCodegen(object):
 
     def GET_SLOT(self, ins):
         self.emit_load_list(ins)
-        self.emit('OME_Value _{} = OME_untag_slots(_{})[{}];'.format(ins.dest, ins.object, ins.slot_index))
+        self.emit('OME_Value _{} = OME_get_slot(_{}, {});'.format(ins.dest, ins.object, ins.slot_index))
 
     def SET_SLOT(self, ins):
         self.emit_load_list(ins)
-        self.emit('OME_untag_slots(_{})[{}] = _{};'.format(ins.object, ins.slot_index, ins.value))
+        self.emit('OME_set_slot(_{}, {}, _{});'.format(ins.object, ins.slot_index, ins.value))
 
     def SET_ELEM(self, ins):
         self.emit_load_list(ins)
-        self.emit('((OME_Array *) OME_untag_pointer(_{}))->elems[{}] = _{};'.format(ins.array, ins.elem_index, ins.value))
+        self.emit('OME_untag_array(_{})->elems[{}] = _{};'.format(ins.array, ins.elem_index, ins.value))
 
     def RETURN(self, ins):
         self.emit_load_list(ins)

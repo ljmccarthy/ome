@@ -239,6 +239,16 @@ static int OME_is_boolean(OME_Value value)
     return OME_is_false(value) || OME_is_true(value);
 }
 
+static OME_Value OME_get_slot(OME_Value slots, unsigned int index)
+{
+    return OME_untag_slots(slots)[index];
+}
+
+static OME_Value OME_set_slot(OME_Value slots, unsigned int index, OME_Value value)
+{
+    return OME_untag_slots(slots)[index] = value;
+}
+
 #define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
 
 #define OME_ENTER_OR_RETURN(stack_size, retval)\
