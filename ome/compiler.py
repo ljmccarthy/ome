@@ -215,7 +215,7 @@ class Program(object):
         optional_messages = frozenset(['return', 'catch', 'catch:'])
         for symbol in sorted(self.sent_messages):
             if symbol not in dispatchers:
-                if symbol not in optional_messages:
+                if symbol not in optional_messages and symbol not in self.builtin.defaults:
                     self.warning("no methods defined for message '%s'" % symbol)
                 default_method = self.builtin.defaults.get(symbol)
                 out.write(generate_dispatcher(symbol, [], self.target, default_method))
