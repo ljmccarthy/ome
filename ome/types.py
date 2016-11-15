@@ -6,6 +6,7 @@ class BuiltIn(object):
         self.code = []
         self.methods = []
         self.messages = []
+        self.defaults = {}
         self.constant_names = ['False', 'True', 'Less', 'Equal', 'Greater', 'Empty', 'BuiltIn']
         self.opaque_names = ['Constant', 'Small-Integer', 'Small-Decimal']
         self.pointer_names = ['String', 'Array']

@@ -205,7 +205,8 @@ class Program(object):
                 out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
-                out.write(generate_dispatcher(symbol, tags, self.target))
+                default_method = self.builtin.defaults.get(symbol)
+                out.write(generate_dispatcher(symbol, tags, self.target, default_method))
                 out.write('\n')
                 out.write(generate_lookup_dispatcher(symbol, tags, self.target))
                 out.write('\n')
@@ -216,7 +217,7 @@ class Program(object):
             if symbol not in dispatchers:
                 if symbol not in optional_messages:
                     self.warning("no methods defined for message '%s'" % symbol)
-                out.write(generate_dispatcher(symbol, [], self.target))
+                out.write(generate_dispatcher(symbol, [], self.target, default_method))
                 out.write('\n')
                 out.write(generate_lookup_dispatcher(symbol, [], self.target))
                 out.write('\n')

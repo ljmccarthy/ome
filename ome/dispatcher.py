@@ -5,10 +5,10 @@ from .constants import MIN_CONSTANT_TAG, NUM_DATA_BITS
 from .emit import ProcedureCodeEmitter
 
 class DispatcherGenerator(object):
-    def __init__(self, symbol, tags, target, codegen_class):
+    def __init__(self, symbol, tags, default_method, target, codegen_class):
         tags = sorted(tags)
         self.emit = ProcedureCodeEmitter(target)
-        self.codegen = codegen_class(self.emit, symbol)
+        self.codegen = codegen_class(self.emit, symbol, default_method)
         self.codegen.begin()
         if tags:
             any_constant_tags = any(tag >= MIN_CONSTANT_TAG for tag in tags)
@@ -34,15 +34,15 @@ class DispatcherGenerator(object):
             self.emit.label(middle_label)
             self.split_tag_range(tags[middle:], tags[middle], max_tag)
 
-def generate_dispatcher(symbol, tags, target):
+def generate_dispatcher(symbol, tags, target, default_method):
     """
     Generate assembly code for dispatching messages. This is implemented as
     a binary search with compare and conditional jump instructions until the
     method for the tag is found.
     """
-    gen = DispatcherGenerator(symbol, tags, target, target.DispatchCodegen)
+    gen = DispatcherGenerator(symbol, tags, default_method, target, target.DispatchCodegen)
     return gen.emit.get_output()
 
 def generate_lookup_dispatcher(symbol, tags, target):
-    gen = DispatcherGenerator(symbol, tags, target, target.LookupDispatchCodegen)
+    gen = DispatcherGenerator(symbol, tags, None, target, target.LookupDispatchCodegen)
     return gen.emit.get_output()

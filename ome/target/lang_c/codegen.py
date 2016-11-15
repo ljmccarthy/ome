@@ -17,6 +17,9 @@ indent = '    '
 def make_message_label(symbol):
     return 'OME_message_' + symbol_to_label(symbol)
 
+def make_default_label(symbol):
+    return 'OME_default_' + symbol_to_label(symbol)
+
 def make_lookup_label(symbol):
     return 'OME_lookup_' + symbol_to_label(symbol)
 
@@ -187,12 +190,26 @@ class ProcedureCodegen(object):
         self.emit_return('_{}'.format(ins.source))
 
 class DispatchCodegen(object):
-    def __init__(self, emitter, symbol):
+    def __init__(self, emitter, symbol, default_method):
         self.emit = emitter
         self.symbol = symbol
         self.num_args = symbol_arity(symbol)
+        self.default_method = default_method
 
     def begin(self):
+        default_name = make_default_label(self.symbol)
+        if self.default_method:
+            self.emit(format_function_definition_with_arg_names(default_name, self.default_method.arg_names))
+        else:
+            self.emit(format_function_definition(default_name, self.num_args))
+        self.emit('{')
+        with self.emit.indented():
+            if self.default_method:
+                self.emit(self.default_method.code)
+            else:
+                self.emit('return OME_error(OME_Not_Understood);')
+        self.emit('}\n')
+
         self.emit(format_function_definition(make_message_label(self.symbol), self.num_args))
         self.emit('{')
         self.emit.indent()
@@ -202,7 +219,8 @@ class DispatchCodegen(object):
         self.end_empty_dispatch()
 
     def end_empty_dispatch(self):
-        self.emit('return OME_error(OME_Not_Understood);')
+        default_name = make_default_label(self.symbol)
+        self.emit('return {};'.format(format_dispatch_call(default_name, self.num_args)))
         self.emit.dedent()
         self.emit.end('}')
 
@@ -239,7 +257,7 @@ class LookupDispatchCodegen(DispatchCodegen):
         self.emit.indent()
 
     def end_empty_dispatch(self):
-        self.emit('return NULL;')
+        self.emit('return {};'.format(make_default_label(self.symbol)))
         self.emit.dedent()
         self.emit.end('}')
 

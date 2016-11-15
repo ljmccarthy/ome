@@ -30,10 +30,6 @@ static OME_Value OME_print(FILE *out, OME_Value value)
         OME_String *p_string = OME_untag_string(string);
         fwrite(p_string->data, 1, p_string->size, out);
     }
-    else {
-        OME_LOAD_LOCAL(0, value);
-        fprintf(out, "#<%ld:%ld>", (long) OME_get_tag(value), (long) OME_untag_unsigned(value));
-    }
     OME_RETURN(OME_Empty);
 }
 

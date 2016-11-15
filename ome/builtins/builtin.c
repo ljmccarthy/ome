@@ -11,6 +11,16 @@
 #constant Overflow
 #constant Divide-By-Zero
 
+#default string
+{
+    char buf[64];
+    int size = snprintf(buf, sizeof(buf), "#<%lu:%lX>",
+        (uintptr_t) OME_get_tag(self), (uintptr_t) OME_untag_unsigned(self));
+    OME_String *string = OME_allocate_string(size);
+    memcpy(string->data, buf, size);
+    return OME_tag_pointer(OME_Tag_String, string);
+}
+
 #message == rhs
 {
     if (OME_equal(self, rhs)) {

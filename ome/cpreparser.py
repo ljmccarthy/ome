@@ -10,7 +10,7 @@ from .target.lang_c.codegen import make_message_label, make_lookup_label
 re_name_or_operator = re.compile(re_name.pattern + '|' + re_operator.pattern)
 re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n))+')
 re_comments = re.compile(r'/\*(?:[^*]*(?:\*[^/][^*]*)*)\*/|//[^\r\n]*(?=\r\n|\r|\n|$)')
-re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method|message)', re.M)
+re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method|message|default)', re.M)
 re_space_to_eol = re.compile(r'\s*$', re.M)
 re_start_method = re.compile(r'^{', re.M)
 re_end_method = re.compile(r'^}', re.M)
@@ -116,6 +116,9 @@ class CPreParser(BaseParser):
             command = m.group(1)
             if command == 'message':
                 builtin.messages.append(self.method(None))
+            elif command == 'default':
+                method = self.method(None)
+                builtin.defaults[method.symbol] = method
             else:
                 m = self.expect_token(re_name, 'expected type name after #{}'.format(command))
                 name = m.group()
