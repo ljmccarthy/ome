@@ -20,11 +20,8 @@ static OME_Value OME_print(FILE *out, OME_Value value)
     OME_SAVE_LOCAL(0, value);
     OME_Value string = value;
     if (OME_get_tag(value) != OME_Tag_String) {
-        OME_Method_0 string_method = OME_lookup_string__0(value);
-        if (string_method) {
-            string = string_method(value);
-            OME_RETURN_ERROR(string);
-        }
+        string = OME_message_string__0(value);
+        OME_RETURN_ERROR(string);
     }
     if (OME_get_tag(string) == OME_Tag_String) {
         OME_String *p_string = OME_untag_string(string);
