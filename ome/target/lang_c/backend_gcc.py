@@ -6,23 +6,24 @@ from ...error import OmeError
 from .backend_cc import CCArgsBuilder, CCBuilder
 
 class GCCArgsBuilder(CCArgsBuilder):
-    all = [
+    cc_args = [
         '-x', 'c',
         '-std=c99',
         '-Wall',
         '-Wextra',
         '-Wno-unused',
     ]
-    release = [
-        '-O3',
-    ]
-    debug = [
-        '-ggdb',
-    ]
-    release_link = [
-        '-Wl,--strip-all',
-        '-Wl,--gc-sections',
-    ]
+    variant_cc_args = {
+        'release': ['-O3'],
+        'fast': ['-O0'],
+        'debug': ['-O0', '-ggdb']
+    }
+    variant_link_args = {
+        'release': [
+            '-Wl,--strip-all',
+            '-Wl,--gc-sections',
+        ]
+    }
 
     def get_musl_args(self, build_options, musl_path):
         specs_file = os.path.join(musl_path, 'lib', 'musl-gcc.specs')

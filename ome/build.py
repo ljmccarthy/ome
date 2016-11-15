@@ -89,7 +89,9 @@ class BuildOptions(CompileOptions):
     def __init__(self, target, options):
         self.target = target
         self.platform = options.platform.lower()
+        self.variant = 'debug' if options.debug else ('fast' if options.fast else 'release')
         self.debug = options.debug
+        self.release = not options.debug and not options.fast
         self.link = not options.make_object
         self.static = options.static
         self.verbose = options.verbose

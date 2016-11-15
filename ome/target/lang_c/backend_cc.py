@@ -16,11 +16,10 @@ def find_musl_path(path):
     raise OmeError('could not find musl path, please specify with --musl-path')
 
 class CCArgsBuilder(object):
-    all = []
-    release = []
-    debug = []
-    release_link = []
-    debug_link = []
+    cc_args = []
+    link_args = []
+    variant_cc_args = {'release': [], 'fast': [], 'debug': []}
+    variant_link_args = {'release': [], 'fast': [], 'debug': []}
 
     def get_musl_args(self, build_options, musl_path):
         raise OmeError("musl is not supported for this backend")
@@ -37,10 +36,11 @@ class CCArgsBuilder(object):
             args.append('-c')
         if build_options.static:
             args.append('-static')
-        args.extend(self.all)
-        args.extend(self.debug if build_options.debug else self.release)
+        args.extend(self.cc_args)
+        args.extend(self.variant_cc_args.get(build_options.variant, []))
         if build_options.link:
-            args.extend(self.debug_link if build_options.debug else self.release_link)
+            args.extend(self.link_args)
+            args.extend(self.variant_link_args.get(build_options.variant, []))
         for name, value in build_options.defines:
             args.append('-D{}={}'.format(name, value) if value else '-D' + name)
         for include_dir in build_options.include_dirs:
@@ -70,5 +70,5 @@ class CCBuilder(object):
     def make_output(self, shell, code, outfile, build_options):
         build_args = self.get_build_args(build_options, '-', outfile)
         shell.run([self.command] + build_args, input=code)
-        if not (build_options.debug or build_options.link):
+        if build_options.release and build_options.link:
             shell.run('strip', '-R', '.comment', outfile)
