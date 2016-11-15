@@ -144,8 +144,8 @@ class ProcedureCodegen(object):
             with self.emit.indented():
                 self.emit('OME_Tag _tag = OME_get_tag(_{});'.format(ins.args[0]))
                 if ins.check_tag >= MIN_CONSTANT_TAG:
-                    constant_id = self.check_tag - MIN_CONSTANT_TAG
-                    self.emit('if (_tag != OME_Tag_Constant || OME_untag_unsigned(_{}) != {}; }}'.format(ins.args[0], constant_id))
+                    constant_id = ins.check_tag - MIN_CONSTANT_TAG
+                    self.emit('if (_tag != OME_Tag_Constant || OME_untag_unsigned(_{}) != {}) {{'.format(ins.args[0], constant_id))
                 else:
                     self.emit('if (_tag != {}) {{'.format(ins.check_tag))
                 with self.emit.indented():
