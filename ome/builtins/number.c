@@ -5,10 +5,11 @@
 
 #method Small-Integer string
 {
-    intptr_t n = OME_untag_signed(self);
-    OME_String *s = OME_allocate_data(32);
-    s->size = snprintf(s->data, 31 - sizeof(OME_String), "%" PRIdPTR, n);
-    return OME_tag_pointer(OME_Tag_String, s);
+    char buf[64];
+    int size = snprintf(buf, sizeof(buf), "%" PRIdPTR, OME_untag_signed(self));
+    OME_String *string = OME_allocate_string(size);
+    memcpy(string->data, buf, size);
+    return OME_tag_pointer(OME_Tag_String, string);
 }
 
 #method Small-Integer equals: rhs
