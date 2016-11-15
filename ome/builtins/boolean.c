@@ -50,12 +50,12 @@
 
 #method False then: block
 {
-    return OME_Empty;
+    return self;
 }
 
 #method True else: block
 {
-    return OME_Empty;
+    return self;
 }
 
 #method False else: block
