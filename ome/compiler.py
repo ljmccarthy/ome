@@ -217,6 +217,7 @@ class Program(object):
             if symbol not in dispatchers:
                 if symbol not in optional_messages:
                     self.warning("no methods defined for message '%s'" % symbol)
+                default_method = self.builtin.defaults.get(symbol)
                 out.write(generate_dispatcher(symbol, [], self.target, default_method))
                 out.write('\n')
                 out.write(generate_lookup_dispatcher(symbol, [], self.target))
