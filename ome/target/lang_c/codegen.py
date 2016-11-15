@@ -200,15 +200,13 @@ class DispatchCodegen(object):
         default_name = make_default_label(self.symbol)
         if self.default_method:
             self.emit(format_function_definition_with_arg_names(default_name, self.default_method.arg_names))
+            self.emit('{{{}}}\n'.format(self.default_method.code))
         else:
             self.emit(format_function_definition(default_name, self.num_args))
-        self.emit('{')
-        with self.emit.indented():
-            if self.default_method:
-                self.emit(self.default_method.code)
-            else:
+            self.emit('{')
+            with self.emit.indented():
                 self.emit('return OME_error(OME_Not_Understood);')
-        self.emit('}\n')
+            self.emit('}\n')
 
         self.emit(format_function_definition(make_message_label(self.symbol), self.num_args))
         self.emit('{')
