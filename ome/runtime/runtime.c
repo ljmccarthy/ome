@@ -85,6 +85,28 @@ static void OME_print_traceback(FILE *out, OME_Value error)
     fflush(out);
 }
 
+static uint64_t OME_cycle_count(void)
+{
+#if defined(__clang__)
+    return __builtin_readcyclecounter();
+#else
+    uint64_t rax, rdx;
+    __asm__ __volatile__("rdtsc" : "=a"(rax), "=d"(rdx));
+    return (rdx << 32) | rax;
+#endif
+}
+
+static uint64_t OME_estimate_cycles_per_ms(void)
+{
+    clock_t t = clock();
+    uint64_t cycles = OME_cycle_count();
+    while (clock() < t + CLOCKS_PER_SEC / 1000)
+        ;
+    t = clock() - t;
+    cycles = OME_cycle_count() - cycles;
+    return cycles * CLOCKS_PER_SEC / t / 1000;
+}
+
 static void *OME_memory_allocate(size_t size)
 {
     void *p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
@@ -101,6 +123,9 @@ static void OME_memory_free(void *addr, size_t size)
 {
     munmap(addr, size);
 }
+
+#define OME_MIN_HEAP_SIZE 0x1000
+#define OME_MAX_HEAP_SIZE ((1L << 32) * 16)
 
 static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 {
@@ -126,13 +151,34 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 
 static void OME_initialize_heap(OME_Heap *heap)
 {
-    size_t heap_size = 0x8000;
-    char *heap_base = OME_memory_allocate(heap_size);
-    if (heap_base == MAP_FAILED) {
-        perror("OME_memory_allocate");
-        exit(1);
+    size_t reserved_size = OME_MAX_HEAP_SIZE;
+    char *heap_base = NULL;
+    while (1) {
+        heap_base = OME_memory_allocate(reserved_size);
+        if (heap_base) {
+            break;
+        }
+        reserved_size /= 2;
+        if (reserved_size < OME_MIN_HEAP_SIZE) {
+            fprintf(stderr, "ome: failed to allocate heap memory, aborting");
+            exit(1);
+        }
     }
-    OME_set_heap_base(heap, heap_base, heap_size);
+    heap->reserved_size = reserved_size;
+    heap->latency = 50L * OME_cycles_per_ms;
+    OME_set_heap_base(heap, heap_base, 0x8000);
+
+    OME_GC_PRINT("heap reserved size: %lu MB\n", reserved_size / (1024*1024));
+    OME_GC_PRINT("cycles per ms: %lu\n", OME_cycles_per_ms);
+}
+
+static void OME_delete_heap(OME_Heap *heap)
+{
+    for (OME_Big_Object *big = heap->big_objects; big < heap->big_objects_end; big++) {
+        OME_memory_free(big->body, big->size);
+    }
+    OME_memory_free(heap->base, heap->size);
+    memset(heap, 0, sizeof(*heap));
 }
 
 static void OME_mark_bitmap(OME_Heap *heap, OME_Header *header)
@@ -192,14 +238,23 @@ static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
 
 static void OME_resize_heap(OME_Heap *heap, size_t new_size)
 {
+    OME_GC_TIMER_START();
     OME_GC_ASSERT(new_size > heap->size);
+    OME_GC_ASSERT(new_size >= OME_MIN_HEAP_SIZE);
+    OME_GC_ASSERT(new_size <= OME_MAX_HEAP_SIZE);
     OME_GC_PRINT("resizing heap: %lu KB\n", new_size / 1024);
-    char *new_heap = OME_memory_reallocate(heap->base, heap->size, new_size);
-    if (!new_heap) {
-        perror("OME_memory_reallocate");
-        exit(1);
+
+    char *new_heap = heap->base;
+    if (new_size > heap->reserved_size) {
+        new_heap = OME_memory_reallocate(heap->base, heap->size, new_size);
+        if (!new_heap) {
+            perror("OME_memory_reallocate");
+            exit(1);
+        }
     }
     OME_move_heap(heap, new_heap, new_size);
+
+    OME_GC_TIMER_END(heap->resize_time);
 }
 
 static int OME_compare_big_object(const void *pa, const void *pb)
@@ -262,6 +317,7 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
                     OME_mark_bitmap(heap, header);
                     header->mark_next = heap->mark_list;
                     heap->mark_list = (body - heap->base) / OME_HEAP_ALIGNMENT;
+                    heap->mark_size += sizeof(OME_Header) + header->size * sizeof(OME_Value);
                     //printf("marked %p %d\n", header, heap->mark_list);
                 }
             }
@@ -279,10 +335,11 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
 
 #define OME_MARK_LIST_NULL 0xFFFFFFFF
 
-static void OME_mark(OME_Heap *heap)
+static int OME_mark(OME_Heap *heap, uint64_t deadline)
 {
     OME_GC_TIMER_START();
 
+    heap->mark_size = 0;
     heap->mark_list = OME_MARK_LIST_NULL;
     memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
     OME_sort_big_objects(heap);
@@ -294,9 +351,14 @@ static void OME_mark(OME_Heap *heap)
         OME_Header *header = (OME_Header *) body - 1;
         heap->mark_list = header->mark_next;
         OME_mark_object(heap, body, header->scan_offset, header->scan_size);
+        if (deadline != 0 && OME_cycle_count() > deadline) {
+            OME_GC_PRINT("deadline expired while marking\n");
+            return 0;
+        }
     }
 
     OME_GC_TIMER_END(heap->mark_time);
+    return 1;
 }
 
 static uintptr_t OME_find_relocation(char *body, OME_Heap *heap, OME_Heap_Relocation *end_relocs)
@@ -417,20 +479,24 @@ static void OME_relocate_fully_compacted(OME_Heap *heap, OME_Heap_Relocation *re
     OME_relocate_big_objects(heap, relocs_cur);
 }
 
-static void OME_compact(OME_Heap *heap)
+static int OME_compact(OME_Heap *heap, uint64_t deadline)
 {
     OME_GC_TIMER_START();
-    clock_t deadline = clock() + (CLOCKS_PER_SEC / 60);
 
     OME_free_big_objects(heap);
+    if (deadline != 0 && OME_cycle_count() > deadline) {
+        OME_GC_PRINT("deadline expired while compacting\n");
+        return 0;
+    }
 
     char *dest = heap->base;
     OME_Header *end = (OME_Header *) heap->pointer;
     OME_Heap_Relocation *relocs_cur = heap->relocs;
     OME_Heap_Relocation *relocs_end = heap->relocs + heap->relocs_size - 1;
     size_t end_index = (heap->pointer - heap->base) / sizeof(OME_Header);
+    size_t moved = 0;
 
-    for (size_t index = 0, count = 1; index < end_index; count++) {
+    for (size_t index = 0; index < end_index; ) {
         index = OME_scan_bitmap(heap, index);
         if (index == ~0UL) {
             break;
@@ -448,6 +514,7 @@ static void OME_compact(OME_Heap *heap)
         }
         if (dest != src && size > 0) {
             memmove(dest, src, size);
+            moved += size;
             relocs_cur->src = (src + sizeof(OME_Header) - heap->base) / OME_HEAP_ALIGNMENT;
             relocs_cur->diff = (src - dest) / OME_HEAP_ALIGNMENT;
             relocs_cur++;
@@ -462,14 +529,17 @@ static void OME_compact(OME_Heap *heap)
         dest += size;
         index = ((char *) cur - heap->base) / sizeof(OME_Header);
 
-        if ((count & 0xFFFF) == 0 && clock() > deadline) {
-            OME_GC_PRINT("deadline expired\n");
+        if (deadline != 0 && OME_cycle_count() > deadline) {
+            OME_GC_PRINT("compacted %lu KB\n", moved / 1024);
+            OME_GC_PRINT("deadline expired while compacting\n");
             OME_relocate_partially_compacted(heap, (OME_Header *) dest, cur, relocs_cur);
             relocs_cur = heap->relocs;
             OME_GC_TIMER_END(heap->compact_time);
-            return;
+            return 0;
         }
     }
+
+    size_t freed = heap->pointer - dest;
 
     heap->pointer = dest;
     if (heap->pointer < heap->limit) {
@@ -477,23 +547,56 @@ static void OME_compact(OME_Heap *heap)
     }
 
     OME_relocate_fully_compacted(heap, relocs_cur);
+
+    OME_GC_PRINT("compacted %lu KB, freed %lu KB\n", moved / 1024, freed / 1024);
     OME_GC_TIMER_END(heap->compact_time);
+    return 1;
 }
 
 static void OME_collect(OME_Heap *heap)
 {
-    OME_mark(heap);
-    OME_compact(heap);
-    OME_GC_PRINT("%lu bytes used after collection\n", heap->pointer - heap->base);
+#ifdef OME_GC_DEBUG
+    clock_t t = clock();
+#endif
+    uint64_t deadline = OME_cycle_count() + heap->latency;
 
+    OME_GC_PRINT("--- begin collection (heap size: %lu KB)\n", heap->size / 1024);
+
+    if (OME_mark(heap, deadline)) {
+        OME_GC_PRINT("%lu bytes marked\n", heap->mark_size);
+        if (heap->mark_size < heap->size / 2 && (deadline == 0 || OME_cycle_count() < deadline)) {
+            if (OME_compact(heap, deadline)) {
+                OME_GC_PRINT("%lu KB used after collection\n", (heap->pointer - heap->base) / 1024);
+            }
+        }
+        else {
+            OME_GC_PRINT("skipping compaction\n");
+        }
+    }
+
+    OME_GC_PRINT("--- collection completed in %lu ms\n", (clock() - t) * 1000 / CLOCKS_PER_SEC);
 #ifdef OME_GC_STATS
     heap->num_collections++;
 #endif
 }
 
+static void OME_collect_full(OME_Heap *heap)
+{
+#ifdef OME_GC_DEBUG
+    clock_t t = clock();
+#endif
+    OME_GC_PRINT("--- begin FULL collection (heap size: %lu)\n", heap->size);
+
+    OME_mark(heap, 0);
+    OME_compact(heap, 0);
+
+    OME_GC_PRINT("--- FULL collection completed in %lu ms (%lu KB used)\n",
+        (clock() - t) * 1000 / CLOCKS_PER_SEC, (heap->pointer - heap->base) / 1024);
+}
+
 static void OME_collect_big_objects(OME_Heap *heap)
 {
-    OME_mark(heap);
+    OME_mark(heap, 0);
     OME_GC_TIMER_START();
     OME_free_big_objects(heap);
     OME_GC_TIMER_END(heap->compact_time);
@@ -511,8 +614,18 @@ static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_of
         OME_collect(heap);
         big = &heap->big_objects[-1];
         if ((char *) big < heap->pointer) {
-            OME_resize_heap(heap, heap->size * 2);
-            big = &heap->big_objects[-1];
+            if (heap->size * 2 > OME_MAX_HEAP_SIZE) {
+                OME_collect_full(heap);
+                big = &heap->big_objects[-1];
+                if ((char *) big >= heap->pointer) {
+                    fprintf(stderr, "ome: memory exhausted, aborting\n");
+                    exit(1);
+                }
+            }
+            else {
+                OME_resize_heap(heap, heap->size * 2);
+                big = &heap->big_objects[-1];
+            }
         }
     }
 
@@ -522,7 +635,11 @@ static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_of
         OME_collect_big_objects(heap);
         body = OME_memory_allocate(object_size);
         if (!body) {
-            perror("OME_memory_allocate");
+            OME_collect_full(heap);
+        }
+        body = OME_memory_allocate(object_size);
+        if (!body) {
+            fprintf(stderr, "ome: memory exhausted, aborting\n");
             exit(1);
         }
         big = &heap->big_objects[-1];
@@ -555,9 +672,17 @@ static void *OME_allocate(size_t object_size, size_t scan_offset, size_t scan_si
     if (heap->pointer + padded_size >= heap->limit) {
         OME_collect(heap);
         size_t heap_size = heap->limit - heap->base;
-        char *resize_threshold = heap->base + heap_size / 2;
-        if (heap->pointer + padded_size >= resize_threshold) {
-            OME_resize_heap(heap, heap->size * 2);
+        if (heap->pointer + padded_size >= heap->base + heap_size / 2) {
+            if (heap->size * 2 <= OME_MAX_HEAP_SIZE) {
+                OME_resize_heap(heap, heap->size * 2);
+            }
+            else if (heap->pointer + padded_size >= heap->limit) {
+                OME_collect_full(heap);
+                if (heap->pointer + padded_size >= heap->limit) {
+                    fprintf(stderr, "ome: memory exhausted, aborting\n");
+                    exit(1);
+                }
+            }
         }
     }
 
@@ -646,6 +771,7 @@ static void OME_initialize(int argc, const char *const *argv)
         memcpy(arg->data, argv[i], len + 1);
         OME_argv->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
     }
+    OME_cycles_per_ms = OME_estimate_cycles_per_ms();
 }
 
 #define OME_STACK_SIZE 256
@@ -659,13 +785,10 @@ static int OME_thread_main(void)
         .stack_base = stack,
         .stack_end = stack + OME_STACK_SIZE,
         .callback_stack = NULL,
+        .start_time = clock(),
     };
 
     OME_initialize_heap(&context.heap);
-
-#ifdef OME_GC_STATS
-    clock_t start = clock();
-#endif
 
     OME_context = &context;
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
@@ -674,16 +797,19 @@ static int OME_thread_main(void)
     }
 
 #ifdef OME_GC_STATS
-    clock_t time = clock() - start;
-    clock_t gc_time = context.heap.mark_time + context.heap.compact_time;
+    clock_t time = clock() - context.start_time;
+    clock_t gc_time = context.heap.mark_time + context.heap.compact_time + context.heap.resize_time;
     printf("collections:  %lu\n", context.heap.num_collections);
     printf("gc time:      %lu ms\n", gc_time * 1000 / CLOCKS_PER_SEC);
     printf("- marking:    %lu ms\n", context.heap.mark_time * 1000 / CLOCKS_PER_SEC);
     printf("- compacting: %lu ms\n", context.heap.compact_time * 1000 / CLOCKS_PER_SEC);
+    printf("- resizing:   %lu ms\n", context.heap.resize_time * 1000 / CLOCKS_PER_SEC);
     printf("mutator time: %lu ms\n", (time - gc_time) * 1000 / CLOCKS_PER_SEC);
     printf("total time:   %lu ms\n", time * 1000 / CLOCKS_PER_SEC);
     printf("gc overhead:  %lu%%\n", gc_time * 100 / time);
 #endif
+
+    OME_delete_heap(&context.heap);
 
     return OME_is_error(value) ? 1 : 0;
 }

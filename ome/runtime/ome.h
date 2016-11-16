@@ -85,12 +85,16 @@ struct OME_Heap {
     size_t size;
     size_t relocs_size;
     size_t bitmap_size;
+    size_t reserved_size;
+    clock_t latency;
+    size_t mark_size;
+    uint32_t mark_list;
 #ifdef OME_GC_STATS
     size_t num_collections;
     clock_t mark_time;
     clock_t compact_time;
+    clock_t resize_time;
 #endif
-    uint32_t mark_list;
 };
 
 struct OME_Context {
@@ -106,6 +110,7 @@ struct OME_Context {
     };
     OME_Value *callback_stack;
     OME_Heap heap;
+    clock_t start_time;
 };
 
 struct OME_String {
@@ -310,3 +315,4 @@ static OME_Value OME_set_slot(OME_Value slots, unsigned int index, OME_Value val
 
 static __thread OME_Context *OME_context;
 static OME_Array *OME_argv;
+static uint64_t OME_cycles_per_ms;
