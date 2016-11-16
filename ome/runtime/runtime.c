@@ -427,7 +427,7 @@ static void OME_compact(OME_Heap *heap)
     char *dest = heap->base;
     OME_Header *end = (OME_Header *) heap->pointer;
     OME_Heap_Relocation *relocs_cur = heap->relocs;
-    OME_Heap_Relocation *relocs_end = heap->relocs + heap->relocs_size;
+    OME_Heap_Relocation *relocs_end = heap->relocs + heap->relocs_size - 1;
     size_t end_index = (heap->pointer - heap->base) / sizeof(OME_Header);
 
     for (size_t index = 0, count = 1; index < end_index; count++) {
@@ -452,7 +452,7 @@ static void OME_compact(OME_Heap *heap)
             relocs_cur->diff = (src - dest) / OME_HEAP_ALIGNMENT;
             relocs_cur++;
             //printf("reloc src=%p dest=%p size=%u reloc=%u-%u\n", src, dest, size, relocs_cur->src, relocs_cur->diff);
-            if (relocs_cur + 1 >= relocs_end) {
+            if (relocs_cur >= relocs_end) {
                 // relocation buffer full, apply relocations now and reset
                 OME_GC_PRINT("relocation buffer full\n");
                 OME_relocate_partially_compacted(heap, (OME_Header *) (dest + size), cur, relocs_cur);
@@ -499,45 +499,54 @@ static void OME_collect_big_objects(OME_Heap *heap)
     OME_GC_TIMER_END(heap->compact_time);
 }
 
-static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t scan_size)
+static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_offset, size_t scan_size)
+{
+    if (object_size > OME_MAX_BIG_OBJECT_SIZE * sizeof(OME_Value)) {
+        fprintf(stderr, "ome: invalid object object size %ld\n", object_size);
+        exit(1);
+    }
+
+    OME_Big_Object *big = &heap->big_objects[-1];
+    if ((char *) big < heap->pointer) {
+        OME_collect(heap);
+        big = &heap->big_objects[-1];
+        if ((char *) big < heap->pointer) {
+            OME_resize_heap(heap, heap->size * 2);
+            big = &heap->big_objects[-1];
+        }
+    }
+
+    char *body = OME_memory_allocate(object_size);
+    if (!body) {
+        OME_GC_PRINT("allocation failed, collecting big objects\n");
+        OME_collect_big_objects(heap);
+        body = OME_memory_allocate(object_size);
+        if (!body) {
+            perror("OME_memory_allocate");
+            exit(1);
+        }
+        big = &heap->big_objects[-1];
+    }
+
+    big->body = body;
+    big->mark = 0;
+    big->scan_offset = scan_offset;
+    big->scan_size = scan_size;
+    big->size = object_size;
+    heap->big_objects = big;
+
+    OME_GC_PRINT("allocated big object %p (%ld bytes)\n", big->body, big->size);
+    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
+    return body;
+}
+
+static void *OME_allocate(size_t object_size, size_t scan_offset, size_t scan_size)
 {
     OME_Heap *heap = &OME_context->heap;
     object_size = (object_size + 7) & ~7;
 
     if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
-        if (object_size > OME_MAX_BIG_OBJECT_SIZE * sizeof(OME_Value)) {
-            fprintf(stderr, "ome: invalid object object size %ld\n", object_size);
-            exit(1);
-        }
-        OME_Big_Object *big_object = &heap->big_objects[-1];
-        if ((char *) big_object < heap->pointer) {
-            OME_collect(heap);
-            big_object = &heap->big_objects[-1];
-            if ((char *) big_object < heap->pointer) {
-                OME_resize_heap(heap, heap->size * 2);
-                big_object = &heap->big_objects[-1];
-            }
-        }
-        char *body = OME_memory_allocate(object_size);
-        if (!body) {
-            OME_GC_PRINT("allocation failed, collecting big objects\n");
-            OME_collect_big_objects(heap);
-            body = OME_memory_allocate(object_size);
-            if (!body) {
-                perror("OME_memory_allocate");
-                exit(1);
-            }
-            big_object = &heap->big_objects[-1];
-        }
-        big_object->body = body;
-        big_object->mark = 0;
-        big_object->scan_offset = scan_offset;
-        big_object->scan_size = scan_size;
-        big_object->size = object_size;
-        heap->big_objects = big_object;
-        OME_GC_PRINT("allocated big object %p (%ld bytes)\n", big_object->body, big_object->size);
-        OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
-        return body;
+        return OME_allocate_big(heap, object_size, scan_offset, scan_size);
     }
 
     size_t alloc_size = object_size + sizeof(OME_Header);
