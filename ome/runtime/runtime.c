@@ -420,7 +420,7 @@ static void OME_relocate_fully_compacted(OME_Heap *heap, OME_Heap_Relocation *re
 static void OME_compact(OME_Heap *heap)
 {
     OME_GC_TIMER_START();
-    clock_t deadline = clock() + (1 * CLOCKS_PER_SEC / 60);
+    clock_t deadline = clock() + (CLOCKS_PER_SEC / 60);
 
     OME_free_big_objects(heap);
 
@@ -466,6 +466,7 @@ static void OME_compact(OME_Heap *heap)
             OME_GC_PRINT("deadline expired\n");
             OME_relocate_partially_compacted(heap, (OME_Header *) dest, cur, relocs_cur);
             relocs_cur = heap->relocs;
+            OME_GC_TIMER_END(heap->compact_time);
             return;
         }
     }
@@ -476,7 +477,6 @@ static void OME_compact(OME_Heap *heap)
     }
 
     OME_relocate_fully_compacted(heap, relocs_cur);
-
     OME_GC_TIMER_END(heap->compact_time);
 }
 
@@ -563,7 +563,6 @@ static void *OME_allocate(size_t object_size, uint32_t scan_offset, uint32_t sca
     header->scan_size = scan_size;
 
     heap->pointer = (char *) header + alloc_size;
-    heap->num_allocated++;
 
     void *body = header + 1;
     OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
@@ -654,8 +653,6 @@ static int OME_thread_main(void)
     };
 
     OME_initialize_heap(&context.heap);
-    context.heap.mark_time = 0;
-    context.heap.compact_time = 0;
 
 #ifdef OME_GC_STATS
     clock_t start = clock();

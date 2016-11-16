@@ -85,10 +85,11 @@ struct OME_Heap {
     size_t size;
     size_t relocs_size;
     size_t bitmap_size;
-    size_t num_allocated;
+#ifdef OME_GC_STATS
     size_t num_collections;
     clock_t mark_time;
     clock_t compact_time;
+#endif
     uint32_t mark_list;
 };
 
