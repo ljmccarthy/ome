@@ -153,28 +153,28 @@ static int OME_qsort_compare(const void *pi, const void *pj)
 {
     OME_Value OME_message_compare__1(OME_Value, OME_Value);
 
+    OME_CALLBACK_LOCALS();
     OME_Value error;
-    OME_CALLBACK_LOAD_LOCAL(1, error);
-
+    OME_LOAD_LOCAL(1, error);
     if (OME_is_error(error)) {
         return 0;
     }
     uint32_t i = *(const uint32_t *) pi;
     uint32_t j = *(const uint32_t *) pj;
     OME_Value t_array;
-    OME_CALLBACK_LOAD_LOCAL(0, t_array);
+    OME_LOAD_LOCAL(0, t_array);
     OME_Array *array = OME_untag_pointer(t_array);
     OME_Value a = array->elems[i];
     OME_Value b = array->elems[j];
     OME_Value cmp = OME_message_compare__1(a, b);
     if (OME_is_error(cmp)) {
-        OME_CALLBACK_SAVE_LOCAL(1, cmp);
+        OME_SAVE_LOCAL(1, cmp);
         return 0;
     }
     if (OME_equal(cmp, OME_Less)) return -1;
     if (OME_equal(cmp, OME_Greater)) return 1;
     if (OME_equal(cmp, OME_Equal)) return 0;
-    OME_CALLBACK_SAVE_LOCAL(1, OME_error(OME_Type_Error));
+    OME_SAVE_LOCAL(1, OME_error(OME_Type_Error));
     return 0;
 }
 
@@ -198,9 +198,9 @@ static int OME_qsort_compare(const void *pi, const void *pj)
         indices[i] = i;
     }
 
-    OME_PUSH_CALLBACK_STACK();
+    OME_PUSH_CALLBACK_LOCALS();
     qsort(indices, size, sizeof(uint32_t), OME_qsort_compare);
-    OME_POP_CALLBACK_STACK();
+    OME_POP_CALLBACK_LOCALS();
 
     OME_LOAD_LOCAL(1, error);
     if (OME_is_error(error)) {
