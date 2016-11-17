@@ -460,8 +460,8 @@ static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
 
 static void OME_append_relocation(OME_Heap *heap, size_t src, size_t diff)
 {
-    OME_GC_ASSERT(src == (src & (OME_HEAP_ALIGNMENT - 1)));
-    OME_GC_ASSERT(diff == (diff & (OME_HEAP_ALIGNMENT - 1)));
+    OME_GC_ASSERT(src / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == src);
+    OME_GC_ASSERT(diff / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == diff);
     OME_GC_ASSERT(heap->relocs_end < heap->relocs + heap->relocs_size);
     heap->relocs_end->src = src / OME_HEAP_ALIGNMENT;
     heap->relocs_end->diff = diff / OME_HEAP_ALIGNMENT;
@@ -470,7 +470,8 @@ static void OME_append_relocation(OME_Heap *heap, size_t src, size_t diff)
 
 static void OME_relocate_partially_compacted(OME_Heap *heap, OME_Header *compacted_end, OME_Header *uncompacted)
 {
-    OME_append_relocation(heap, (char *) uncompacted + sizeof(OME_Header) - heap->base, 0);
+    char *src = (char *) (uncompacted + (OME_is_header_aligned(uncompacted) ? 1 : 2));
+    OME_append_relocation(heap, (char *) src - heap->base, 0);
     OME_relocate_stack(heap);
     OME_relocate_compacted(heap, (OME_Header *) heap->base, compacted_end);
     OME_relocate_uncompacted(heap, uncompacted, (OME_Header *) heap->pointer);
