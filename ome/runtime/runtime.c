@@ -525,7 +525,7 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
             OME_append_relocation(heap, src + 1, dest + 1);
             if (heap->relocs_end >= relocs_limit) {
                 OME_GC_PRINT("relocation buffer full\n");
-                OME_relocate_partially_compacted(heap, (OME_Header *) (dest + size), cur);
+                OME_relocate_partially_compacted(heap, dest + size, cur);
                 heap->relocs_end = heap->relocs;
             }
         }
