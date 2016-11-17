@@ -441,13 +441,41 @@ static void OME_relocate_big_objects(OME_Heap *heap)
     }
 }
 
-static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
+static void OME_append_relocation(OME_Heap *heap, OME_Header *from, OME_Header *dest)
+{
+    OME_GC_ASSERT(((char *) from - heap->base) / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == (char *) from - heap->base);
+    OME_GC_ASSERT(((char *) from - (char *) dest) / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == (char *) from - (char *) dest);
+    OME_GC_ASSERT(heap->relocs_end < heap->relocs + heap->relocs_size);
+    heap->relocs_end->src = ((char *) from - heap->base) / OME_HEAP_ALIGNMENT;
+    heap->relocs_end->diff = ((char *) from - (char *) dest) / OME_HEAP_ALIGNMENT;
+    heap->relocs_end++;
+}
+
+static void OME_relocate_partially_compacted(OME_Heap *heap, OME_Header *compacted_end, OME_Header *uncompacted)
+{
+    OME_Header *from = uncompacted + (OME_is_header_aligned(uncompacted) ? 1 : 0);
+    OME_append_relocation(heap, from, from);
+    OME_relocate_stack(heap);
+    OME_relocate_compacted(heap, (OME_Header *) heap->base, compacted_end);
+    OME_relocate_uncompacted(heap, uncompacted, (OME_Header *) heap->pointer);
+    OME_relocate_big_objects(heap);
+}
+
+static void OME_relocate_fully_compacted(OME_Heap *heap)
+{
+    OME_append_relocation(heap, (OME_Header *) heap->limit, (OME_Header *) heap->limit);
+    OME_relocate_stack(heap);
+    OME_relocate_compacted(heap, (OME_Header *) heap->base, (OME_Header *) heap->pointer);
+    OME_relocate_big_objects(heap);
+}
+
+static size_t OME_scan_bitmap(unsigned long *bitmap, size_t size, size_t start)
 {
     const size_t nbits = 8 * sizeof(unsigned long);
     size_t start_bit = start % nbits;
 
-    for (size_t bitmap_index = start / nbits; bitmap_index < heap->bitmap_size; bitmap_index++) {
-        unsigned long bits = heap->bitmap[bitmap_index] >> start_bit;
+    for (size_t bitmap_index = start / nbits; bitmap_index < size; bitmap_index++) {
+        unsigned long bits = bitmap[bitmap_index] >> start_bit;
         for (size_t bit_index = start_bit; bits && bit_index < nbits; bit_index++, bits >>= 1) {
             if (bits & 1UL) {
                 return bitmap_index * nbits + bit_index;
@@ -458,34 +486,6 @@ static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
     return ~0UL;
 }
 
-static void OME_append_relocation(OME_Heap *heap, size_t src, size_t diff)
-{
-    OME_GC_ASSERT(src / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == src);
-    OME_GC_ASSERT(diff / OME_HEAP_ALIGNMENT * OME_HEAP_ALIGNMENT == diff);
-    OME_GC_ASSERT(heap->relocs_end < heap->relocs + heap->relocs_size);
-    heap->relocs_end->src = src / OME_HEAP_ALIGNMENT;
-    heap->relocs_end->diff = diff / OME_HEAP_ALIGNMENT;
-    heap->relocs_end++;
-}
-
-static void OME_relocate_partially_compacted(OME_Heap *heap, OME_Header *compacted_end, OME_Header *uncompacted)
-{
-    char *src = (char *) (uncompacted + (OME_is_header_aligned(uncompacted) ? 1 : 2));
-    OME_append_relocation(heap, (char *) src - heap->base, 0);
-    OME_relocate_stack(heap);
-    OME_relocate_compacted(heap, (OME_Header *) heap->base, compacted_end);
-    OME_relocate_uncompacted(heap, uncompacted, (OME_Header *) heap->pointer);
-    OME_relocate_big_objects(heap);
-}
-
-static void OME_relocate_fully_compacted(OME_Heap *heap)
-{
-    OME_append_relocation(heap, heap->limit - heap->base, 0);
-    OME_relocate_stack(heap);
-    OME_relocate_compacted(heap, (OME_Header *) heap->base, (OME_Header *) heap->pointer);
-    OME_relocate_big_objects(heap);
-}
-
 static int OME_compact(OME_Heap *heap, uint64_t deadline)
 {
     OME_GC_TIMER_START();
@@ -493,10 +493,11 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
     OME_free_big_objects(heap);
     if (deadline != 0 && OME_cycle_count() > deadline) {
         OME_GC_PRINT("deadline expired while compacting\n");
+        OME_GC_TIMER_END(heap->compact_time);
         return 0;
     }
 
-    char *dest = heap->base;
+    OME_Header *dest = (OME_Header *) heap->base;
     OME_Header *end = (OME_Header *) heap->pointer;
     OME_Heap_Relocation *relocs_limit = heap->relocs + heap->relocs_size - 1;
     size_t end_index = (heap->pointer - heap->base) / sizeof(OME_Header);
@@ -504,34 +505,32 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
     heap->relocs_end = heap->relocs;
 
     for (size_t index = 0; index < end_index; ) {
-        index = OME_scan_bitmap(heap, index);
+        index = OME_scan_bitmap(heap->bitmap, heap->bitmap_size, index);
         if (index == ~0UL) {
             break;
         }
-        char *src = heap->base + index * sizeof(OME_Header);
-        OME_Header *cur = (OME_Header *) src;
+        OME_Header *src = (OME_Header *) heap->base + index;
+        OME_Header *cur = src;
         while (cur < end && (OME_is_marked(heap, cur) || (cur->size == 0 && OME_is_marked(heap, cur+1)))) {
-            //printf("retain %p (%d bytes)\n", cur, cur->size * 8);
             cur += cur->size + 1;
         }
-        uint32_t size = (char *) cur - src;
+        uint32_t size = cur - src;
         if (!OME_is_header_aligned(dest)) {
-            ((OME_Header *) dest)->bits = 0;
-            dest += sizeof(OME_Header);
+            dest->bits = 0;
+            dest++;
         }
         if (dest != src && size > 0) {
-            memmove(dest, src, size);
+            memmove(dest, src, size * sizeof(OME_Header));
             moved += size;
-            OME_append_relocation(heap, src + sizeof(OME_Header) - heap->base, src - dest);
+            OME_append_relocation(heap, src + 1, dest + 1);
             if (heap->relocs_end >= relocs_limit) {
-                // relocation buffer full, apply relocations now and reset
                 OME_GC_PRINT("relocation buffer full\n");
                 OME_relocate_partially_compacted(heap, (OME_Header *) (dest + size), cur);
                 heap->relocs_end = heap->relocs;
             }
         }
         dest += size;
-        index = ((char *) cur - heap->base) / sizeof(OME_Header);
+        index = cur - (OME_Header *) heap->base;
 
         if (deadline != 0 && OME_cycle_count() > deadline) {
             OME_GC_PRINT("compacted %lu KB\n", moved / 1024);
@@ -543,9 +542,9 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
         }
     }
 
-    size_t freed = heap->pointer - dest;
+    size_t freed = heap->pointer - (char *) dest;
 
-    heap->pointer = dest;
+    heap->pointer = (char *) dest;
     if (heap->pointer < heap->limit) {
         memset(heap->pointer, 0, heap->limit - heap->pointer);
     }
@@ -562,9 +561,9 @@ static void OME_collect(OME_Heap *heap)
 #ifdef OME_GC_DEBUG
     clock_t t = clock();
 #endif
-    uint64_t deadline = OME_cycle_count() + heap->latency;
-
     OME_GC_PRINT("--- begin collection (heap size: %lu KB)\n", heap->size / 1024);
+
+    uint64_t deadline = OME_cycle_count() + heap->latency;
 
     if (OME_mark(heap, deadline)) {
         OME_GC_PRINT("%lu bytes marked\n", heap->mark_size);
@@ -578,8 +577,8 @@ static void OME_collect(OME_Heap *heap)
         }
     }
 
-    OME_GC_PRINT("--- collection completed in %lu ms\n", (clock() - t) * 1000 / CLOCKS_PER_SEC);
 #ifdef OME_GC_STATS
+    OME_GC_PRINT("--- collection completed in %lu ms\n", (clock() - t) * 1000 / CLOCKS_PER_SEC);
     heap->num_collections++;
 #endif
 }
