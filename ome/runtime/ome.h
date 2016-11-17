@@ -81,6 +81,7 @@ struct OME_Heap {
         OME_Big_Object *big_objects_end;
         OME_Heap_Relocation *relocs;
     };
+    OME_Heap_Relocation *relocs_end;
     unsigned long *bitmap;
     size_t size;
     size_t relocs_size;
