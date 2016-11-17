@@ -458,11 +458,19 @@ static size_t OME_scan_bitmap(OME_Heap *heap, size_t start)
     return ~0UL;
 }
 
+static void OME_append_relocation(OME_Heap *heap, size_t src, size_t diff)
+{
+    OME_GC_ASSERT(src == (src & (OME_HEAP_ALIGNMENT - 1)));
+    OME_GC_ASSERT(diff == (diff & (OME_HEAP_ALIGNMENT - 1)));
+    OME_GC_ASSERT(heap->relocs_end < heap->relocs + heap->relocs_size);
+    heap->relocs_end->src = src / OME_HEAP_ALIGNMENT;
+    heap->relocs_end->diff = diff / OME_HEAP_ALIGNMENT;
+    heap->relocs_end++;
+}
+
 static void OME_relocate_partially_compacted(OME_Heap *heap, OME_Header *compacted_end, OME_Header *uncompacted)
 {
-    heap->relocs_end->src = ((char *) uncompacted + sizeof(OME_Header) - heap->base) / OME_HEAP_ALIGNMENT;
-    heap->relocs_end->diff = 0;
-    heap->relocs_end++;
+    OME_append_relocation(heap, (char *) uncompacted + sizeof(OME_Header) - heap->base, 0);
     OME_relocate_stack(heap);
     OME_relocate_compacted(heap, (OME_Header *) heap->base, compacted_end);
     OME_relocate_uncompacted(heap, uncompacted, (OME_Header *) heap->pointer);
@@ -471,9 +479,7 @@ static void OME_relocate_partially_compacted(OME_Heap *heap, OME_Header *compact
 
 static void OME_relocate_fully_compacted(OME_Heap *heap)
 {
-    heap->relocs_end->src = (heap->limit - heap->base) / OME_HEAP_ALIGNMENT;
-    heap->relocs_end->diff = 0;
-    heap->relocs_end++;
+    OME_append_relocation(heap, heap->limit - heap->base, 0);
     OME_relocate_stack(heap);
     OME_relocate_compacted(heap, (OME_Header *) heap->base, (OME_Header *) heap->pointer);
     OME_relocate_big_objects(heap);
@@ -515,10 +521,7 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
         if (dest != src && size > 0) {
             memmove(dest, src, size);
             moved += size;
-            heap->relocs_end->src = (src + sizeof(OME_Header) - heap->base) / OME_HEAP_ALIGNMENT;
-            heap->relocs_end->diff = (src - dest) / OME_HEAP_ALIGNMENT;
-            heap->relocs_end++;
-            //printf("reloc src=%p dest=%p size=%u reloc=%u-%u\n", src, dest, size, heap->relocs_end->src, heap->relocs_end->diff);
+            OME_append_relocation(heap, src + sizeof(OME_Header) - heap->base, src - dest);
             if (heap->relocs_end >= relocs_limit) {
                 // relocation buffer full, apply relocations now and reset
                 OME_GC_PRINT("relocation buffer full\n");
