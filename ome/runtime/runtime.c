@@ -535,7 +535,7 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
         if (deadline != 0 && OME_cycle_count() > deadline) {
             OME_GC_PRINT("compacted %lu KB\n", moved / 1024);
             OME_GC_PRINT("deadline expired while compacting\n");
-            OME_relocate_partially_compacted(heap, (OME_Header *) dest, cur);
+            OME_relocate_partially_compacted(heap, dest, cur);
             heap->relocs_end = heap->relocs;
             OME_GC_TIMER_END(heap->compact_time);
             return 0;
