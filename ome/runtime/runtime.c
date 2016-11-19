@@ -159,9 +159,9 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     OME_GC_PRINT("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
 }
 
-static void OME_initialize_heap(OME_Heap *heap)
+static void OME_initialize_heap(OME_Heap *heap, OME_Tag pointer_tag)
 {
-    heap->pointer_tag = OME_Pointer_Tag;
+    heap->pointer_tag = pointer_tag;
     heap->latency = 50L * OME_cycles_per_ms;
 
     size_t reserved_size = OME_MAX_HEAP_SIZE;
@@ -791,7 +791,7 @@ static void OME_initialize(int argc, const char *const *argv)
     OME_cycles_per_ms = OME_estimate_cycles_per_ms();
 }
 
-static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_t stack_size)
+static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_t stack_size, OME_Tag pointer_tag)
 {
     memset(stack, 0, sizeof(stack[0]) * stack_size);
     memset(context, 0, sizeof(*context));
@@ -800,7 +800,7 @@ static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_
     context->stack_base = stack;
     context->stack_end = stack + stack_size;
     context->start_time = clock();
-    OME_initialize_heap(&context->heap);
+    OME_initialize_heap(&context->heap, pointer_tag);
 }
 
 #define OME_STACK_SIZE 256
@@ -810,7 +810,7 @@ static int OME_thread_main(void)
     OME_Value stack[OME_STACK_SIZE];
     OME_Context context;
 
-    OME_initialize_context(&context, stack, OME_STACK_SIZE);
+    OME_initialize_context(&context, stack, OME_STACK_SIZE, OME_Pointer_Tag);
     OME_context = &context;
 
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
