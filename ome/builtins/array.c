@@ -38,8 +38,7 @@
 
     OME_FORGET_LOCAL(0);
 
-    OME_String *output = OME_allocate_data(sizeof(OME_String) + size + 1);
-    output->size = size;
+    OME_String *output = OME_allocate_string(size);
     char *cur = output->data;
     OME_LOAD_LOCAL(1, t_strings);
     strings = OME_untag_pointer(t_strings);
