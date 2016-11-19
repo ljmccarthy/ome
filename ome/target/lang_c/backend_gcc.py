@@ -14,7 +14,7 @@ class GCCArgsBuilder(CCArgsBuilder):
         '-Wno-unused',
     ]
     variant_cc_args = {
-        'release': ['-O3'],
+        'release': ['-O3', '-fomit-frame-pointer'],
         'fast': ['-O0'],
         'debug': ['-O0', '-ggdb']
     }

@@ -101,10 +101,10 @@ class BuildOptions(CompileOptions):
         self.use_musl = options.use_musl
         self.musl_path = options.musl_path
         self.shell = BuildShell(options.show_build_commands)
-        self.include_dirs = []
-        self.lib_dirs = []
-        self.dynamic_libs = []
-        self.static_libs = []
+        self.include_dirs = options.include_dir[:]
+        self.library_dirs = options.library_dir[:]
+        self.libraries = options.link[:]
+        self.objects = []
         self.defines = [
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),

@@ -15,7 +15,7 @@ class ClangArgsBuilder(CCArgsBuilder):
         '-Wno-unused-parameter',
     ]
     variant_cc_args = {
-        'release': ['-O3'],
+        'release': ['-O3', '-fomit-frame-pointer'],
         'fast': ['-O0'],
         'debug': ['-O0', '-ggdb']
     }
@@ -39,7 +39,7 @@ class ClangArgsBuilder(CCArgsBuilder):
         args.append('-isystem')
         args.append(os.path.join(musl_path, 'include'))
         args.append('-L-user-start')
-        if build_options.dynamic_libs:
+        if build_options.libraries:
             args.append('-l-user-start')
             tail_args.append('-l-user-end')
         tail_args.append('-L' + os.path.join(musl_path, 'lib'))

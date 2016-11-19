@@ -45,12 +45,12 @@ class CCArgsBuilder(object):
             args.append('-D{}={}'.format(name, value) if value else '-D' + name)
         for include_dir in build_options.include_dirs:
             args.append('-I' + include_dir)
-        for lib_dir in build_options.lib_dirs:
+        for lib_dir in build_options.library_dirs:
             args.append('-L' + lib_dir)
-        for dynamic_lib in build_options.dynamic_libs:
-            args.append('-l' + dynamic_lib)
-        for static_lib in build_options.static_libs:
-            args.append(static_lib)
+        for lib in build_options.libraries:
+            args.append('-l' + lib)
+        for obj in build_options.objects:
+            args.append(obj)
         args.append(infile)
         args.append('-o')
         args.append(outfile)
