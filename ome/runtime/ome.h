@@ -83,13 +83,16 @@ struct OME_Heap {
     };
     OME_Heap_Relocation *relocs_end;
     unsigned long *bitmap;
-    size_t size;
     size_t relocs_size;
     size_t bitmap_size;
+    size_t size;
     size_t reserved_size;
-    clock_t latency;
     size_t mark_size;
+    OME_Tag pointer_tag;
     uint32_t mark_list;
+    const char *static_start;
+    const char *static_end;
+    clock_t latency;
 #ifdef OME_GC_STATS
     size_t num_collections;
     clock_t mark_time;

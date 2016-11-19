@@ -124,6 +124,15 @@ static void OME_memory_free(void *addr, size_t size)
     munmap(addr, size);
 }
 
+static const char *OME_get_static_end(void)
+{
+#ifdef OME_PLATFORM_POSIX
+    return sbrk(0);
+#else
+    return 0;
+#endif
+}
+
 #define OME_MIN_HEAP_SIZE 0x1000
 #define OME_MAX_HEAP_SIZE ((1L << 32) * 16)
 
@@ -152,6 +161,9 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 
 static void OME_initialize_heap(OME_Heap *heap)
 {
+    heap->pointer_tag = OME_Pointer_Tag;
+    heap->latency = 50L * OME_cycles_per_ms;
+
     size_t reserved_size = OME_MAX_HEAP_SIZE;
     char *heap_base = NULL;
     while (1) {
@@ -165,9 +177,9 @@ static void OME_initialize_heap(OME_Heap *heap)
             exit(1);
         }
     }
-    heap->reserved_size = reserved_size;
-    heap->latency = 50L * OME_cycles_per_ms;
+
     OME_set_heap_base(heap, heap_base, 0x8000);
+    heap->reserved_size = reserved_size;
 
     OME_GC_PRINT("heap reserved size: %lu MB\n", reserved_size / (1024*1024));
     OME_GC_PRINT("cycles per ms: %lu\n", OME_cycles_per_ms);
@@ -206,7 +218,7 @@ static void OME_adjust_slots(OME_Heap *heap, OME_Value *start, OME_Value *end, p
     for (OME_Value *slot = start; slot < end; slot++) {
         OME_Tag tag = OME_get_tag(*slot);
         char *body = OME_untag_pointer(*slot);
-        if (tag >= OME_Pointer_Tag && body >= heap->base && body < heap->limit) {
+        if (tag >= heap->pointer_tag && body >= heap->base && body < heap->limit) {
             //printf("  changing field at %p from %p to %p\n", slot, body, body + diff);
             *slot = OME_tag_pointer(tag, body + diff);
         }
@@ -310,7 +322,7 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
     OME_Value *cur = (OME_Value *) body + scan_offset;
     OME_Value *end = cur + scan_size;
     for (; cur < end; cur++) {
-        if (OME_is_pointer(*cur)) {
+        if (OME_get_tag(*cur) >= heap->pointer_tag) {
             char *body = OME_untag_pointer(*cur);
             if (body >= heap->base && body <= heap->pointer) {
                 OME_Header *header = (OME_Header *) body - 1;
@@ -322,7 +334,7 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
                     //printf("marked %p %d\n", header, heap->mark_list);
                 }
             }
-            else {
+            else if (body < heap->static_start || body > heap->static_end) {
                 OME_Big_Object *big = OME_find_big_object(heap, body);
                 if (big && !big->mark) {
                     //printf("marked big object %p\n", big->body);
@@ -342,6 +354,8 @@ static int OME_mark(OME_Heap *heap, uint64_t deadline)
 
     heap->mark_size = 0;
     heap->mark_list = OME_MARK_LIST_NULL;
+    heap->static_start = 0;
+    heap->static_end = OME_get_static_end();
     memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
     OME_sort_big_objects(heap);
 
@@ -394,7 +408,7 @@ static void OME_relocate_slots(OME_Heap *heap, OME_Value *slot, OME_Value *end)
     for (; slot < end; slot++) {
         OME_Tag tag = OME_get_tag(*slot);
         char *body = OME_untag_pointer(*slot);
-        if (tag >= OME_Pointer_Tag && body >= heap->base && body < heap->limit) {
+        if (tag >= heap->pointer_tag && body >= heap->base && body < heap->limit) {
             uintptr_t diff = OME_find_relocation(heap, body);
             if (diff) {
                 //printf("changing field at %p from %p to %p\n", slot, body, body - diff);
@@ -656,7 +670,7 @@ static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_of
     heap->big_objects = big;
 
     OME_GC_PRINT("allocated big object %p (%ld bytes)\n", big->body, big->size);
-    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
+    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(0, body)) == body);
     return body;
 }
 
@@ -702,26 +716,26 @@ static void *OME_allocate(size_t object_size, size_t scan_offset, size_t scan_si
     heap->pointer = (char *) header + alloc_size;
 
     void *body = header + 1;
-    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(OME_Pointer_Tag, body)) == body);
+    OME_GC_ASSERT(OME_untag_pointer(OME_tag_pointer(0, body)) == body);
     return body;
-}
-
-static void *OME_allocate_slots(uint32_t num_slots)
-{
-    return OME_allocate(sizeof(OME_Value[num_slots]), 0, num_slots);
-}
-
-static OME_Array *OME_allocate_array(uint32_t num_elems)
-{
-    size_t size = sizeof(OME_Array) + sizeof(OME_Value[num_elems]);
-    OME_Array *array = OME_allocate(size, offsetof(OME_Array, elems) / sizeof(OME_Value), num_elems);
-    array->size = num_elems;
-    return array;
 }
 
 static void *OME_allocate_data(size_t size)
 {
     return OME_allocate(size, 0, 0);
+}
+
+static void *OME_allocate_slots(uint32_t num_slots)
+{
+    return OME_allocate(sizeof(OME_Value) * num_slots, 0, num_slots);
+}
+
+static OME_Array *OME_allocate_array(uint32_t num_elems)
+{
+    size_t size = sizeof(OME_Array) + sizeof(OME_Value) * num_elems;
+    OME_Array *array = OME_allocate(size, offsetof(OME_Array, elems) / sizeof(OME_Value), num_elems);
+    array->size = num_elems;
+    return array;
 }
 
 static OME_String *OME_allocate_string(uint32_t size)
@@ -764,7 +778,7 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 
 static void OME_initialize(int argc, const char *const *argv)
 {
-    OME_argv = malloc(sizeof(OME_Array) + sizeof(OME_Value[argc]));
+    OME_argv = malloc(sizeof(OME_Array) + sizeof(OME_Value) * argc);
     OME_argv->size = argc;
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]);
@@ -777,23 +791,28 @@ static void OME_initialize(int argc, const char *const *argv)
     OME_cycles_per_ms = OME_estimate_cycles_per_ms();
 }
 
+static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_t stack_size)
+{
+    memset(stack, 0, sizeof(stack[0]) * stack_size);
+    memset(context, 0, sizeof(*context));
+    context->stack_pointer = stack;
+    context->stack_limit = stack + stack_size;
+    context->stack_base = stack;
+    context->stack_end = stack + stack_size;
+    context->start_time = clock();
+    OME_initialize_heap(&context->heap);
+}
+
 #define OME_STACK_SIZE 256
 
 static int OME_thread_main(void)
 {
     OME_Value stack[OME_STACK_SIZE];
-    OME_Context context = {
-        .stack_pointer = stack,
-        .stack_limit = stack + OME_STACK_SIZE,
-        .stack_base = stack,
-        .stack_end = stack + OME_STACK_SIZE,
-        .callback_stack = NULL,
-        .start_time = clock(),
-    };
+    OME_Context context;
 
-    OME_initialize_heap(&context.heap);
-
+    OME_initialize_context(&context, stack, OME_STACK_SIZE);
     OME_context = &context;
+
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
     if (OME_is_error(value)) {
         OME_print_traceback(stderr, value);
