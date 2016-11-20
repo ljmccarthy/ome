@@ -18,6 +18,7 @@ typedef struct OME_Big_Object OME_Big_Object;
 typedef struct OME_Heap_Relocation OME_Heap_Relocation;
 typedef struct OME_Heap OME_Heap;
 typedef struct OME_Context OME_Context;
+typedef struct OME_Globals OME_Globals;
 typedef struct OME_String OME_String;
 typedef struct OME_Array OME_Array;
 typedef struct OME_Buffer OME_Buffer;
@@ -115,6 +116,11 @@ struct OME_Context {
     OME_Value *callback_stack;
     OME_Heap heap;
     clock_t start_time;
+};
+
+struct OME_Globals {
+    OME_Array *argv;
+    uint64_t cycles_per_ms;
 };
 
 struct OME_String {
@@ -318,5 +324,4 @@ static OME_Value OME_set_slot(OME_Value slots, unsigned int index, OME_Value val
     static const OME_String name OME_ALIGNED = {sizeof(string)-1, {string}}
 
 static __thread OME_Context *OME_context;
-static OME_Array *OME_argv;
-static uint64_t OME_cycles_per_ms;
+static OME_Globals OME_globals;

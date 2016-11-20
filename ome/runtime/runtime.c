@@ -162,7 +162,7 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 static void OME_initialize_heap(OME_Heap *heap, OME_Tag pointer_tag)
 {
     heap->pointer_tag = pointer_tag;
-    heap->latency = 50L * OME_cycles_per_ms;
+    heap->latency = 50L * OME_globals.cycles_per_ms;
 
     size_t reserved_size = OME_MAX_HEAP_SIZE;
     char *heap_base = NULL;
@@ -182,7 +182,7 @@ static void OME_initialize_heap(OME_Heap *heap, OME_Tag pointer_tag)
     heap->reserved_size = reserved_size;
 
     OME_GC_PRINT("heap reserved size: %lu MB\n", reserved_size / (1024*1024));
-    OME_GC_PRINT("cycles per ms: %lu\n", OME_cycles_per_ms);
+    OME_GC_PRINT("cycles per ms: %lu\n", OME_globals.cycles_per_ms);
 }
 
 static void OME_delete_heap(OME_Heap *heap)
@@ -778,17 +778,17 @@ static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 
 static void OME_initialize(int argc, const char *const *argv)
 {
-    OME_argv = malloc(sizeof(OME_Array) + sizeof(OME_Value) * argc);
-    OME_argv->size = argc;
+    OME_globals.argv = malloc(sizeof(OME_Array) + sizeof(OME_Value) * argc);
+    OME_globals.argv->size = argc;
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]);
         size_t alloc_size = sizeof(OME_String) + len + 1;
         OME_String *arg = malloc(alloc_size);
         arg->size = len;
         memcpy(arg->data, argv[i], len + 1);
-        OME_argv->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
+        OME_globals.argv->elems[i] = OME_tag_pointer(OME_Tag_String, arg);
     }
-    OME_cycles_per_ms = OME_estimate_cycles_per_ms();
+    OME_globals.cycles_per_ms = OME_estimate_cycles_per_ms();
 }
 
 static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_t stack_size, OME_Tag pointer_tag)

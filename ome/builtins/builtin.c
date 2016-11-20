@@ -168,7 +168,7 @@
 
 #method BuiltIn argv
 {
-    return OME_tag_pointer(OME_Tag_Array, OME_argv);
+    return OME_tag_pointer(OME_Tag_Array, OME_globals.argv);
 }
 
 #method BuiltIn print: value
