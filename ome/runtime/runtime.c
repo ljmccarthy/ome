@@ -382,21 +382,18 @@ static uintptr_t OME_find_relocation(OME_Heap *heap, char *body)
     size_t num_relocs = heap->relocs_end - heap->relocs;
     size_t lo = 0;
     size_t hi = num_relocs - 1;
-    size_t i = 0;
     while (lo <= hi) {
         size_t mid = (lo + hi) / 2;
         if (mid >= num_relocs)
             break;
-
-        uint32_t src = heap->relocs[mid].src;
-        if (index < src) {
+        if (index < heap->relocs[mid].src) {
             hi = mid - 1;
         }
         else {
             lo = mid + 1;
-            i = mid;
         }
     }
+    size_t i = lo - 1;
     if (i < num_relocs && heap->relocs[i].src <= index) {
         return (uintptr_t) heap->relocs[i].diff * OME_HEAP_ALIGNMENT;
     }
