@@ -4,7 +4,7 @@ import os
 tests_dir = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(tests_dir, '..')))
 
-from ome.ast import format_sexpr_flat
+from ome.ome_ast import format_sexpr_flat
 from ome.parser import Parser
 from ome.terminal import stderr
 

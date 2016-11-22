@@ -5,8 +5,8 @@ import re
 import subprocess
 import time
 from .error import OmeError
+from .ome_types import CompileOptions
 from .target import target_map
-from .types import CompileOptions
 
 def get_target(target_name):
     target_name = target_name.lower()

@@ -7,9 +7,9 @@ import time
 from . import build
 from . import compiler
 from . import optimise
-from .ast import BuiltInBlock, format_sexpr
 from .command import command_args, print_verbose
 from .error import OmeError
+from .ome_ast import BuiltInBlock, format_sexpr
 from .terminal import stderr
 from .version import version
 

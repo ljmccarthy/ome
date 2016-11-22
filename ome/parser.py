@@ -2,9 +2,9 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import re
-from . import ast
+from . import ome_ast as ast
 from .error import OmeParseError
-from .symbol import is_private_symbol
+from .symbol import is_private_symbol, operator_aliases
 
 re_newline = re.compile(r'\r\n|\r|\n')
 re_spaces = re.compile(r'[ \r\n\t]*')
@@ -24,12 +24,7 @@ re_addition_operator = re.compile('\+|-')
 re_multiplication_operator = re.compile(r'\*|/|×|÷')
 re_end_token = re.compile(r'[|)}\]]')
 
-operator_aliases = {
-    '×' : '*',
-    '÷' : '/',
-    '≠' : '!=',
-    '≤' : '<=',
-    '≥' : '>=',
+logical_operator_messages = {
     '&&': 'then:',
     '||': 'else:',
 }
@@ -375,7 +370,7 @@ class Parser(ParserState):
         for m in self.repeat_expr_token(re_logical_operator):
             op = m.group()
             rhs = ast.Block([], [ast.Method('do', [], self.keywordexpr())])
-            lhs = ast.Send(lhs, operator_aliases.get(op, op), [rhs], parse_state)
+            lhs = ast.Send(lhs, logical_operator_messages.get(op, op), [rhs], parse_state)
             self.scan()
             parse_state = self.copy_state()
         return lhs

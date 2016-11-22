@@ -4,7 +4,7 @@
 import os
 from ... import runtime
 from ...cpreparser import CPreParser
-from ...types import BuiltIn, BuiltInMethod
+from ...ome_types import BuiltIn, BuiltInMethod
 
 constant_string_method = '''
     OME_STATIC_STRING(s, "{name}");

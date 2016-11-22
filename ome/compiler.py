@@ -5,13 +5,13 @@ import io
 import sys
 
 from . import constants
-from .ast import Block, BuiltInBlock, Method, Send, Sequence
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .idalloc import IdAllocator
+from .ome_ast import Block, BuiltInBlock, Method, Send, Sequence
+from .ome_types import CompileOptions, TraceBackInfo
 from .parser import Parser
 from .terminal import stderr
-from .types import CompileOptions, TraceBackInfo
 
 default_compile_options = CompileOptions()
 
