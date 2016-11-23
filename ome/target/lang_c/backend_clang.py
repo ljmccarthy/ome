@@ -7,6 +7,7 @@ from .backend_cc import CCArgsBuilder, CCBuilder
 
 class ClangArgsBuilder(CCArgsBuilder):
     cc_args = [
+        '-pipe',
         '-x', 'c',
         '-std=c99',
         '-Wall',
