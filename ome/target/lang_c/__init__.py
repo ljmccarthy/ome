@@ -6,6 +6,7 @@ from .backend_gcc import GCCBuilder
 from .backend_file import FileBuilder
 from .builtin import *
 from .codegen import *
+from .packages import packages
 
 name = 'C'
 

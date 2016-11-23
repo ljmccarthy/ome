@@ -1,12 +1,31 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import os
 import re
+import stat
 import subprocess
-import time
+from .build_shell import BuildShell
 from .error import OmeError
 from .ome_types import CompileOptions
 from .target import target_map
+
+def is_executable(filename):
+    try:
+        st = os.stat(filename)
+    except OSError:
+        return False
+    mode = st.st_mode
+    return stat.S_ISREG(mode) and ((mode & stat.S_IXOTH) or
+        (os.getuid() == st.st_uid and mode & stat.S_IXUSR) or
+        (os.getgid() == st.st_gid and mode & stat.S_IXGRP))
+
+def find_executable(name):
+    for path in os.environ.get('PATH', '').split(os.path.pathsep):
+        filepath = os.path.realpath(os.path.join(path, name))
+        if is_executable(filepath):
+            return filepath
+    raise OmeError('executable not found: {}'.format(name))
 
 def get_target(target_name):
     target_name = target_name.lower()
@@ -32,12 +51,16 @@ def get_backend_version(backend):
             pass
         raise OmeError("backend '{}' is not available: {}".format(backend.name, reason))
 
+def _get_backend(target, backend_name, backend_command=None):
+    backend = target.backends[backend_name]
+    command = find_executable(backend_command or backend.default_command)
+    return backend(command)
+
 def get_backend(target, platform, backend_name=None, backend_command=None):
     platform = platform.lower()
     if backend_name is None:
         for backend_name in target.backend_preference:
-            backend = target.backends[backend_name]
-            backend = backend(backend_command or backend.default_command)
+            backend = _get_backend(target, backend_name, backend_command)
             if not hasattr(backend, 'supported_platforms') or platform in backend.supported_platforms:
                 try:
                     get_backend_version(backend)
@@ -49,37 +72,11 @@ def get_backend(target, platform, backend_name=None, backend_command=None):
         backend_name = backend_name.lower()
         if backend_name not in target.backends:
             raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
-        backend = target.backends[backend_name]
-        backend = backend(backend_command or backend.default_command)
+        backend = _get_backend(target, backend_name, backend_command)
+        if hasattr(backend, 'supported_platforms') and platform not in backend.supported_platforms:
+            raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, platform))
         get_backend_version(backend)
         return backend
-
-def run_shell_command(args, input=None, output=None):
-    process = subprocess.Popen(args,
-        stdin = input and subprocess.PIPE,
-        stdout = output and subprocess.PIPE)
-    outs, errs = process.communicate(input)
-    if process.returncode != 0:
-        raise OmeError('command failed with return code {}'.format(process.returncode))
-    return outs
-
-def get_args_list(args):
-    if len(args) == 1 and isinstance(args[0], (list, tuple)):
-        args = args[0]
-    return args
-
-class BuildShell(object):
-    def __init__(self, show_commands=False):
-        self.show_commands = show_commands
-
-    def print_command(self, args):
-        if self.show_commands:
-            print(' '.join(args))
-
-    def run(self, *args, input=None, output=None):
-        args = get_args_list(args)
-        self.print_command(args)
-        return run_shell_command(args, input, output)
 
 platform_aliases = {
     'linux': ['posix'],
@@ -109,7 +106,7 @@ class BuildOptions(CompileOptions):
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
-        for platform_alias in platform_aliases.get(self.platform):
+        for platform_alias in platform_aliases.get(self.platform, [self.platform]):
             self.defines.append(('OME_PLATFORM_' + platform_alias.upper(), ''))
         if not options.debug:
             self.defines.append(('NDEBUG', ''))
@@ -121,8 +118,3 @@ class BuildOptions(CompileOptions):
             self.defines.append(('OME_NO_TRACEBACK', ''))
         if options.no_source_traceback:
             self.defines.append(('OME_NO_SOURCE_TRACEBACK', ''))
-
-    def make_output(self, input, outfile, backend):
-        if hasattr(backend, 'supported_platforms') and self.platform not in backend.supported_platforms:
-            raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, self.platform))
-        backend.make_output(self.shell, input, outfile, self)

@@ -1,23 +1,33 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import hashlib
 import os
 import sys
 import time
 from . import build
 from . import compiler
 from . import optimise
+from .build_shell import BuildShell
 from .command import command_args, print_verbose
 from .error import OmeError
 from .ome_ast import BuiltInBlock, format_sexpr
+from .package import SourcePackageBuilder
 from .terminal import stderr
 from .version import version
+
+package_dir = os.path.expanduser(os.path.join('~', '.ome', 'libs'))
 
 def get_terminal_width():
     try:
         return os.get_terminal_size().columns
     except OSError:
         return 80
+
+def get_prefix_dir(command):
+    m = hashlib.md5()
+    m.update(command.encode('utf8'))
+    return os.path.join(package_dir, m.hexdigest())
 
 def main():
     start_time = time.time()
@@ -31,9 +41,14 @@ def main():
             raise OmeError('--backend must be specified with --backend-command')
 
         compile_start_time = time.time()
+
         target = build.get_target(command_args.target)
-        options = build.BuildOptions(target, command_args)
         backend = build.get_backend(target, command_args.platform, command_args.backend, command_args.backend_command)
+
+        prefix_dir = get_prefix_dir(backend.command)
+        options = build.BuildOptions(target, command_args)
+        options.include_dirs.append(os.path.join(prefix_dir, 'include'))
+        options.library_dirs.append(os.path.join(prefix_dir, 'lib'))
 
         print_verbose('using target {}'.format(target.name))
         print_verbose('using backend {} {}'.format(backend.name, backend.version))
@@ -80,9 +95,16 @@ def main():
             print(input.decode(target.encoding))
             sys.exit()
 
+        if target.packages:
+            print_verbose('building packages')
+            sources_dir = os.path.join(package_dir, 'sources')
+            package_builder = SourcePackageBuilder(sources_dir, prefix_dir, backend)
+            package_builder.build_packages(target.packages)
+
         print_verbose('building output', outfile)
         build_start_time = time.time()
-        options.make_output(input, outfile, backend)
+        shell = BuildShell(command_args.show_build_commands)
+        backend.make_output(shell, input, outfile, options)
         build_time = time.time() - build_start_time
         print_verbose('backend build completed in %.2fs' % build_time)
 
@@ -91,6 +113,8 @@ def main():
     except OmeError as error:
         error.write_ansi(stderr)
         stderr.reset()
+        sys.exit(1)
+    except KeyboardInterrupt:
         sys.exit(1)
 
 if __name__ == '__main__':
