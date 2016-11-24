@@ -7,12 +7,12 @@ from .backend_cc import CCArgsBuilder, CCBuilder
 
 class GCCArgsBuilder(CCArgsBuilder):
     cc_args = [
-        '-pipe',
         '-x', 'c',
         '-std=c99',
         '-Wall',
         '-Wextra',
         '-Wno-unused',
+        '-fPIC',
     ]
     variant_cc_args = {
         'release': ['-O3', '-fomit-frame-pointer'],
@@ -26,7 +26,7 @@ class GCCArgsBuilder(CCArgsBuilder):
         ]
     }
 
-    def get_musl_args(self, build_options, musl_path):
+    def get_musl_args(self, build_options, musl_path, linking):
         specs_file = os.path.join(musl_path, 'lib', 'musl-gcc.specs')
         if not os.path.isfile(specs_file):
             raise OmeError('could not find GCC specs file for musl: ' + specs_file)

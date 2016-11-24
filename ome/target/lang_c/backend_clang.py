@@ -7,13 +7,17 @@ from .backend_cc import CCArgsBuilder, CCBuilder
 
 class ClangArgsBuilder(CCArgsBuilder):
     cc_args = [
-        '-pipe',
         '-x', 'c',
         '-std=c99',
         '-Wall',
         '-Wextra',
         '-Wno-unused',
         '-Wno-unused-parameter',
+        '-fPIC',
+        '-Qunused-arguments',
+    ]
+    link_args = [
+        '-Qunused-arguments',
     ]
     variant_cc_args = {
         'release': ['-O3', '-fomit-frame-pointer'],
@@ -27,24 +31,23 @@ class ClangArgsBuilder(CCArgsBuilder):
         ]
     }
 
-    def get_musl_args(self, build_options, musl_path):
+    def get_musl_args(self, build_options, musl_path, linking):
         if not build_options.static:
-            raise OmeError('to use musl with clang please specify --static or --backend-command=musl-clang')
+            raise OmeError('to use musl with clang please specify --static or --backend-command=musl-clang without --use-musl')
         args = []
         tail_args = []
         args.append('-B' + musl_path)
-        args.append('-static-libgcc')
-        args.append('-nostdinc')
         args.append('--sysroot')
         args.append(musl_path)
-        args.append('-isystem')
-        args.append(os.path.join(musl_path, 'include'))
-        args.append('-L-user-start')
-        if build_options.libraries:
-            args.append('-l-user-start')
-            tail_args.append('-l-user-end')
-        tail_args.append('-L' + os.path.join(musl_path, 'lib'))
-        tail_args.append('-L-user-end')
+        if linking:
+            args.append('-static-libgcc')
+            args.append('-L-user-start')
+            tail_args.append('-L' + os.path.join(musl_path, 'lib'))
+            tail_args.append('-L-user-end')
+        else:
+            args.append('-nostdinc')
+            args.append('-isystem')
+            args.append(os.path.join(musl_path, 'include'))
         return args, tail_args
 
 class ClangBuilder(CCBuilder):

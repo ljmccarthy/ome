@@ -3,7 +3,7 @@ from os.path import join
 from ...package import SourcePackage
 
 def build_mpdecimal(shell, backend, options):
-    cflags = ['-DNDEBUG', '-O3', '-fomit-frame-pointer']
+    cflags = ['-DNDEBUG', '-O3', '-fomit-frame-pointer', '-fPIC']
     if backend.name == 'clang':
         cflags.append('-Qunused-arguments')
     shell.run('./configure', 'CC=' + backend.command, 'CFLAGS=' + ' '.join(cflags))

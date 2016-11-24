@@ -1,6 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import glob
 import hashlib
 import os
 import sys
@@ -16,7 +17,7 @@ from .package import SourcePackageBuilder
 from .terminal import stderr
 from .version import version
 
-package_dir = os.path.expanduser(os.path.join('~', '.ome', 'libs'))
+package_dir = os.path.expanduser(os.path.join('~', '.cache', 'ome', 'libs'))
 
 def get_terminal_width():
     try:
@@ -100,6 +101,8 @@ def main():
             sources_dir = os.path.join(package_dir, 'sources')
             package_builder = SourcePackageBuilder(sources_dir, prefix_dir, backend)
             package_builder.build_packages(target.packages)
+            for lib in glob.glob(os.path.join(prefix_dir, 'lib', '*' + backend.lib_extension)):
+                options.objects.append(lib)
 
         print_verbose('building output', outfile)
         build_start_time = time.time()

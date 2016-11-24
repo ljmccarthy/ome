@@ -2,6 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import os
+import tempfile
 from ...error import OmeError
 
 def find_musl_path(path):
@@ -24,51 +25,59 @@ class CCArgsBuilder(object):
     def get_musl_args(self, build_options, musl_path):
         raise OmeError("musl is not supported for this backend")
 
-    def __call__(self, build_options, infile, outfile):
+    def __call__(self, build_options, infile, outfile, linking):
         args = []
         tail_args = []
         if build_options.use_musl:
             musl_path = find_musl_path(build_options.musl_path)
-            args, tail_args = self.get_musl_args(build_options, musl_path)
+            args, tail_args = self.get_musl_args(build_options, musl_path, linking)
+        args.append('-pipe')
         if build_options.verbose_backend:
             args.append('-v')
-        if not build_options.link:
+        if not linking:
             args.append('-c')
-        if build_options.static:
-            args.append('-static')
-        args.extend(self.cc_args)
-        args.extend(self.variant_cc_args.get(build_options.variant, []))
-        if build_options.link:
+            args.extend(self.cc_args)
+            args.extend(self.variant_cc_args.get(build_options.variant, []))
+            for name, value in build_options.defines:
+                args.append('-D{}={}'.format(name, value) if value else '-D' + name)
+            for include_dir in build_options.include_dirs:
+                args.append('-I' + include_dir)
+            args.append(infile)
+        else:
+            args.append('-static' if build_options.static else '-pie')
             args.extend(self.link_args)
             args.extend(self.variant_link_args.get(build_options.variant, []))
-        for name, value in build_options.defines:
-            args.append('-D{}={}'.format(name, value) if value else '-D' + name)
-        for include_dir in build_options.include_dirs:
-            args.append('-I' + include_dir)
-        for lib_dir in build_options.library_dirs:
-            args.append('-L' + lib_dir)
-        for lib in build_options.libraries:
-            args.append('-l' + lib)
-        for obj in build_options.objects:
-            args.append(obj)
-        args.append(infile)
+            args.append(infile)
+            for obj in build_options.objects:
+                args.append(obj)
+            for lib_dir in build_options.library_dirs:
+                args.append('-L' + lib_dir)
+            for lib in build_options.libraries:
+                args.append('-l' + lib)
+        args.extend(tail_args)
         args.append('-o')
         args.append(outfile)
-        args.extend(tail_args)
         return args
 
 class CCBuilder(object):
+    obj_extension = '.o'
+    lib_extension = '.a'
+    exe_extension = ''
+
     def __init__(self, command):
         self.command = command
 
     def output_name(self, infile, build_options):
-        outfile = os.path.splitext(infile)[0]
-        if not build_options.link:
-            outfile += '.o'
-        return outfile
+        return os.path.splitext(infile)[0] + (self.exe_extension if build_options.link else self.obj_extension)
 
     def make_output(self, shell, code, outfile, build_options):
-        build_args = self.get_build_args(build_options, '-', outfile)
-        shell.run([self.command] + build_args, input=code)
-        if build_options.release and build_options.link:
-            shell.run('strip', '-R', '.comment', outfile)
+        if build_options.link:
+            with tempfile.NamedTemporaryFile(prefix='.ome-build-{}.'.format(os.getuid()), suffix='.o') as objfile:
+                objfile = objfile.name
+                shell.run([self.command] + self.get_build_args(build_options, '-', objfile, False), input=code)
+                if build_options.link:
+                    shell.run([self.command] + self.get_build_args(build_options, objfile, outfile, True))
+                    if build_options.release:
+                        shell.run('strip', '-R', '.comment', outfile)
+        else:
+            shell.run([self.command] + self.get_build_args(build_options, '-', outfile, False), input=code)
