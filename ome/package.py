@@ -1,9 +1,7 @@
 import hashlib
 import os
-import shutil
 import tarfile
 import tempfile
-from contextlib import contextmanager
 from os.path import join
 from urllib.request import urlopen
 from .build_shell import BuildShell
@@ -33,13 +31,8 @@ def make_path(path):
     if not os.path.isdir(path):
         os.makedirs(path)
 
-@contextmanager
 def temporary_dir(prefix):
-    path = tempfile.mkdtemp(prefix='{}-{}.'.format(prefix, os.getuid()))
-    try:
-        yield path
-    finally:
-        shutil.rmtree(path, ignore_errors=True)
+    return tempfile.TemporaryDirectory(prefix='{}-{}.'.format(prefix, os.getuid()))
 
 def download(url, path):
     print('ome: downloading', url)
