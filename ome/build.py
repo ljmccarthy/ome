@@ -78,8 +78,9 @@ def get_backend(target, platform, backend_name=None, backend_command=None):
         get_backend_version(backend)
         return backend
 
-platform_aliases = {
-    'linux': ['posix'],
+platform_defines = {
+    'linux':  [('OME_PLATFORM_POSIX', ''), ('_GNU_SOURCE', '')],
+    'darwin': [('OME_PLATFORM_POSIX', '')],
 }
 
 class BuildOptions(CompileOptions):
@@ -106,8 +107,7 @@ class BuildOptions(CompileOptions):
             ('OME_PLATFORM', self.platform),
             ('OME_PLATFORM_' + self.platform.upper(), ''),
         ]
-        for platform_alias in platform_aliases.get(self.platform, [self.platform]):
-            self.defines.append(('OME_PLATFORM_' + platform_alias.upper(), ''))
+        self.defines.extend(platform_defines.get(self.platform, []))
         if not options.debug:
             self.defines.append(('NDEBUG', ''))
         if options.debug_gc:

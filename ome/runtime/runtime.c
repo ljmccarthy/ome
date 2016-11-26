@@ -1,3 +1,13 @@
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+
+#ifdef OME_PLATFORM_POSIX
+    #include <unistd.h>
+    #include <sys/mman.h>
+#endif
+
 #ifdef OME_GC_DEBUG
     #define OME_GC_ASSERT(e) assert(e)
     #define OME_GC_PRINT(...) printf("ome gc: " __VA_ARGS__)
@@ -109,19 +119,29 @@ static uint64_t OME_estimate_cycles_per_ms(void)
 
 static void *OME_memory_allocate(size_t size)
 {
+#ifdef OME_PLATFORM_POSIX
     void *p = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     return p != MAP_FAILED ? p : NULL;
+#else
+    return NULL;
+#endif
 }
 
 static void *OME_memory_reallocate(void *old_p, size_t old_size, size_t new_size)
 {
+#ifdef OME_PLATFORM_LINUX
     void *p = mremap(old_p, old_size, new_size, MREMAP_MAYMOVE);
     return p != MAP_FAILED ? p : NULL;
+#else
+    return NULL;
+#endif
 }
 
 static void OME_memory_free(void *addr, size_t size)
 {
+#ifdef OME_PLATFORM_POSIX
     munmap(addr, size);
+#endif
 }
 
 static const char *OME_get_static_end(void)

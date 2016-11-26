@@ -1,14 +1,7 @@
-#define _GNU_SOURCE
 #include <stddef.h>
 #include <stdint.h>
 #include <inttypes.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/mman.h>
 
 typedef uint32_t OME_Tag;
 typedef union OME_Value OME_Value;

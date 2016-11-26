@@ -2,6 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import os
+import platform
 import tempfile
 from ...error import OmeError
 
@@ -77,7 +78,7 @@ class CCBuilder(object):
                 shell.run([self.command] + self.get_build_args(build_options, '-', objfile, False), input=code)
                 if build_options.link:
                     shell.run([self.command] + self.get_build_args(build_options, objfile, outfile, True))
-                    if build_options.release:
+                    if build_options.release and platform.system() == 'Linux':
                         shell.run('strip', '-R', '.comment', outfile)
         else:
             shell.run([self.command] + self.get_build_args(build_options, '-', outfile, False), input=code)
