@@ -3,9 +3,8 @@
 
 import os
 import platform
-import tempfile
-from contextlib import contextmanager
 from ...error import OmeError
+from ...util import temporary_file
 
 def find_musl_path(path):
     if path:
@@ -60,18 +59,6 @@ class CCArgsBuilder(object):
         args.append('-o')
         args.append(outfile)
         return args
-
-@contextmanager
-def temporary_file(prefix=None, suffix=None):
-    fd, path = tempfile.mkstemp(prefix=prefix, suffix=suffix)
-    try:
-        yield path
-    finally:
-        os.close(fd)
-        try:
-            os.remove(path)
-        except Exception:
-            pass
 
 class CCBuilder(object):
     obj_extension = '.o'

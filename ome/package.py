@@ -1,12 +1,11 @@
-import hashlib
 import os
 import tarfile
-import tempfile
 from os.path import join
 from urllib.parse import urlparse
 from .build_shell import BuildShell
 from .download import download
 from .error import OmeError
+from .util import get_file_hash, temporary_dir, make_path
 
 class SourcePackage(object):
     def __init__(self, name, version, url, hash, build, output_files=[],
@@ -20,25 +19,6 @@ class SourcePackage(object):
         self.output_files = output_files
         self.archive_name = (archive_name or os.path.basename(urlparse(url).path)).format(**vars)
         self.extract_dir = extract_dir.format(**vars)
-
-def remove(path):
-    try:
-        os.remove(path)
-    except Exception:
-        pass
-
-def make_path(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
-
-def temporary_dir(prefix):
-    return tempfile.TemporaryDirectory(prefix='{}-{}.'.format(prefix, os.getuid()))
-
-def get_file_hash(path):
-    m = hashlib.sha256()
-    with open(path, 'rb') as f:
-        m.update(f.read())
-    return m.hexdigest()
 
 class SourcePackageBuilder(object):
     def __init__(self, sources_dir, prefix_dir, backend, verbose=True):

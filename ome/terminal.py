@@ -1,12 +1,8 @@
 import sys
-import os
+from .util import is_ansi_terminal
 
 ansi_colour_list = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
 ansi_colour_code = dict((name, '{}m'.format(code)) for code, name in enumerate(ansi_colour_list, 30))
-
-def is_ansi_terminal(file):
-    return ((sys.platform != 'win32' or 'ANSICON' in os.environ)
-        and hasattr(file, 'isatty') and file.isatty())
 
 class MaybeAnsiTerminal(object):
     def __init__(self, file):

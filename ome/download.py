@@ -3,18 +3,7 @@ import sys
 import time
 from urllib.request import urlopen
 from .error import OmeError
-
-def remove(path):
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-def get_terminal_width():
-    try:
-        return os.get_terminal_size().columns
-    except OSError:
-        return 80
+from .util import remove, get_terminal_width
 
 def format_size(n):
     if n < 1024:

@@ -16,18 +16,13 @@ from .error import OmeError
 from .ome_ast import BuiltInBlock, format_sexpr
 from .package import SourcePackageBuilder
 from .terminal import stderr
+from .util import get_terminal_width
 from .version import version
 
 if platform.system() == 'Darwin':
     package_dir = os.path.expanduser(os.path.join('~', 'Library', 'Caches' 'ome', 'libs'))
 else:
     package_dir = os.path.expanduser(os.path.join('~', '.cache', 'ome', 'libs'))
-
-def get_terminal_width():
-    try:
-        return os.get_terminal_size().columns
-    except OSError:
-        return 80
 
 def get_prefix_dir(command):
     m = hashlib.md5()
