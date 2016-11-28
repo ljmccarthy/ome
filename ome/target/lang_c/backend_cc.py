@@ -4,6 +4,7 @@
 import os
 import platform
 import tempfile
+from contextlib import contextmanager
 from ...error import OmeError
 
 def find_musl_path(path):
@@ -47,7 +48,7 @@ class CCArgsBuilder(object):
         else:
             args.append('-static' if build_options.static else '-pie')
             args.extend(self.link_args)
-            args.extend(self.variant_link_args.get(build_options.variant, []))
+            args.extend(self.variant_link_args.get((build_options.platform, build_options.variant), []))
             args.append(infile)
             for obj in build_options.objects:
                 args.append(obj)
@@ -59,6 +60,18 @@ class CCArgsBuilder(object):
         args.append('-o')
         args.append(outfile)
         return args
+
+@contextmanager
+def temporary_file(prefix=None, suffix=None):
+    fd, path = tempfile.mkstemp(prefix=prefix, suffix=suffix)
+    try:
+        yield path
+    finally:
+        os.close(fd)
+        try:
+            os.remove(path)
+        except Exception:
+            pass
 
 class CCBuilder(object):
     obj_extension = '.o'
@@ -73,12 +86,11 @@ class CCBuilder(object):
 
     def make_output(self, shell, code, outfile, build_options):
         if build_options.link:
-            with tempfile.NamedTemporaryFile(prefix='.ome-build-{}.'.format(os.getuid()), suffix='.o') as objfile:
-                objfile = objfile.name
+            with temporary_file(prefix='.ome-build.', suffix='.o') as objfile:
                 shell.run([self.command] + self.get_build_args(build_options, '-', objfile, False), input=code)
                 if build_options.link:
                     shell.run([self.command] + self.get_build_args(build_options, objfile, outfile, True))
                     if build_options.release and platform.system() == 'Linux':
-                        shell.run('strip', '-R', '.comment', outfile)
+                        shell.run('strip', '--strip-all', '--remove-section=.comment', '--remove-section=.note', outfile)
         else:
             shell.run([self.command] + self.get_build_args(build_options, '-', outfile, False), input=code)

@@ -20,10 +20,7 @@ class GCCArgsBuilder(CCArgsBuilder):
         'debug': ['-O0', '-ggdb']
     }
     variant_link_args = {
-        'release': [
-            '-Wl,--strip-all',
-            '-Wl,--gc-sections',
-        ]
+        ('linux', 'release'): ['-Wl,--gc-sections'],
     }
 
     def get_musl_args(self, build_options, musl_path, linking):

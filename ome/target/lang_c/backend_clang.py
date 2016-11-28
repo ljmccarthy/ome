@@ -25,10 +25,7 @@ class ClangArgsBuilder(CCArgsBuilder):
         'debug': ['-O0', '-ggdb']
     }
     variant_link_args = {
-        'release': [
-            '-Wl,--strip-all',
-            '-Wl,--gc-sections',
-        ]
+        ('linux', 'release'): ['-Wl,--gc-sections']
     }
 
     def get_musl_args(self, build_options, musl_path, linking):
@@ -55,5 +52,5 @@ class ClangBuilder(CCBuilder):
     default_command = 'clang'
     supported_platforms = frozenset(['linux', 'darwin'])
     version_args = ['--version']
-    version_re = 'clang version (\d+\.\d+\.\d+)'
+    version_re = '(clang|Apple LLVM) version (\d+\.\d+\.\d+)'
     get_build_args = ClangArgsBuilder()
