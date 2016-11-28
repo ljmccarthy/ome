@@ -28,6 +28,11 @@
     #define OME_GC_TIMER_END(timer)
 #endif
 
+static int OME_is_header_aligned(OME_Header *header)
+{
+    return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
+}
+
 static OME_Value OME_print(FILE *out, OME_Value value)
 {
     OME_LOCALS(1);

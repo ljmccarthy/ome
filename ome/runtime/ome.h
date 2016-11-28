@@ -218,11 +218,6 @@ static size_t OME_heap_align(uintptr_t size)
     return (size + OME_HEAP_ALIGNMENT - 1) & ~(OME_HEAP_ALIGNMENT - 1);
 }
 
-static int OME_is_header_aligned(void *header)
-{
-    return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
-}
-
 static int OME_equal(OME_Value a, OME_Value b)
 {
     return a._bits == b._bits;
