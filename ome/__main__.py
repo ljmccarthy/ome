@@ -4,6 +4,7 @@
 import glob
 import hashlib
 import os
+import platform
 import sys
 import time
 from . import build
@@ -17,7 +18,10 @@ from .package import SourcePackageBuilder
 from .terminal import stderr
 from .version import version
 
-package_dir = os.path.expanduser(os.path.join('~', '.cache', 'ome', 'libs'))
+if platform.system() == 'Darwin':
+    package_dir = os.path.expanduser(os.path.join('~', 'Library', 'Caches' 'ome', 'libs'))
+else:
+    package_dir = os.path.expanduser(os.path.join('~', '.cache', 'ome', 'libs'))
 
 def get_terminal_width():
     try:
