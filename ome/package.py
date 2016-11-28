@@ -3,14 +3,14 @@ import os
 import tarfile
 import tempfile
 from os.path import join
-from urllib.request import urlopen
+from urllib.parse import urlparse
 from .build_shell import BuildShell
+from .download import download
 from .error import OmeError
 
 class SourcePackage(object):
     def __init__(self, name, version, url, hash, build, output_files=[],
-                  archive_name='{name}-{version}.tar.gz',
-                  extract_dir='{name}-{version}'):
+                  archive_name=None, extract_dir='{name}-{version}'):
         vars = dict(name=name, version=version)
         self.name = name
         self.version = version
@@ -18,7 +18,7 @@ class SourcePackage(object):
         self.hash = hash
         self.build = build
         self.output_files = output_files
-        self.archive_name = archive_name.format(**vars)
+        self.archive_name = (archive_name or os.path.basename(urlparse(url).path)).format(**vars)
         self.extract_dir = extract_dir.format(**vars)
 
 def remove(path):
@@ -33,23 +33,6 @@ def make_path(path):
 
 def temporary_dir(prefix):
     return tempfile.TemporaryDirectory(prefix='{}-{}.'.format(prefix, os.getuid()))
-
-def download(url, path):
-    print('ome: downloading', url)
-    try:
-        with open(path, 'wb') as output:
-            with urlopen(url) as input:
-                while True:
-                    buf = input.read(1024)
-                    if not buf:
-                        break
-                    output.write(buf)
-    except KeyboardInterrupt:
-        remove(path)
-        raise
-    except Exception as e:
-        remove(path)
-        raise OmeError('ome: download failed: {}'.format(e))
 
 def get_file_hash(path):
     m = hashlib.sha256()
@@ -85,24 +68,31 @@ class SourcePackageBuilder(object):
             remove(source_path)
         return source_path
 
-    def build_package(self, package):
+    def is_package_built(self, package):
         output_exists = [os.path.exists(join(self.prefix_dir, filename)) for filename in package.output_files]
         if not all(output_exists):
             for filename, exists in zip(package.output_files, output_exists):
                 if exists:
                     remove(join(self.prefix_dir, filename))
-            source_path = self.get_source(package)
-            with temporary_dir('.ome-build') as build_dir:
-                self.print_verbose('extracting', package.archive_name)
-                with tarfile.open(source_path) as tar:
-                    tar.extractall(build_dir)
-                self.shell.cd(join(build_dir, package.extract_dir))
-                self.print_verbose('building {0.name} {0.version}'.format(package))
-                package.build(self.shell, self.backend, self)
+            return False
+        return True
+
+    def build_package(self, package):
+        with temporary_dir('.ome-build') as build_dir:
+            self.print_verbose('extracting', package.archive_name)
+            source_path = join(self.sources_dir, package.archive_name)
+            with tarfile.open(source_path) as tar:
+                tar.extractall(build_dir)
+            self.shell.cd(join(build_dir, package.extract_dir))
+            self.print_verbose('building {0.name} {0.version}'.format(package))
+            package.build(self.shell, self.backend, self)
 
     def build_packages(self, packages):
         make_path(self.sources_dir)
         make_path(self.include_dir)
         make_path(self.library_dir)
-        for package in packages:
+        unbuilt_packages = [p for p in packages if not self.is_package_built(p)]
+        for package in unbuilt_packages:
+            self.get_source(package)
+        for package in unbuilt_packages:
             self.build_package(package)
