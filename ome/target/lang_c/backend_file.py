@@ -14,6 +14,6 @@ class FileBuilder(object):
     def output_name(self, infile, build_options):
         return os.path.splitext(infile)[0] + '.c'
 
-    def make_output(self, shell, code, outfile, build_options):
+    def build_string(self, shell, code, outfile, build_options):
         with open(outfile, 'wb') as f:
             f.write(code)

@@ -46,7 +46,7 @@ def main():
         backend = build.get_backend(target, command_args.platform, command_args.backend, command_args.backend_command)
 
         prefix_dir = get_prefix_dir(backend.command)
-        options = build.BuildOptions(target, command_args)
+        options = build.get_build_options_from_command(command_args)
         options.include_dirs.append(os.path.join(prefix_dir, 'include'))
         options.library_dirs.append(os.path.join(prefix_dir, 'lib'))
 
@@ -95,21 +95,22 @@ def main():
             print(input.decode(target.encoding))
             sys.exit()
 
+        libraries = []
         if target.packages:
             print_verbose('building packages')
             sources_dir = os.path.join(package_dir, 'sources')
             package_builder = SourcePackageBuilder(sources_dir, prefix_dir, backend)
             package_builder.build_packages(target.packages)
-            for lib in glob.glob(os.path.join(prefix_dir, 'lib', '*' + backend.lib_extension)):
-                options.objects.append(lib)
+            libraries = glob.glob(os.path.join(prefix_dir, 'lib', '*' + backend.lib_extension))
+            options.objects.extend(libraries)
 
         print_verbose('building output', outfile)
         build_start_time = time.time()
         shell = BuildShell(command_args.show_build_commands)
-        backend.make_output(shell, input, outfile, options)
+        backend.build_string(shell, input, outfile, options)
         build_time = time.time() - build_start_time
-        print_verbose('backend build completed in %.2fs' % build_time)
 
+        print_verbose('backend build completed in %.2fs' % build_time)
         total_time = time.time() - start_time
         print_verbose('completed in %.2fs' % total_time)
     except OmeError as error:

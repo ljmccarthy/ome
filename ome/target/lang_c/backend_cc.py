@@ -71,7 +71,18 @@ class CCBuilder(object):
     def output_name(self, infile, build_options):
         return os.path.splitext(infile)[0] + (self.exe_extension if build_options.link else self.obj_extension)
 
-    def make_output(self, shell, code, outfile, build_options):
+    def build_file(self, shell, infile, outfile, build_options):
+        if build_options.link:
+            with temporary_file(prefix='.ome-build.', suffix='.o') as objfile:
+                shell.run([self.command] + self.get_build_args(build_options, infile, objfile, False))
+                if build_options.link:
+                    shell.run([self.command] + self.get_build_args(build_options, objfile, outfile, True))
+                    if build_options.release and platform.system() == 'Linux':
+                        shell.run('strip', '--strip-all', '--remove-section=.comment', '--remove-section=.note', outfile)
+        else:
+            shell.run([self.command] + self.get_build_args(build_options, infile, outfile, False))
+
+    def build_string(self, shell, code, outfile, build_options):
         if build_options.link:
             with temporary_file(prefix='.ome-build.', suffix='.o') as objfile:
                 shell.run([self.command] + self.get_build_args(build_options, '-', objfile, False), input=code)

@@ -2,6 +2,7 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import os
+import platform
 import re
 import stat
 import subprocess
@@ -84,37 +85,61 @@ platform_defines = {
 }
 
 class BuildOptions(CompileOptions):
-    def __init__(self, target, options):
-        self.target = target
-        self.platform = options.platform.lower()
-        self.variant = 'debug' if options.debug else ('fast' if options.fast else 'release')
-        self.debug = options.debug
-        self.release = not options.debug and not options.fast
-        self.link = not options.make_object
-        self.static = options.static
-        self.verbose = options.verbose
-        self.verbose_backend = options.verbose_backend
-        self.traceback = not options.no_traceback
-        self.source_traceback = not options.no_source_traceback
-        self.use_musl = options.use_musl
-        self.musl_path = options.musl_path
-        self.shell = BuildShell(options.show_build_commands)
-        self.include_dirs = options.include_dir[:]
-        self.library_dirs = options.library_dir[:]
-        self.libraries = options.link[:]
-        self.objects = []
-        self.defines = [
-            ('OME_PLATFORM', self.platform),
-            ('OME_PLATFORM_' + self.platform.upper(), ''),
-        ]
-        self.defines.extend(platform_defines.get(self.platform, []))
-        if not options.debug:
+    def __init__(self, platform=platform.system(), variant='release',
+                  link=False, static=False, use_musl=False, musl_path=None,
+                  verbose=False, verbose_backend=False, show_build_commands=False,
+                  include_dirs=(), library_dirs=(), libraries=(), objects=(),
+                  defines=()):
+        self.platform = platform
+        self.variant = variant
+        self.debug = variant == 'debug'
+        self.release = variant == 'release'
+        self.link = link
+        self.static = static
+        self.use_musl = use_musl
+        self.musl_path = musl_path
+        self.verbose = verbose
+        self.verbose_backend = verbose_backend
+        self.shell = BuildShell(show_build_commands)
+        self.include_dirs = list(include_dirs)
+        self.library_dirs = list(library_dirs)
+        self.libraries = list(libraries)
+        self.objects = list(objects)
+        self.defines = list(defines)
+        if not self.debug:
             self.defines.append(('NDEBUG', ''))
-        if options.debug_gc:
+
+    def set_ome_defines(self, debug_gc=False, gc_stats=False, traceback=True, source_traceback=True):
+        self.traceback = traceback
+        self.source_traceback = source_traceback
+        self.defines.append(('OME_PLATFORM', self.platform))
+        self.defines.append(('OME_PLATFORM_' + self.platform.upper(), ''))
+        self.defines.extend(platform_defines.get(self.platform, []))
+        if debug_gc:
             self.defines.append(('OME_GC_DEBUG', ''))
-        if options.gc_stats:
+        if gc_stats:
             self.defines.append(('OME_GC_STATS', ''))
-        if options.no_traceback:
+        if not traceback:
             self.defines.append(('OME_NO_TRACEBACK', ''))
-        if options.no_source_traceback:
+        if not source_traceback:
             self.defines.append(('OME_NO_SOURCE_TRACEBACK', ''))
+
+def get_build_options_from_command(command_args):
+    options = BuildOptions(
+        platform = command_args.platform.lower(),
+        variant = 'debug' if command_args.debug else ('fast' if command_args.fast else 'release'),
+        link = not command_args.make_object,
+        static = command_args.static,
+        use_musl = command_args.use_musl,
+        musl_path = command_args.musl_path,
+        verbose = command_args.verbose,
+        verbose_backend = command_args.verbose_backend,
+        include_dirs = command_args.include_dir,
+        library_dirs = command_args.library_dir,
+        libraries = command_args.link)
+    options.set_ome_defines(
+        debug_gc = command_args.debug_gc,
+        gc_stats = command_args.gc_stats,
+        traceback = not command_args.no_traceback,
+        source_traceback = not command_args.no_source_traceback)
+    return options
