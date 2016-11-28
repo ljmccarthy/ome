@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 from .error import OmeError
@@ -41,7 +42,7 @@ class BuildShell(object):
 
     def print_command(self, args):
         if self.show_commands:
-            print(' '.join(args))
+            print(' '.join(shlex.quote(x) for x in args))
 
     def run(self, *args, input=None, output=None):
         args = get_args_list(args)
