@@ -3,7 +3,7 @@ import sys
 import time
 from urllib.request import urlopen
 from .error import OmeError
-from .util import remove, get_terminal_width
+from .util import remove, get_terminal_width, is_terminal
 
 def format_size(n):
     if n < 1024:
@@ -23,7 +23,7 @@ class Progress(object):
     def __init__(self, length, file=sys.stdout):
         self.length = length
         self.file = file
-        self.is_tty = hasattr(file, 'isatty') and file.isatty()
+        self.is_terminal = is_terminal(file)
         self.start_time = time.time()
         self.transferred = 0
         self.last_time = self.start_time
@@ -32,7 +32,7 @@ class Progress(object):
         self.last_line = ''
 
     def update(self, transferred):
-        if self.is_tty:
+        if self.is_terminal:
             self.transferred += transferred
             now = time.time()
             if now - self.last_time > 1.0:
@@ -55,7 +55,7 @@ class Progress(object):
                 self.last_line = line
 
     def finish(self):
-        if self.is_tty:
+        if self.is_terminal:
             self.file.write('\r\x1B[K')
 
 def download(url, path):
@@ -64,7 +64,6 @@ def download(url, path):
         with open(path, 'wb') as output:
             with urlopen(url) as input:
                 progress = Progress(input.length)
-                progress.update(0)
                 try:
                     while True:
                         buf = input.read(1024)

@@ -4,11 +4,11 @@ import sys
 import tempfile
 from contextlib import contextmanager
 
-def is_tty(file):
+def is_terminal(file):
     return hasattr(file, 'isatty') and file.isatty()
 
 def is_ansi_terminal(file):
-    return (sys.platform != 'win32' or 'ANSICON' in os.environ) and is_tty(file)
+    return (sys.platform != 'win32' or 'ANSICON' in os.environ) and is_terminal(file)
 
 def get_terminal_width():
     try:
