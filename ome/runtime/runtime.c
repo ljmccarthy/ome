@@ -8,6 +8,10 @@
     #include <sys/mman.h>
 #endif
 
+#define OME_NOINLINE __attribute__((noinline))
+#define OME_LIKELY(e) __builtin_expect((e), 1)
+#define OME_UNLIKELY(e) __builtin_expect((e), 0)
+
 #ifdef OME_GC_DEBUG
     #define OME_GC_ASSERT(e) assert(e)
     #define OME_GC_PRINT(...) printf("ome gc: " __VA_ARGS__)
@@ -146,7 +150,7 @@ static void OME_memory_free(void *addr, size_t size)
 
 static const char *OME_get_static_end(void)
 {
-#ifdef OME_PLATFORM_POSIX
+#ifdef OME_PLATFORM_LINUX
     return sbrk(0);
 #else
     return 0;
@@ -368,6 +372,7 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
 
 #define OME_MARK_LIST_NULL 0xFFFFFFFF
 
+OME_NOINLINE
 static int OME_mark(OME_Heap *heap, uint64_t deadline)
 {
     OME_GC_TIMER_START();
@@ -517,6 +522,7 @@ static size_t OME_scan_bitmap(unsigned long *bitmap, size_t size, size_t start)
     return ~0UL;
 }
 
+OME_NOINLINE
 static int OME_compact(OME_Heap *heap, uint64_t deadline)
 {
     OME_GC_TIMER_START();
@@ -587,6 +593,7 @@ static int OME_compact(OME_Heap *heap, uint64_t deadline)
     return 1;
 }
 
+OME_NOINLINE
 static void OME_collect(OME_Heap *heap)
 {
 #ifdef OME_GC_DEBUG
@@ -614,6 +621,7 @@ static void OME_collect(OME_Heap *heap)
 #endif
 }
 
+OME_NOINLINE
 static void OME_collect_full(OME_Heap *heap)
 {
 #ifdef OME_GC_DEBUG
@@ -628,6 +636,7 @@ static void OME_collect_full(OME_Heap *heap)
         (clock() - t) * 1000 / CLOCKS_PER_SEC, (heap->pointer - heap->base) / 1024);
 }
 
+OME_NOINLINE
 static void OME_collect_big_objects(OME_Heap *heap)
 {
     OME_mark(heap, 0);
@@ -636,6 +645,7 @@ static void OME_collect_big_objects(OME_Heap *heap)
     OME_GC_TIMER_END(heap->compact_time);
 }
 
+OME_NOINLINE
 static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_offset, size_t scan_size)
 {
     if (object_size > OME_MAX_BIG_OBJECT_SIZE * sizeof(OME_Value)) {
@@ -691,33 +701,40 @@ static void *OME_allocate_big(OME_Heap *heap, size_t object_size, size_t scan_of
     return body;
 }
 
-static void *OME_allocate(size_t object_size, size_t scan_offset, size_t scan_size)
+OME_NOINLINE
+static void OME_ensure_allocate(OME_Heap *heap, size_t size)
 {
-    OME_Heap *heap = &OME_context->heap;
-    object_size = (object_size + 7) & ~7;
-
-    if (object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value)) {
-        return OME_allocate_big(heap, object_size, scan_offset, scan_size);
-    }
-
-    size_t alloc_size = object_size + sizeof(OME_Header);
-    size_t padded_size = alloc_size + sizeof(OME_Header);
-
-    if (heap->pointer + padded_size >= heap->limit) {
+    if (heap->pointer + size >= heap->limit) {
         OME_collect(heap);
         size_t heap_size = heap->limit - heap->base;
-        if (heap->pointer + padded_size >= heap->base + heap_size / 2) {
+        if (heap->pointer + size >= heap->base + heap_size / 2) {
             if (heap->size * 2 <= OME_MAX_HEAP_SIZE) {
                 OME_resize_heap(heap, heap->size * 2);
             }
-            else if (heap->pointer + padded_size >= heap->limit) {
+            else if (heap->pointer + size >= heap->limit) {
                 OME_collect_full(heap);
-                if (heap->pointer + padded_size >= heap->limit) {
+                if (heap->pointer + size >= heap->limit) {
                     fprintf(stderr, "ome: memory exhausted, aborting\n");
                     exit(1);
                 }
             }
         }
+    }
+}
+
+static void *OME_allocate(size_t object_size, size_t scan_offset, size_t scan_size)
+{
+    OME_Heap *heap = &OME_context->heap;
+    object_size = (object_size + 7) & ~7;
+    size_t alloc_size = object_size + sizeof(OME_Header);
+    size_t padded_size = alloc_size + sizeof(OME_Header);
+
+    if (OME_UNLIKELY(object_size > OME_MAX_HEAP_OBJECT_SIZE * sizeof(OME_Value))) {
+        return OME_allocate_big(heap, object_size, scan_offset, scan_size);
+    }
+
+    if (OME_UNLIKELY(heap->pointer + padded_size >= heap->limit)) {
+        OME_ensure_allocate(heap, padded_size);
     }
 
     OME_Header *header = (OME_Header *) heap->pointer;
@@ -762,6 +779,7 @@ static OME_String *OME_allocate_string(uint32_t size)
     return string;
 }
 
+OME_NOINLINE
 static OME_Value OME_concat(OME_Value *strings, unsigned int count)
 {
     size_t size = 0;
