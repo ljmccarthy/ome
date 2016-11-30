@@ -1,6 +1,6 @@
 SRCFILES = $(wildcard *.ome)
 OUTFILES = $(SRCFILES:%.ome=%)
-OMEFLAGS = --backend=clang --use-musl --static
+OMEFLAGS =
 
 all : $(OUTFILES)
 
