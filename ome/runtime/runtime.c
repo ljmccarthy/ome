@@ -715,18 +715,18 @@ static OME_String *OME_allocate_string(uint32_t size)
 
 static OME_Value OME_print(FILE *out, OME_Value value)
 {
-    OME_LOCALS(1);
-    OME_SAVE_LOCAL(0, value);
-    OME_Value string = value;
     if (OME_get_tag(value) != OME_Tag_String) {
-        string = OME_message_string__0(value);
-        OME_RETURN_ERROR(string);
+        value = OME_message_string__0(value);
+        if (OME_is_error(value)) {
+            return value;
+        }
+        if (OME_get_tag(value) != OME_Tag_String) {
+            return OME_error(OME_Type_Error);
+        }
     }
-    if (OME_get_tag(string) == OME_Tag_String) {
-        OME_String *p_string = OME_untag_string(string);
-        fwrite(p_string->data, 1, p_string->size, out);
-    }
-    OME_RETURN(OME_Empty);
+    OME_String *string = OME_untag_string(value);
+    fwrite(string->data, 1, string->size, out);
+    return OME_Empty;
 }
 
 static void OME_append_traceback(uint32_t entry)
