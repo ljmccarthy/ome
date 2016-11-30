@@ -1,5 +1,6 @@
 import hashlib
 import os
+import platform
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -44,3 +45,11 @@ def get_file_hash(path):
     with open(path, 'rb') as f:
         m.update(f.read())
     return m.hexdigest()
+
+def get_cache_dir(appname):
+    if platform.system() == 'Darwin':
+        return os.path.expanduser(os.path.join('~', 'Library', 'Caches', appname))
+    elif platform.system() == 'Windows':
+        return os.path.join(os.environ['LOCALAPPDATA'], appname, 'cache')
+    else:
+        return os.path.expanduser(os.path.join('~', '.cache', appname))
