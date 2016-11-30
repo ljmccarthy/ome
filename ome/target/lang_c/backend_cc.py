@@ -27,6 +27,8 @@ class CCArgsBuilder(object):
         raise OmeError("musl is not supported for this backend")
 
     def __call__(self, build_options, infile, outfile, linking):
+        if build_options.static and build_options.platform == 'darwin':
+            raise OmeError('macOS does not support static linking')
         args = []
         tail_args = []
         if build_options.use_musl:
