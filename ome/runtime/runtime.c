@@ -12,98 +12,6 @@
 #define OME_LIKELY(e) __builtin_expect((e), 1)
 #define OME_UNLIKELY(e) __builtin_expect((e), 0)
 
-#ifdef OME_GC_DEBUG
-    #define OME_GC_ASSERT(e) assert(e)
-    #define OME_GC_PRINT(...) printf("ome gc: " __VA_ARGS__)
-#else
-    #define OME_GC_ASSERT(e) do {} while (0)
-    #define OME_GC_PRINT(...) do {} while (0)
-#endif
-
-#ifdef OME_GC_STATS
-    #define OME_GC_TIMER_START() clock_t _OME_gc_start_time = clock()
-    #define OME_GC_TIMER_END(timer) do { timer += clock() - _OME_gc_start_time; } while (0)
-#else
-    #define OME_GC_TIMER_START()
-    #define OME_GC_TIMER_END(timer)
-#endif
-
-static int OME_is_header_aligned(OME_Header *header)
-{
-    return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
-}
-
-static OME_Value OME_print(FILE *out, OME_Value value)
-{
-    OME_LOCALS(1);
-    OME_SAVE_LOCAL(0, value);
-    OME_Value string = value;
-    if (OME_get_tag(value) != OME_Tag_String) {
-        string = OME_message_string__0(value);
-        OME_RETURN_ERROR(string);
-    }
-    if (OME_get_tag(string) == OME_Tag_String) {
-        OME_String *p_string = OME_untag_string(string);
-        fwrite(p_string->data, 1, p_string->size, out);
-    }
-    OME_RETURN(OME_Empty);
-}
-
-static void OME_append_traceback(uint32_t entry)
-{
-#ifndef OME_NO_TRACEBACK
-    uint32_t *traceback = &OME_context->traceback[-1];
-    if ((void *) traceback >= (void *) OME_context->stack_pointer) {
-        *traceback = entry;
-        OME_context->traceback = traceback;
-    }
-#endif
-}
-
-static void OME_reset_traceback(void)
-{
-#ifndef OME_NO_TRACEBACK
-    size_t size = OME_context->stack_end - OME_context->stack_limit;
-    memset(OME_context->traceback, 0, size);
-    OME_context->traceback = OME_context->traceback_end;
-#endif
-}
-
-static void OME_print_traceback(FILE *out, OME_Value error)
-{
-#ifndef OME_NO_TRACEBACK
-    uint32_t *cur = OME_context->traceback;
-    uint32_t *end = OME_context->traceback_end;
-
-#ifdef OME_PLATFORM_POSIX
-    const int use_ansi = isatty(fileno(out));
-#else
-    const int use_ansi = 0;
-#endif
-
-    if (cur < end) {
-        fputs("Traceback (most recent call last):\n", out);
-    }
-    for (; cur < end; cur++) {
-        OME_Traceback_Entry const *tb = &OME_traceback_table[*cur];
-        fprintf(out, "  File \"%s\", line %d, in |%s|\n", tb->stream_name, tb->line_number, tb->method_name);
-#ifndef OME_NO_SOURCE_TRACEBACK
-        if (use_ansi) fputs("\x1b[1m", out);
-        fprintf(out, "    %s\n    ", tb->source_line);
-        for (uint32_t i = 0; i < tb->column; i++) fputc(' ', out);
-        if (use_ansi) fputs("\x1b[31m", out);
-        for (uint32_t i = 0; i < tb->underline; i++) fputc('^', out);
-        if (use_ansi) fputs("\x1b[0m", out);
-        fputc('\n', out);
-#endif // OME_NO_SOURCE_TRACEBACK
-    }
-#endif // OME_NO_TRACEBACK
-    fputs("Error: ", out);
-    OME_print(out, OME_strip_error(error));
-    fputc('\n', out);
-    fflush(out);
-}
-
 static uint64_t OME_cycle_count(void)
 {
 #if defined(__clang__)
@@ -164,6 +72,27 @@ static const char *OME_get_static_end(void)
 
 #define OME_MIN_HEAP_SIZE 0x1000
 #define OME_MAX_HEAP_SIZE ((1L << 32) * 16)
+
+#ifdef OME_GC_DEBUG
+    #define OME_GC_ASSERT(e) assert(e)
+    #define OME_GC_PRINT(...) printf("ome gc: " __VA_ARGS__)
+#else
+    #define OME_GC_ASSERT(e) do {} while (0)
+    #define OME_GC_PRINT(...) do {} while (0)
+#endif
+
+#ifdef OME_GC_STATS
+    #define OME_GC_TIMER_START() clock_t _OME_gc_start_time = clock()
+    #define OME_GC_TIMER_END(timer) do { timer += clock() - _OME_gc_start_time; } while (0)
+#else
+    #define OME_GC_TIMER_START()
+    #define OME_GC_TIMER_END(timer)
+#endif
+
+static int OME_is_header_aligned(OME_Header *header)
+{
+    return (((uintptr_t) header + sizeof(OME_Header)) & 0xF) == 0;
+}
 
 static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
 {
@@ -782,6 +711,77 @@ static OME_String *OME_allocate_string(uint32_t size)
     OME_String *string = OME_allocate_data(sizeof(OME_String) + size + 1);
     string->size = size;
     return string;
+}
+
+static OME_Value OME_print(FILE *out, OME_Value value)
+{
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, value);
+    OME_Value string = value;
+    if (OME_get_tag(value) != OME_Tag_String) {
+        string = OME_message_string__0(value);
+        OME_RETURN_ERROR(string);
+    }
+    if (OME_get_tag(string) == OME_Tag_String) {
+        OME_String *p_string = OME_untag_string(string);
+        fwrite(p_string->data, 1, p_string->size, out);
+    }
+    OME_RETURN(OME_Empty);
+}
+
+static void OME_append_traceback(uint32_t entry)
+{
+#ifndef OME_NO_TRACEBACK
+    uint32_t *traceback = &OME_context->traceback[-1];
+    if ((void *) traceback >= (void *) OME_context->stack_pointer) {
+        *traceback = entry;
+        OME_context->traceback = traceback;
+    }
+#endif
+}
+
+static void OME_reset_traceback(void)
+{
+#ifndef OME_NO_TRACEBACK
+    size_t size = OME_context->stack_end - OME_context->stack_limit;
+    memset(OME_context->traceback, 0, size);
+    OME_context->traceback = OME_context->traceback_end;
+#endif
+}
+
+static void OME_print_traceback(FILE *out, OME_Value error)
+{
+#ifndef OME_NO_TRACEBACK
+    uint32_t *cur = OME_context->traceback;
+    uint32_t *end = OME_context->traceback_end;
+
+#ifdef OME_PLATFORM_POSIX
+    const int use_ansi = isatty(fileno(out));
+#else
+    const int use_ansi = 0;
+#endif
+
+    if (cur < end) {
+        fputs("Traceback (most recent call last):\n", out);
+    }
+    for (; cur < end; cur++) {
+        OME_Traceback_Entry const *tb = &OME_traceback_table[*cur];
+        fprintf(out, "  File \"%s\", line %d, in |%s|\n", tb->stream_name, tb->line_number, tb->method_name);
+#ifndef OME_NO_SOURCE_TRACEBACK
+        if (use_ansi) fputs("\x1b[1m", out);
+        fprintf(out, "    %s\n    ", tb->source_line);
+        for (uint32_t i = 0; i < tb->column; i++) fputc(' ', out);
+        if (use_ansi) fputs("\x1b[31m", out);
+        for (uint32_t i = 0; i < tb->underline; i++) fputc('^', out);
+        if (use_ansi) fputs("\x1b[0m", out);
+        fputc('\n', out);
+#endif // OME_NO_SOURCE_TRACEBACK
+    }
+#endif // OME_NO_TRACEBACK
+    fputs("Error: ", out);
+    OME_print(out, OME_strip_error(error));
+    fputc('\n', out);
+    fflush(out);
 }
 
 OME_NOINLINE
