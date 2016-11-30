@@ -12,6 +12,8 @@ from .ome_types import CompileOptions
 from .target import target_map
 
 def is_executable(filename):
+    if platform.system() == 'Windows':
+        return os.path.isfile(filename)
     try:
         st = os.stat(filename)
     except OSError:
@@ -21,7 +23,10 @@ def is_executable(filename):
         (os.getuid() == st.st_uid and mode & stat.S_IXUSR) or
         (os.getgid() == st.st_gid and mode & stat.S_IXGRP))
 
+executable_name_format = {'Windows': '{}.exe'}
+
 def find_executable(name):
+    name = executable_name_format.get(platform.system(), '{}').format(name)
     for path in os.environ.get('PATH', '').split(os.path.pathsep):
         filepath = os.path.realpath(os.path.join(path, name))
         if is_executable(filepath):
@@ -90,7 +95,7 @@ class BuildOptions(CompileOptions):
                   verbose=False, verbose_backend=False, show_build_commands=False,
                   include_dirs=(), library_dirs=(), libraries=(), objects=(),
                   defines=()):
-        self.platform = platform
+        self.platform = platform.lower()
         self.variant = variant
         self.debug = variant == 'debug'
         self.release = variant == 'release'
@@ -126,7 +131,7 @@ class BuildOptions(CompileOptions):
 
 def get_build_options_from_command(command_args):
     options = BuildOptions(
-        platform = command_args.platform.lower(),
+        platform = command_args.platform,
         variant = 'debug' if command_args.debug else ('fast' if command_args.fast else 'release'),
         link = not command_args.make_object,
         static = command_args.static,
