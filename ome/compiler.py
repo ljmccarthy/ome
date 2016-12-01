@@ -2,8 +2,6 @@
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
 import io
-import sys
-
 from . import constants
 from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError

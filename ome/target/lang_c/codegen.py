@@ -1,7 +1,6 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
-import struct
 from ... import optimise
 from ...constants import MIN_CONSTANT_TAG
 from ...instructions import CONCAT
