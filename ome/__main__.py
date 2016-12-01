@@ -4,7 +4,6 @@
 import glob
 import hashlib
 import os
-import platform
 import sys
 import time
 from . import build
