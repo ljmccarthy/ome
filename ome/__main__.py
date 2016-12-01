@@ -21,6 +21,7 @@ from .version import version
 
 class OmeApp(object):
     def __init__(self, args):
+        self.start = time.time()
         self.args = args
         self.package_dir = os.path.join(get_cache_dir('ome'), 'libs')
         self.target = build.get_target(args.target)
@@ -111,7 +112,6 @@ class OmeApp(object):
         return libraries
 
     def main(self):
-        start = time.time()
         stderr.reset()
 
         if self.args.version:
@@ -135,7 +135,7 @@ class OmeApp(object):
         self.backend.build_string(self.shell, input, self.args.output, self.options)
         self.print_verbose('backend build completed in %.2fs' % (time.time() - build_start))
 
-        self.print_verbose('completed in %.2fs' % (time.time() - start))
+        self.print_verbose('completed in %.2fs' % (time.time() - self.start))
 
 def main():
     try:
