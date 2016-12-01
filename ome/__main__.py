@@ -41,6 +41,18 @@ class OmeApp(object):
         if self.verbose:
             print('ome:', *args)
 
+    def print_version(self):
+        print('ome version {}.{}.{}'.format(*version))
+        sys.exit()
+
+    def check_args(self):
+        if self.args.backend_command and not self.args.backend:
+            raise OmeError('--backend must be specified with --backend-command')
+        if len(self.args.file) == 0:
+            raise OmeError('no input files')
+        if len(self.args.file) > 1:
+            raise OmeError('too many input files')
+
     def print_ast(self, ast):
         print(format_sexpr(ast.sexpr(), max_width=get_terminal_width()))
         sys.exit()
@@ -65,6 +77,10 @@ class OmeApp(object):
                     print('    ' + str(ins))
         sys.exit()
 
+    def print_target_code(self, code):
+        print(code.decode(self.target.encoding))
+        sys.exit()
+
     def build_packages(self):
         libraries = []
         if self.target.packages:
@@ -81,28 +97,22 @@ class OmeApp(object):
         stderr.reset()
 
         if self.args.version:
-            print('ome version {}.{}.{}'.format(*version))
-            sys.exit()
+            self.print_version()
 
-        if self.args.backend_command and not self.args.backend:
-            raise OmeError('--backend must be specified with --backend-command')
+        self.check_args()
 
         self.print_verbose('using target {}'.format(self.target.name))
         self.print_verbose('using backend {} {}'.format(self.backend.name, self.backend.version))
-
-        if len(self.args.file) == 0:
-            raise OmeError('no input files')
-        if len(self.args.file) > 1:
-            raise OmeError('too many input files')
 
         self.build_packages()
 
         filename = self.args.file[0]
         outfile = self.args.output or self.backend.output_name(filename, self.options)
         self.print_verbose('compiling {}'.format(filename))
-        compile_start_time = time.time()
 
+        compile_start_time = time.time()
         ast = compiler.parse_file(filename)
+
         if self.args.print_ast:
             self.print_ast(ast)
 
@@ -116,8 +126,7 @@ class OmeApp(object):
         self.print_verbose('frontend compilation completed in %.2fs' % (time.time() - compile_start_time))
 
         if self.args.print_target_code:
-            print(input.decode(self.target.encoding))
-            sys.exit()
+            self.print_target_code(input)
 
         self.print_verbose('building output', outfile)
         build_start_time = time.time()
