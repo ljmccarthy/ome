@@ -52,19 +52,25 @@ class OmeApp(object):
             raise OmeError('no input files')
         if len(self.args.file) > 1:
             raise OmeError('too many input files')
+        self.args.infile = self.args.file[0]
+        if not self.args.output:
+            self.args.output = self.backend.output_name(self.args.infile, self.options)
+            if self.args.infile == self.args.output:
+                raise OmeError('input file name is same as output')
 
-    def print_ast(self, ast):
+    def print_ast(self, filename):
+        ast = compiler.parse_file(filename)
         print(format_sexpr(ast.sexpr(), max_width=get_terminal_width()))
-        sys.exit()
 
-    def print_resolved_ast(self, ast):
+    def print_resolved_ast(self, filename):
         builtin_block = BuiltInBlock(self.target.get_builtin().methods)
+        ast = compiler.parse_file(filename)
         ast = ast.resolve_free_vars(builtin_block)
         ast = ast.resolve_block_refs(builtin_block)
         print(format_sexpr(ast.sexpr(), max_width=get_terminal_width()))
-        sys.exit()
 
-    def print_intermediate_code(self, ast):
+    def print_intermediate_code(self, filename):
+        ast = compiler.parse_file(filename)
         program = compiler.Program(ast, self.target, '', self.options)
         for block in sorted(program.block_list, key=lambda block: block.tag_id):
             for method in sorted(block.methods, key=lambda method: method.symbol):
@@ -75,10 +81,22 @@ class OmeApp(object):
                 optimise.renumber_locals(code.instructions, code.num_args)
                 for ins in code.instructions:
                     print('    ' + str(ins))
-        sys.exit()
 
-    def print_target_code(self, code):
+    def print_target_code(self, filename):
+        code = compiler.compile_file(filename, self.target, self.options)
         print(code.decode(self.target.encoding))
+
+    def print_command(self, filename):
+        if self.args.print_ast:
+            self.print_ast(filename)
+        elif self.args.print_resolved_ast:
+            self.print_resolved_ast(filename)
+        elif self.args.print_intermediate_code:
+            self.print_intermediate_code(filename)
+        elif self.args.print_target_code:
+            self.print_target_code(filename)
+        else:
+            return
         sys.exit()
 
     def build_packages(self):
@@ -93,50 +111,31 @@ class OmeApp(object):
         return libraries
 
     def main(self):
-        start_time = time.time()
+        start = time.time()
         stderr.reset()
 
         if self.args.version:
             self.print_version()
 
         self.check_args()
+        self.print_command(self.args.infile)
 
         self.print_verbose('using target {}'.format(self.target.name))
         self.print_verbose('using backend {} {}'.format(self.backend.name, self.backend.version))
 
         self.build_packages()
 
-        filename = self.args.file[0]
-        outfile = self.args.output or self.backend.output_name(filename, self.options)
-        if filename == outfile:
-            raise OmeError('input file name is same as output')
+        self.print_verbose('compiling {}'.format(self.args.infile))
+        compile_start = time.time()
+        input = compiler.compile_file(self.args.infile, self.target, self.options)
+        self.print_verbose('frontend compilation completed in %.2fs' % (time.time() - compile_start))
 
-        self.print_verbose('compiling {}'.format(filename))
+        self.print_verbose('building output', self.args.output)
+        build_start = time.time()
+        self.backend.build_string(self.shell, input, self.args.output, self.options)
+        self.print_verbose('backend build completed in %.2fs' % (time.time() - build_start))
 
-        compile_start_time = time.time()
-        ast = compiler.parse_file(filename)
-
-        if self.args.print_ast:
-            self.print_ast(ast)
-
-        if self.args.print_resolved_ast:
-            self.print_resolved_ast(ast)
-
-        if self.args.print_intermediate_code:
-            self.print_intermediate_code(ast)
-
-        input = compiler.compile_ast(ast, self.target, filename, self.options)
-        self.print_verbose('frontend compilation completed in %.2fs' % (time.time() - compile_start_time))
-
-        if self.args.print_target_code:
-            self.print_target_code(input)
-
-        self.print_verbose('building output', outfile)
-        build_start_time = time.time()
-        self.backend.build_string(self.shell, input, outfile, self.options)
-        self.print_verbose('backend build completed in %.2fs' % (time.time() - build_start_time))
-
-        self.print_verbose('completed in %.2fs' % (time.time() - start_time))
+        self.print_verbose('completed in %.2fs' % (time.time() - start))
 
 def main():
     try:
