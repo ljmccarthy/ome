@@ -11,7 +11,7 @@ from . import build
 from . import compiler
 from . import optimise
 from .build_shell import BuildShell
-from .command import command_args
+from .command import argparser
 from .error import OmeError
 from .ome_ast import BuiltInBlock, format_sexpr
 from .package import SourcePackageBuilder
@@ -128,7 +128,7 @@ class OmeApp(object):
 
 def main():
     try:
-        app = OmeApp(command_args)
+        app = OmeApp(argparser.parse_args())
         app.main()
     except OmeError as error:
         error.write_ansi(stderr)
