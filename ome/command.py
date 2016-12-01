@@ -34,12 +34,3 @@ argparser.add_argument('--no-source-traceback', action='store_true')
 argparser.add_argument('--output', '-o', action='store', default=None)
 
 command_args = argparser.parse_args()
-
-if command_args.verbose:
-    def print_verbose(*args):
-        print('ome:', *args)
-else:
-    def print_verbose(*args):
-        pass
-
-command_args.print_verbose = print_verbose
