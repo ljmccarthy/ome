@@ -84,8 +84,6 @@ struct OME_Heap {
     size_t mark_size;
     OME_Tag pointer_tag;
     uint32_t mark_list;
-    const char *static_start;
-    const char *static_end;
     clock_t latency;
 #ifdef OME_GC_STATS
     size_t num_collections;

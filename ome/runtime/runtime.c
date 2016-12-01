@@ -61,15 +61,6 @@ static void OME_memory_free(void *addr, size_t size)
 #endif
 }
 
-static const char *OME_get_static_end(void)
-{
-#ifdef OME_PLATFORM_LINUX
-    return sbrk(0);
-#else
-    return 0;
-#endif
-}
-
 #define OME_MIN_HEAP_SIZE 0x1000
 #define OME_MAX_HEAP_SIZE ((1L << 32) * 16)
 
@@ -292,7 +283,7 @@ static void OME_mark_object(OME_Heap *heap, void *body, size_t scan_offset, size
                     //printf("marked %p %d\n", header, heap->mark_list);
                 }
             }
-            else if (body < heap->static_start || body > heap->static_end) {
+            else {
                 OME_Big_Object *big = OME_find_big_object(heap, body);
                 if (big && !big->mark) {
                     //printf("marked big object %p\n", big->body);
@@ -313,8 +304,6 @@ static int OME_mark(OME_Heap *heap, uint64_t deadline)
 
     heap->mark_size = 0;
     heap->mark_list = OME_MARK_LIST_NULL;
-    heap->static_start = 0;
-    heap->static_end = OME_get_static_end();
     memset(heap->bitmap, 0, heap->bitmap_size * sizeof(unsigned long));
     OME_sort_big_objects(heap);
 
