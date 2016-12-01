@@ -177,19 +177,19 @@ class Block(ASTNode):
             if var.mutable:
                 self.methods.append(Method(setter, [var.name], var.self_ref.setter(Send(None, var.name, []))))
 
-        # Generate string method
-        if 'string' not in self.symbols:
+        # Generate show method
+        if 'show' not in self.symbols:
             if not slots:
-                self.methods.append(Method('string', [], String('{}')))
+                self.methods.append(Method('show', [], String('{}')))
             else:
                 concat_args = []
                 concat_args.append(String('{' + slots[0].name + '='))
-                concat_args.append(Send(None, slots[0].name, []))
+                concat_args.append(Send(Send(None, slots[0].name, []), 'show', []))
                 for var in slots[1:]:
                     concat_args.append(String('; ' + var.name + '='))
-                    concat_args.append(Send(None, var.name, []))
+                    concat_args.append(Send(Send(None, var.name, []), 'show', []))
                 concat_args.append(String('}'))
-                self.methods.append(Method('string', [], Concat(concat_args)))
+                self.methods.append(Method('show', [], Concat(concat_args)))
 
     def sexpr(self):
         methods = tuple(method.sexpr() for method in self.methods)

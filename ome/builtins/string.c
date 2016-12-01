@@ -10,6 +10,60 @@
     return self;
 }
 
+#method String show
+{
+    OME_String *string = OME_untag_string(self);
+    size_t size = 2;
+    for (size_t i = 0; i < string->size; i++) {
+        int c = string->data[i];
+        if ((7 <= c && c <= 13) || c == 27 || c == '\'' || c == '$' || c == '\\') {
+            size += 2;
+        }
+        else if (c < 32 || c == 127) {
+            size += 4;
+        }
+        else {
+            size++;
+        }
+    }
+
+    OME_LOCALS(1);
+    OME_SAVE_LOCAL(0, self);
+    OME_String *show_string = OME_allocate_string(size);
+    OME_LOAD_LOCAL(0, self);
+    string = OME_untag_string(self);
+
+    char *out = show_string->data;
+    *out++ = '\'';
+    for (size_t i = 0; i < string->size; i++) {
+        int c = string->data[i];
+        if (7 <= c && c <= 13) {
+            *out++ = '\\';
+            *out++ = "abtnvfr"[c - 7];
+        }
+        else if (c == 27) {
+            *out++ = '\\';
+            *out++ = 'e';
+        }
+        else if (c == '\'' || c == '$' || c == '\\') {
+            *out++ = '\\';
+            *out++ = c;
+        }
+        else if (c < 32 || c == 127) {
+            *out++ = '\\';
+            *out++ = 'x';
+            *out++ = "0123456789abcdef"[(c >> 4) & 0xF];
+            *out++ = "0123456789abcdef"[c & 0xF];
+        }
+        else {
+            *out++ = c;
+        }
+    }
+    *out++ = '\'';
+
+    OME_RETURN(OME_tag_pointer(OME_Tag_String, show_string));
+}
+
 #method String + rhs
 {
     if (OME_get_tag(rhs) != OME_Tag_String) {

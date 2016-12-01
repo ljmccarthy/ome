@@ -13,6 +13,11 @@
 
 #default string
 {
+    OME_Method_0 show_method = @lookup("show")(self);
+    if (show_method) {
+        return show_method(self);
+    }
+
     char buf[64];
     int size = snprintf(buf, sizeof(buf), "#<%lu:%lX>",
         (uintptr_t) OME_get_tag(self), (uintptr_t) OME_untag_unsigned(self));

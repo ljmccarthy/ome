@@ -3,7 +3,7 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 */
 
-#method Small-Integer string
+#method Small-Integer show
 {
     char buf[64];
     int size = snprintf(buf, sizeof(buf), "%" PRIdPTR, OME_untag_signed(self));

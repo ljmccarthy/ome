@@ -38,7 +38,7 @@ def get_builtin():
             parser = CPreParser(source, filename)
             parser.parse(builtin)
     for name in builtin.constant_names:
-        builtin.methods.append(BuiltInMethod(name, 'string', ['_0'], [], constant_string_method.format(name=name)))
+        builtin.methods.append(BuiltInMethod(name, 'show', ['_0'], [], constant_string_method.format(name=name)))
     return builtin
 
 if __name__ == '__main__':

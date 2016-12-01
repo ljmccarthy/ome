@@ -3,7 +3,7 @@
     Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 */
 
-#method Array string
+#method Array show
 {
     OME_STATIC_STRING(empty, "[]");
 
@@ -23,7 +23,7 @@
 
     size_t size = 2 + 2 * (array_size - 1);
     for (size_t i = 0; i < array_size; i++) {
-        OME_Value s = @message("string")(array->elems[i]);
+        OME_Value s = @message("show")(array->elems[i]);
         OME_RETURN_ERROR(s);
         if (OME_get_tag(s) != OME_Tag_String) {
             OME_RETURN(OME_error(OME_Type_Error));

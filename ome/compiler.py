@@ -118,6 +118,10 @@ class Program(object):
             if method.sent_messages and method.symbol in self.sent_messages:
                 self.sent_messages.update(method.sent_messages)
 
+        for symbol in list(self.sent_messages):
+            if symbol in self.builtin.defaults:
+                self.sent_messages.update(self.builtin.defaults[symbol].sent_messages)
+
         for method in self.builtin.methods:
             if method.tag_name not in self.ids.tags:
                 raise OmeError("Unknown tag name '{}' in built-in method '{}'".format(method.tag_name, method.symbol))
