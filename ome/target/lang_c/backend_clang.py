@@ -52,5 +52,5 @@ class ClangBuilder(CCBuilder):
     default_command = 'clang'
     supported_platforms = frozenset(['linux', 'darwin'])
     version_args = ['--version']
-    version_re = '(clang|Apple LLVM) version (\d+\.\d+\.\d+)'
+    version_re = '(?:clang|Apple LLVM) version (\d+\.\d+\.\d+)'
     get_build_args = ClangArgsBuilder()
