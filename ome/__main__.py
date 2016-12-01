@@ -108,6 +108,9 @@ class OmeApp(object):
 
         filename = self.args.file[0]
         outfile = self.args.output or self.backend.output_name(filename, self.options)
+        if filename == outfile:
+            raise OmeError('input file name is same as output')
+
         self.print_verbose('compiling {}'.format(filename))
 
         compile_start_time = time.time()
