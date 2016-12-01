@@ -6,7 +6,6 @@ import platform
 import re
 import stat
 import subprocess
-from .build_shell import BuildShell
 from .error import OmeError
 from .ome_types import CompileOptions
 from .target import target_map
@@ -92,20 +91,17 @@ platform_defines = {
 class BuildOptions(CompileOptions):
     def __init__(self, platform=platform.system(), variant='release',
                   link=False, static=False, use_musl=False, musl_path=None,
-                  verbose=False, verbose_backend=False, show_build_commands=False,
+                  verbose=False, verbose_backend=False,
                   include_dirs=(), library_dirs=(), libraries=(), objects=(),
                   defines=()):
         self.platform = platform.lower()
         self.variant = variant
-        self.debug = variant == 'debug'
-        self.release = variant == 'release'
         self.link = link
         self.static = static
         self.use_musl = use_musl
         self.musl_path = musl_path
         self.verbose = verbose
         self.verbose_backend = verbose_backend
-        self.shell = BuildShell(show_build_commands)
         self.include_dirs = list(include_dirs)
         self.library_dirs = list(library_dirs)
         self.libraries = list(libraries)
@@ -113,6 +109,14 @@ class BuildOptions(CompileOptions):
         self.defines = list(defines)
         if not self.debug:
             self.defines.append(('NDEBUG', ''))
+
+    @property
+    def debug(self):
+        return self.variant == 'debug'
+
+    @property
+    def release(self):
+        return self.variant == 'release'
 
     def set_ome_defines(self, debug_gc=False, gc_stats=False, traceback=True, source_traceback=True):
         self.traceback = traceback
