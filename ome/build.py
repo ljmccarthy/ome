@@ -84,8 +84,15 @@ def get_backend(target, platform, backend_name=None, backend_command=None):
         return backend
 
 platform_defines = {
-    'linux':  [('OME_PLATFORM_POSIX', ''), ('_GNU_SOURCE', '')],
-    'darwin': [('OME_PLATFORM_POSIX', '')],
+    'linux':  [
+        ('OME_PLATFORM_POSIX', ''),
+        ('_GNU_SOURCE', ''),
+        ('_LARGEFILE_SOURCE', ''),
+        ('_FILE_OFFSET_BITS', '64'),
+    ],
+    'darwin': [
+        ('OME_PLATFORM_POSIX', '')
+    ],
 }
 
 class BuildOptions(CompileOptions):
@@ -107,7 +114,10 @@ class BuildOptions(CompileOptions):
         self.libraries = list(libraries)
         self.objects = list(objects)
         self.defines = list(defines)
-        if not self.debug:
+        if self.debug:
+            self.defines.append(('DEBUG', ''))
+            self.defines.append(('_DEBUG', ''))
+        else:
             self.defines.append(('NDEBUG', ''))
 
     @property
