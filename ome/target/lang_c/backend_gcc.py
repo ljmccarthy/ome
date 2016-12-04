@@ -12,7 +12,14 @@ class GCCArgsBuilder(CCArgsBuilder):
         '-Wall',
         '-Wextra',
         '-Wno-unused',
+        '-Wstrict-aliasing',
+        '-fstrict-aliasing',
+        '-fno-asynchronous-unwind-tables',
         '-fPIC',
+        '-pthread',
+    ]
+    link_args = [
+        '-pthread',
     ]
     variant_cc_args = {
         'release': ['-O3', '-fomit-frame-pointer'],

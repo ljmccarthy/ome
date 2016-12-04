@@ -13,10 +13,15 @@ class ClangArgsBuilder(CCArgsBuilder):
         '-Wextra',
         '-Wno-unused',
         '-Wno-unused-parameter',
+        '-Wstrict-aliasing',
+        '-fstrict-aliasing',
+        '-fno-asynchronous-unwind-tables',
         '-fPIC',
+        '-pthread',
         '-Qunused-arguments',
     ]
     link_args = [
+        '-pthread',
         '-Qunused-arguments',
     ]
     variant_cc_args = {
