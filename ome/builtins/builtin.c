@@ -26,6 +26,19 @@
     return OME_tag_pointer(OME_Tag_String, string);
 }
 
+#default equals: rhs
+{
+    return OME_boolean(OME_equal(self, rhs));
+}
+
+#default compare: rhs
+{
+    if (OME_equal(self, rhs)) {
+        return OME_Equal;
+    }
+    return OME_error(OME_Type_Error);
+}
+
 #message == rhs
 {
     if (OME_equal(self, rhs)) {
