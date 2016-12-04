@@ -99,26 +99,6 @@ class ProcedureCodegen(object):
             self.emit_return('_{}'.format(error))
         self.emit('}')
 
-    def BEGIN_COMPARE(self, ins):
-        self.emit('if (OME_equal(_0, _1)) {')
-        with self.emit.indented():
-            self.emit_return('OME_Equal')
-        self.emit('}')
-        self.emit('if (OME_get_tag(_1) != {}) {{'.format(ins.tag))
-        with self.emit.indented():
-            self.emit_return('OME_error(OME_Type_Error)')
-        self.emit('}')
-
-    def BEGIN_EQUALS(self, ins):
-        self.emit('if (OME_equal(_0, _1)) {')
-        with self.emit.indented():
-            self.emit_return('OME_True')
-        self.emit('}')
-        self.emit('if (OME_get_tag(_1) != {}) {{'.format(ins.tag))
-        with self.emit.indented():
-            self.emit_return('OME_False')
-        self.emit('}')
-
     def LOAD_VALUE(self, ins):
         self.emit('const OME_Value _{} = OME_tag_unsigned({}, {});'.format(ins.dest, ins.tag, ins.value))
 
@@ -226,10 +206,6 @@ class DispatchCodegen(object):
             self.emit('if (OME_equal(_0, _1)) { return OME_True; }')
             self.emit('if (_tag != OME_get_tag(_1) || _tag == OME_Tag_Constant) { return OME_False; }')
         elif self.symbol == 'compare:':
-            self.emit('if (_tag != OME_get_tag(_1) || _tag == OME_Tag_Constant) {')
-            with self.emit.indented():
-                self.emit('return OME_error(OME_Type_Error);')
-            self.emit('}')
             self.emit('if (OME_equal(_0, _1)) { return OME_Equal; }')
         if any_constant_tags:
             self.emit('if (_tag == OME_Tag_Constant) { _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }')

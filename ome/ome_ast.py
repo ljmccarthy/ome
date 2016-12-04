@@ -346,10 +346,6 @@ class Method(ASTNode):
 
     def generate_code(self, program):
         code = MethodCodeBuilder(len(self.args), len(self.locals) - len(self.args), program)
-        if self.symbol == 'compare:':
-            code.add_instruction(BEGIN_COMPARE(self.find_block().tag_id))
-        elif self.symbol == 'equals:':
-            code.add_instruction(BEGIN_EQUALS(self.find_block().tag_id))
         code.add_instruction(RETURN(self.expr.generate_code(code)))
         return code.get_code()
 

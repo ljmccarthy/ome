@@ -19,6 +19,9 @@
 
 #method Small-Integer compare: rhs
 {
+    if (OME_get_tag(rhs) != OME_Tag_Small_Integer) {
+        return OME_error(OME_Type_Error);
+    }
     intptr_t l = OME_untag_signed(self);
     intptr_t r = OME_untag_signed(rhs);
     return l < r ? OME_Less : (l > r ? OME_Greater : OME_Equal);
