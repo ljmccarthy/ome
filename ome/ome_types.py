@@ -8,8 +8,8 @@ class BuiltIn(object):
         self.messages = []
         self.defaults = {}
         self.constant_names = ['False', 'True', 'Less', 'Equal', 'Greater', 'Empty', 'BuiltIn']
-        self.opaque_names = ['Constant', 'Small-Integer', 'Small-Decimal']
-        self.pointer_names = ['String', 'Array']
+        self.opaque_names = ['Constant', 'Small-Integer']
+        self.pointer_names = ['String', 'Array', 'Large-Integer']
 
 class BuiltInMethod(object):
     def __init__(self, tag_name, symbol, arg_names, sent_messages, code):

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <time.h>
+#include <tommath.h>
 
 typedef uint32_t OME_Tag;
 typedef union OME_Value OME_Value;
@@ -15,6 +16,7 @@ typedef struct OME_Globals OME_Globals;
 typedef struct OME_String OME_String;
 typedef struct OME_Array OME_Array;
 typedef struct OME_Buffer OME_Buffer;
+typedef struct OME_Large_Integer OME_Large_Integer;
 
 union OME_Value {
     uintptr_t _bits;
@@ -129,6 +131,11 @@ struct OME_Buffer {
     uint32_t size;
     uint32_t allocated;
     OME_Value elems;
+};
+
+struct OME_Large_Integer {
+    int size, sign;
+    mp_digit digits[];
 };
 
 static OME_Value OME_tag_unsigned(OME_Tag tag, uintptr_t udata)

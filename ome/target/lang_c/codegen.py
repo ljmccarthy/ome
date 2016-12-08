@@ -25,8 +25,8 @@ def make_lookup_label(symbol):
 def make_method_label(tag, symbol):
     return 'OME_method_{}_{}'.format(tag, symbol_to_label(symbol))
 
-def literal_integer(value):
-    return '{}{}'.format(value, '' if -0x80000000 <= value <= 0x7fffffff else 'L')
+def literal_integer(value, suffix=''):
+    return '{}{}{}'.format(value, suffix, '' if -0x80000000 <= value <= 0x7fffffff else 'L')
 
 def format_function_definition_with_arg_names(name, argnames):
     return 'static OME_Value {}({})'.format(name, ', '.join('OME_Value {}'.format(arg) for arg in argnames))
@@ -246,22 +246,43 @@ class LookupDispatchCodegen(DispatchCodegen):
 class DataTable(object):
     def __init__(self):
         self.strings = {}
+        self.large_integers = {}
 
     def allocate_string(self, string):
         if isinstance(string, str):
             string = string.encode('utf8')
-
         if string in self.strings:
             index = self.strings[string]
         else:
             index = len(self.strings)
             self.strings[string] = index
-
         return '&OME_static_string_{}'.format(index)
+
+    def allocate_large_integer(self, value):
+        if value in self.large_integers:
+            index = self.large_integers[value]
+        else:
+            index = len(self.large_integers)
+            self.large_integers[value] = index
+        return '&OME_static_large_integer_{}'.format(index)
 
     def emit(self, out):
         for string, index in sorted(self.strings.items(), key=lambda x: x[1]):
             out.write('OME_STATIC_STRING(OME_static_string_{}, {});\n'.format(index, literal_c_string(string)))
+
+        mp_digit_mod = 1<<60
+        for value, index in sorted(self.large_integers.items(), key=lambda x: x[1]):
+            sign = 'MP_ZPOS' if value >= 0 else 'MP_NEG'
+            value = abs(value)
+            digits = []
+            while True:
+                digits.append(value % mp_digit_mod)
+                value = value // mp_digit_mod
+                if value == 0:
+                    break
+            out.write('static const OME_Large_Integer OME_static_large_integer_{} OME_ALIGNED = {{{}, {}, {{{}}}}};\n'.format(
+                index, len(digits), sign,
+                ', '.join(literal_integer(d, 'U') for d in digits)))
 
 def emit_traceback_table(out, traceback_entries, include_source=True):
     out.write('static const OME_Traceback_Entry OME_traceback_table[] = {\n')

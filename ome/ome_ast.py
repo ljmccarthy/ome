@@ -568,23 +568,17 @@ class Number(TerminalNode):
     def sexpr(self):
         return str(self.significand) + ('e%s' % self.exponent if self.exponent else '')
 
-    def encode_value(self, code):
+    def generate_code(self, code):
+        dest = code.add_temp()
         if self.exponent >= 0:
             value = self.significand * 10**self.exponent
             if MIN_SMALL_INTEGER <= value <= MAX_SMALL_INTEGER:
-                return (code.get_tag('Small-Integer'), value & MASK_DATA)
-
-        if not (MIN_EXPONENT <= self.exponent <= MAX_EXPONENT
-        and MIN_SIGNIFICAND <= self.significand <= MAX_SIGNIFICAND):
-            self.parse_state.error('number out of range')
-
-        value = ((self.significand & MASK_SIGNIFICAND) << NUM_EXPONENT_BITS) | (self.exponent & MASK_EXPONENT)
-        return (code.get_tag('Small-Decimal'), value)
-
-    def generate_code(self, code):
-        tag, value = self.encode_value(code)
-        dest = code.add_temp()
-        code.add_instruction(LOAD_VALUE(dest, tag, value))
+                code.add_instruction(LOAD_VALUE(dest, code.get_tag('Small-Integer'), value & MASK_DATA))
+            else:
+                label = code.allocate_large_integer(value)
+                code.add_instruction(LOAD_LABEL(dest, code.get_tag('Large-Integer'), label))
+        else:
+            self.parse_state.error('decimals not supported yet')
         return dest
 
 class String(TerminalNode):

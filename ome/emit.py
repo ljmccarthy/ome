@@ -100,6 +100,9 @@ class MethodCodeBuilder(object):
     def allocate_string(self, string):
         return self.program.data_table.allocate_string(string)
 
+    def allocate_large_integer(self, string):
+        return self.program.data_table.allocate_large_integer(string)
+
     def get_tag(self, tag_name):
         return self.program.ids.tags[tag_name]
 
