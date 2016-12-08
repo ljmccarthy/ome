@@ -46,8 +46,8 @@ static OME_Value OME_integer_binop(OME_Value _a, OME_Value _b, int (*mp_binop)(m
 {
     static mp_digit small_min_digits[1] = {-OME_MIN_SMALL_INTEGER};
     static mp_digit small_max_digits[1] = {OME_MAX_SMALL_INTEGER};
-    static mp_int small_min = {1, 0, MP_NEG, small_min_digits};
-    static mp_int small_max = {1, 0, MP_ZPOS, small_max_digits};
+    static mp_int small_min = {1, 1, MP_NEG, small_min_digits};
+    static mp_int small_max = {1, 1, MP_ZPOS, small_max_digits};
 
     mp_int a, b, c;
     mp_digit a_digits[1], b_digits[1];
@@ -241,7 +241,7 @@ static int mp_remainder(mp_int *a, mp_int *b, mp_int *c)
             return OME_error(OME_Divide_By_Zero);
         }
         if (divisor < 0) divisor = -divisor;
-        intptr_t result = OME_untag_signed(self) % (divisor < 0 ? -divisor : divisor);
+        intptr_t result = OME_untag_signed(self) % divisor;
         if (result < 0) result += divisor;
         return OME_tag_integer(result);
     }
