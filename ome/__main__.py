@@ -9,6 +9,7 @@ import time
 from . import build
 from . import compiler
 from . import optimise
+from .build_options import get_build_options_from_command
 from .build_shell import BuildShell
 from .command import argparser
 from .error import OmeError
@@ -40,7 +41,7 @@ class OmeApp(object):
         self.target = build.get_target(args.target)
         self.backend = build.get_backend(self.target, args.platform, args.backend, get_backend_tool(args))
         self.prefix_dir = self.get_prefix_dir(self.backend.tools)
-        self.options = build.get_build_options_from_command(args)
+        self.options = get_build_options_from_command(args)
         self.options.include_dirs.append(os.path.join(self.prefix_dir, 'include'))
         self.options.library_dirs.append(os.path.join(self.prefix_dir, 'lib'))
         self.shell = BuildShell(args.show_build_commands)
