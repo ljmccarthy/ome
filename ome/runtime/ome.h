@@ -91,7 +91,6 @@ struct OME_Heap {
     size_t num_collections;
     clock_t mark_time;
     clock_t compact_time;
-    clock_t resize_time;
 #endif
 };
 

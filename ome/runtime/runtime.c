@@ -44,16 +44,6 @@ static void *OME_memory_allocate(size_t size)
 #endif
 }
 
-static void *OME_memory_reallocate(void *old_p, size_t old_size, size_t new_size)
-{
-#ifdef OME_PLATFORM_LINUX
-    void *p = mremap(old_p, old_size, new_size, MREMAP_MAYMOVE);
-    return p != MAP_FAILED ? p : NULL;
-#else
-    return NULL;
-#endif
-}
-
 static void OME_memory_free(void *addr, size_t size)
 {
 #ifdef OME_PLATFORM_POSIX
@@ -174,62 +164,18 @@ static int OME_is_marked(OME_Heap *heap, OME_Header *header)
     return (heap->bitmap[index / nbits] & (1UL << (index % nbits))) != 0;
 }
 
-static void OME_adjust_slots(OME_Heap *heap, OME_Value *start, OME_Value *end, ptrdiff_t diff)
-{
-    //printf("adjust slots from %p to %p\n", start, end);
-    for (OME_Value *slot = start; slot < end; slot++) {
-        OME_Tag tag = OME_get_tag(*slot);
-        char *body = OME_untag_pointer(*slot);
-        if (tag >= heap->pointer_tag && body >= heap->base && body < heap->limit) {
-            //printf("  changing field at %p from %p to %p\n", slot, body, body + diff);
-            *slot = OME_tag_pointer(tag, body + diff);
-        }
-    }
-}
-
-static void OME_move_heap(OME_Heap *heap, char *new_heap, size_t new_size)
-{
-    ptrdiff_t diff = new_heap - heap->base;
-    ptrdiff_t pointer_offset = heap->pointer - heap->base;
-    OME_Header *end = (OME_Header *) (new_heap + pointer_offset);
-
-    OME_GC_ASSERT(new_size > heap->size);
-
-    if (diff != 0) {
-        OME_GC_PRINT("moving heap from %p to %p (%ld)\n", heap->base, new_heap, diff);
-
-        OME_adjust_slots(heap, OME_context->stack_base, OME_context->stack_pointer, diff);
-
-        for (OME_Header *cur = (OME_Header *) new_heap; cur < end; cur += cur->size + 1) {
-            if (cur->scan_size > 0) {
-                OME_Value *slot = (OME_Value *) (cur + 1) + cur->scan_offset;
-                OME_adjust_slots(heap, slot, slot + cur->scan_size, diff);
-            }
-        }
-    }
-    OME_set_heap_base(heap, new_heap, new_size);
-    heap->pointer += pointer_offset;
-}
-
 static void OME_resize_heap(OME_Heap *heap, size_t new_size)
 {
-    OME_GC_TIMER_START();
     OME_GC_ASSERT(new_size > heap->size);
     OME_GC_ASSERT(new_size >= OME_MIN_HEAP_SIZE);
     OME_GC_ASSERT(new_size <= OME_MAX_HEAP_SIZE);
     OME_GC_PRINT("resizing heap: %lu KB\n", new_size / 1024);
 
-    char *new_heap = heap->base;
-    if (new_size > heap->reserved_size) {
-        new_heap = OME_memory_reallocate(heap->base, heap->size, new_size);
-        if (!new_heap) {
-            perror("OME_memory_reallocate");
-            exit(1);
-        }
+    if (new_size <= heap->reserved_size) {
+        ptrdiff_t pointer_offset = heap->pointer - heap->base;
+        OME_set_heap_base(heap, heap->base, new_size);
+        heap->pointer += pointer_offset;
     }
-    OME_move_heap(heap, new_heap, new_size);
-
-    OME_GC_TIMER_END(heap->resize_time);
 }
 
 static int OME_compare_big_object(const void *pa, const void *pb)
@@ -852,12 +798,11 @@ static int OME_thread_main(void)
 
 #ifdef OME_GC_STATS
     clock_t time = clock() - context->start_time;
-    clock_t gc_time = context->heap.mark_time + context->heap.compact_time + context->heap.resize_time;
+    clock_t gc_time = context->heap.mark_time + context->heap.compact_time;
     printf("collections:  %lu\n", context->heap.num_collections);
     printf("gc time:      %lu ms\n", gc_time * 1000 / CLOCKS_PER_SEC);
     printf("- marking:    %lu ms\n", context->heap.mark_time * 1000 / CLOCKS_PER_SEC);
     printf("- compacting: %lu ms\n", context->heap.compact_time * 1000 / CLOCKS_PER_SEC);
-    printf("- resizing:   %lu ms\n", context->heap.resize_time * 1000 / CLOCKS_PER_SEC);
     printf("mutator time: %lu ms\n", (time - gc_time) * 1000 / CLOCKS_PER_SEC);
     printf("total time:   %lu ms\n", time * 1000 / CLOCKS_PER_SEC);
     printf("gc overhead:  %lu%%\n", gc_time * 100 / time);
