@@ -186,15 +186,23 @@ class Program(object):
         self.target.emit_method_declarations(out, sorted(messages_set), sorted(methods_set))
         out.write('\n')
 
+    def emit_dispatcher(self, out, symbol, tags):
+        has_default_method = symbol in self.builtin.defaults
+        if has_default_method:
+            out.write(self.target.generate_default_method(self.builtin.defaults[symbol]))
+            out.write('\n')
+        out.write(generate_dispatcher(symbol, tags, has_default_method, self.target))
+        out.write('\n')
+        out.write(generate_lookup_dispatcher(symbol, tags, has_default_method, self.target))
+        out.write('\n')
+
     def emit_code_definitions(self, out):
         self.target.emit_builtin_code(out)
         out.write('\n')
-
         for s in self.builtin.code:
             out.write(s)
 
         dispatchers = set()
-
         for method in self.builtin.messages:
             if method.symbol in self.sent_messages:
                 out.write(method.generate_target_code(self.target.make_message_label(method.symbol), self.target))
@@ -207,11 +215,7 @@ class Program(object):
                 out.write('\n')
             if symbol in self.sent_messages:
                 tags = [tag for tag, code in methods]
-                default_method = self.builtin.defaults.get(symbol)
-                out.write(generate_dispatcher(symbol, tags, self.target, default_method))
-                out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, tags, self.target, default_method))
-                out.write('\n')
+                self.emit_dispatcher(out, symbol, tags)
                 dispatchers.add(symbol)
 
         optional_messages = frozenset(['return', 'catch', 'catch:'])
@@ -219,11 +223,7 @@ class Program(object):
             if symbol not in dispatchers:
                 if symbol not in optional_messages and symbol not in self.builtin.defaults:
                     self.warning("no methods defined for message '%s'" % symbol)
-                default_method = self.builtin.defaults.get(symbol)
-                out.write(generate_dispatcher(symbol, [], self.target, default_method))
-                out.write('\n')
-                out.write(generate_lookup_dispatcher(symbol, [], self.target, default_method))
-                out.write('\n')
+                self.emit_dispatcher(out, symbol, [])
 
     def emit_toplevel(self, out):
         code = self.toplevel_method.generate_code(self)

@@ -9,8 +9,6 @@ from .cstring import literal_c_string
 from .stackalloc import allocate_stack_slots
 
 encoding = 'ascii'
-comment_format = '// {}'
-define_label_format = '{}:'
 indent = '    '
 
 def make_message_label(symbol):
@@ -41,8 +39,8 @@ def format_dispatch_call(name, num_args):
     return '{}({})'.format(name, ', '.join('_{}'.format(n) for n in range(num_args)))
 
 class ProcedureCodegen(object):
-    def __init__(self, emitter):
-        self.emit = emitter
+    def __init__(self, emit):
+        self.emit = emit
 
     def optimise(self, code):
         code.instructions = optimise.eliminate_aliases(code.instructions)
@@ -171,28 +169,23 @@ class ProcedureCodegen(object):
         self.emit_return('_{}'.format(ins.source))
 
 class DispatchCodegen(object):
-    def __init__(self, emitter, symbol, default_method):
-        self.emit = emitter
+    def __init__(self, emit, symbol, has_default_method):
+        self.emit = emit
         self.symbol = symbol
         self.num_args = symbol_arity(symbol)
-        self.default_method = default_method
+        self.has_default_method = has_default_method
 
     def begin(self):
-        default_name = make_default_label(self.symbol)
-        if self.default_method:
-            self.emit(format_function_definition_with_arg_names(default_name, self.default_method.arg_names))
-            self.emit('{{{}}}\n'.format(self.default_method.code))
-
         self.emit(format_function_definition(make_message_label(self.symbol), self.num_args))
         self.emit('{')
         self.emit.indent()
 
     def end(self):
-        self.emit.label('not_understood')
+        self.emit.unindented('not_understood:')
         self.end_empty_dispatch()
 
     def end_empty_dispatch(self):
-        if self.default_method:
+        if self.has_default_method:
             default_name = make_default_label(self.symbol)
             self.emit('return {};'.format(format_dispatch_call(default_name, self.num_args)))
         else:
@@ -204,6 +197,12 @@ class DispatchCodegen(object):
         self.emit('OME_Tag _tag = OME_get_tag(_0);')
         if any_constant_tags:
             self.emit('if (_tag == OME_Tag_Constant) { _tag = OME_untag_unsigned(_0) + OME_MIN_CONSTANT_TAG; }')
+
+    def emit_label(self, label):
+        self.emit.unindented('{}:'.format(label))
+
+    def emit_comment(self, comment):
+        self.emit('/* {} */'.format(comment))
 
     def emit_compare_gte(self, tag, gte_label):
         self.emit('if (_tag >= {}) goto {};'.format(tag, gte_label))
@@ -224,7 +223,7 @@ class LookupDispatchCodegen(DispatchCodegen):
         self.emit.indent()
 
     def end_empty_dispatch(self):
-        if self.default_method:
+        if self.has_default_method:
             self.emit('return {};'.format(make_default_label(self.symbol)))
         else:
             self.emit('return NULL;')
@@ -325,3 +324,8 @@ def emit_method_declarations(out, messages, methods):
 
 def generate_builtin_method(label, argnames, code):
     return '{}\n{{{}}}\n'.format(format_function_definition_with_arg_names(label, argnames), code)
+
+def generate_default_method(default_method):
+    name = make_default_label(default_method.symbol)
+    definition = format_function_definition_with_arg_names(name, default_method.arg_names)
+    return '{}\n{{{}}}\n'.format(definition, default_method.code)
