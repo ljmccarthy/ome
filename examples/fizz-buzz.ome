@@ -1,7 +1,7 @@
 |fizz-buzz|
     for: {n := 1 |while| n ≤ 100 |do|
-        d3 = (n mod: 3) == 0
-        d5 = (n mod: 5) == 0
+        d3 = (n modulo: 3) == 0
+        d5 = (n modulo: 5) == 0
         d3 && print: 'Fizz'
         d5 && print: 'Buzz'
         d3 or: d5 || print: n
