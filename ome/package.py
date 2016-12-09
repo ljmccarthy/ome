@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from .build_shell import BuildShell
 from .download import download
 from .error import OmeError
-from .util import get_file_hash, temporary_dir, make_path
+from .util import get_file_hash, temporary_dir, make_path, remove
 
 class SourcePackage(object):
     def __init__(self, name, version, url, hash, build, output_files=[],

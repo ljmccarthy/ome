@@ -1,6 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import re
 import os
 from ...error import OmeError
 from .backend_cc import CCArgsBuilder, CCBuilder
@@ -38,8 +39,7 @@ class GCCArgsBuilder(CCArgsBuilder):
 
 class GCCBuilder(CCBuilder):
     name = 'gcc'
-    default_command = 'gcc'
     supported_platforms = frozenset(['linux'])
-    version_args = ['--version']
-    version_re = 'gcc \(GCC\) (\d+\.\d+\.\d+)'
+    default_tools = {'CC': 'gcc'}
+    version_re = re.compile(r'gcc \(GCC\) (\d+\.\d+\.\d+)')
     get_build_args = GCCArgsBuilder()

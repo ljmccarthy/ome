@@ -15,8 +15,22 @@ from .error import OmeError
 from .ome_ast import BuiltInBlock, format_sexpr
 from .package import SourcePackageBuilder
 from .terminal import stderr
-from .util import get_terminal_width, get_cache_dir
+from .util import get_terminal_width, get_cache_dir, find_executable
 from .version import version
+
+def get_backend_tool(args):
+    tools = {}
+    for tool in args.backend_tool:
+        if '=' not in tool:
+            raise OmeError('--backend-tool {} does not specify tool path'.format(tool))
+        name, command = tool.split('=', 1)
+        name = name.upper()
+        if not os.path.isabs(command):
+            command = find_executable(command)
+            if not command:
+                raise OmeError('executable not found: {}'.format(command))
+        tools[name] = command
+    return tools
 
 class OmeApp(object):
     def __init__(self, args):
@@ -24,17 +38,18 @@ class OmeApp(object):
         self.args = args
         self.package_dir = os.path.join(get_cache_dir('ome'), 'libs')
         self.target = build.get_target(args.target)
-        self.backend = build.get_backend(self.target, args.platform, args.backend, args.backend_command)
-        self.prefix_dir = self.get_prefix_dir(self.backend.command)
+        self.backend = build.get_backend(self.target, args.platform, args.backend, get_backend_tool(args))
+        self.prefix_dir = self.get_prefix_dir(self.backend.tools)
         self.options = build.get_build_options_from_command(args)
         self.options.include_dirs.append(os.path.join(self.prefix_dir, 'include'))
         self.options.library_dirs.append(os.path.join(self.prefix_dir, 'lib'))
         self.shell = BuildShell(args.show_build_commands)
         self.verbose = args.verbose
 
-    def get_prefix_dir(self, command):
+    def get_prefix_dir(self, tools):
+        s = '\0'.join('{}={}'.format(*tool) for tool in sorted(tools.items()))
         m = hashlib.md5()
-        m.update(command.encode('utf8'))
+        m.update(s.encode('utf8'))
         return os.path.join(self.package_dir, m.hexdigest())
 
     def print_verbose(self, *args):
@@ -46,8 +61,8 @@ class OmeApp(object):
         sys.exit()
 
     def check_args(self):
-        if self.args.backend_command and not self.args.backend:
-            raise OmeError('--backend must be specified with --backend-command')
+        if self.args.backend_tool and not self.args.backend:
+            raise OmeError('--backend must be specified when --backend-tool is used')
         if len(self.args.file) == 0:
             raise OmeError('no input files')
         if len(self.args.file) > 1:

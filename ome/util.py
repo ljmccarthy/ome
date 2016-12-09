@@ -1,6 +1,7 @@
 import hashlib
 import os
 import platform
+import stat
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -52,4 +53,26 @@ def get_cache_dir(appname):
     elif platform.system() == 'Windows':
         return os.path.join(os.environ['LOCALAPPDATA'], appname, 'cache')
     else:
-        return os.path.expanduser(os.path.join('~', '.cache', appname))
+        cache_dir = os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache'))
+        return os.path.join(cache_dir, appname)
+
+def is_executable(filename):
+    if platform.system() == 'Windows':
+        return os.path.isfile(filename)
+    try:
+        st = os.stat(filename)
+    except OSError:
+        return False
+    mode = st.st_mode
+    return stat.S_ISREG(mode) and ((mode & stat.S_IXOTH) or
+        (os.getuid() == st.st_uid and mode & stat.S_IXUSR) or
+        (os.getgid() == st.st_gid and mode & stat.S_IXGRP))
+
+executable_name_format = {'Windows': '{}.exe'}
+
+def find_executable(name):
+    name = executable_name_format.get(platform.system(), '{}').format(name)
+    for path in os.environ.get('PATH', '').split(os.path.pathsep):
+        filepath = os.path.realpath(os.path.join(path, name))
+        if is_executable(filepath):
+            return filepath

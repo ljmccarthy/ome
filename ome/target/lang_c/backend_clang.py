@@ -1,6 +1,7 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
+import re
 import os
 from ...error import OmeError
 from .backend_cc import CCArgsBuilder, CCBuilder
@@ -54,8 +55,7 @@ class ClangArgsBuilder(CCArgsBuilder):
 
 class ClangBuilder(CCBuilder):
     name = 'clang'
-    default_command = 'clang'
     supported_platforms = frozenset(['linux', 'darwin'])
-    version_args = ['--version']
-    version_re = '(?:clang|Apple LLVM) version (\d+\.\d+\.\d+)'
+    default_tools = {'CC': 'clang'}
+    version_re = re.compile(r'(?:clang|Apple LLVM) version (\d+\.\d+\.\d+)')
     get_build_args = ClangArgsBuilder()

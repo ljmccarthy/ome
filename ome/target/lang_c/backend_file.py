@@ -5,10 +5,9 @@ import os
 
 class FileBuilder(object):
     name = 'file'
-    default_command = ''
     version = ''
 
-    def __init__(self, command):
+    def __init__(self, tools):
         pass
 
     def output_name(self, infile, build_options):

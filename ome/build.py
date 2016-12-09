@@ -1,36 +1,11 @@
 # ome - Object Message Expressions
 # Copyright (c) 2015-2016 Luke McCarthy <luke@iogopro.co.uk>
 
-import os
 import platform
-import re
-import stat
 import subprocess
 from .error import OmeError
 from .ome_types import CompileOptions
 from .target import target_map
-
-def is_executable(filename):
-    if platform.system() == 'Windows':
-        return os.path.isfile(filename)
-    try:
-        st = os.stat(filename)
-    except OSError:
-        return False
-    mode = st.st_mode
-    return stat.S_ISREG(mode) and ((mode & stat.S_IXOTH) or
-        (os.getuid() == st.st_uid and mode & stat.S_IXUSR) or
-        (os.getgid() == st.st_gid and mode & stat.S_IXGRP))
-
-executable_name_format = {'Windows': '{}.exe'}
-
-def find_executable(name):
-    name = executable_name_format.get(platform.system(), '{}').format(name)
-    for path in os.environ.get('PATH', '').split(os.path.pathsep):
-        filepath = os.path.realpath(os.path.join(path, name))
-        if is_executable(filepath):
-            return filepath
-    raise OmeError('executable not found: {}'.format(name))
 
 def get_target(target_name):
     target_name = target_name.lower()
@@ -39,14 +14,15 @@ def get_target(target_name):
     return target_map[target_name]
 
 def get_backend_version(backend):
-    if not hasattr(backend, 'version') and hasattr(backend, 'command'):
+    if not hasattr(backend, 'version') and hasattr(backend, 'version_args'):
         reason = 'could not get version number'
-        args = [backend.command] + backend.version_args
+        args = list(backend.version_args)
+        args[0] = backend.tools[args[0]]
         try:
             process = subprocess.Popen(args, stdout=subprocess.PIPE)
             outs, errs = process.communicate()
             if process.returncode == 0:
-                m = re.match(backend.version_re, outs.decode('ascii'))
+                m = backend.version_re.match(outs.decode('ascii'))
                 if m:
                     backend.version = m.group(1)
                     return
@@ -56,16 +32,14 @@ def get_backend_version(backend):
             pass
         raise OmeError("backend '{}' is not available: {}".format(backend.name, reason))
 
-def _get_backend(target, backend_name, backend_command=None):
-    backend = target.backends[backend_name]
-    command = find_executable(backend_command or backend.default_command)
-    return backend(command)
+def _get_backend(target, backend_name, backend_tools):
+    return target.backends[backend_name](backend_tools)
 
-def get_backend(target, platform, backend_name=None, backend_command=None):
+def get_backend(target, platform, backend_name=None, backend_tools={}):
     platform = platform.lower()
     if backend_name is None:
         for backend_name in target.backend_preference:
-            backend = _get_backend(target, backend_name, backend_command)
+            backend = _get_backend(target, backend_name, backend_tools)
             if not hasattr(backend, 'supported_platforms') or platform in backend.supported_platforms:
                 try:
                     get_backend_version(backend)
@@ -77,7 +51,7 @@ def get_backend(target, platform, backend_name=None, backend_command=None):
         backend_name = backend_name.lower()
         if backend_name not in target.backends:
             raise OmeError("unknown backend '{}' for target '{}'".format(backend_name, target.name))
-        backend = _get_backend(target, backend_name, backend_command)
+        backend = _get_backend(target, backend_name, backend_tools)
         if hasattr(backend, 'supported_platforms') and platform not in backend.supported_platforms:
             raise OmeError("backend '{}' does not support platform '{}'".format(backend.name, platform))
         get_backend_version(backend)
