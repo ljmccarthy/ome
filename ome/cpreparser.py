@@ -8,7 +8,7 @@ from .parser import re_name, re_keyword, re_operator
 from .target.lang_c.codegen import make_message_label, make_lookup_label
 
 re_name_or_operator = re.compile(re_name.pattern + '|' + re_operator.pattern)
-re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n))+')
+re_empty_lines = re.compile(r'(?:[ \t]*(?:\r\n|\r|\n)){2,}')
 re_comments = re.compile(r'/\*(?:[^*]*(?:\*[^/][^*]*)*)\*/|//[^\r\n]*(?=\r\n|\r|\n|$)')
 re_command = re.compile(r'^\s*#\s*(constant|opaque|pointer|method|message|default)', re.M)
 re_space_to_eol = re.compile(r'\s*$', re.M)
@@ -19,7 +19,7 @@ re_method_ref = re.compile(r'@(message|lookup)')
 
 def remove_empty_lines_and_comments(s):
     s = re_comments.sub('', s)
-    return re_empty_lines.sub('\n', s).strip()
+    return re_empty_lines.sub('\n\n', s).strip()
 
 class CMethodRefParser(BaseParser):
     make_label = {'message': make_message_label, 'lookup': make_lookup_label}
@@ -131,6 +131,6 @@ class CPreParser(BaseParser):
         unparsed.append(self.trailing())
         code = remove_empty_lines_and_comments(''.join(unparsed))
         if code:
-            builtin.code.append('// begin included from {}\n'.format(self.stream_name))
+            builtin.code.append('/* begin included from {} */\n'.format(self.stream_name))
             builtin.code.append(code)
-            builtin.code.append('\n// end included from {}\n\n'.format(self.stream_name))
+            builtin.code.append('\n/* end included from {} */\n\n'.format(self.stream_name))
