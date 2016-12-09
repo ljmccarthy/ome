@@ -101,7 +101,6 @@ struct OME_Context {
         OME_Value *stack_limit;
         uint32_t *traceback;
     };
-    OME_Value *stack_base;
     union {
         OME_Value *stack_end;
         uint32_t *traceback_end;
@@ -109,6 +108,7 @@ struct OME_Context {
     OME_Value *callback_stack;
     OME_Heap heap;
     clock_t start_time;
+    OME_Value stack_base[];
 };
 
 struct OME_Globals {
@@ -258,7 +258,9 @@ static OME_Value OME_set_slot(OME_Value slots, unsigned int index, OME_Value val
     return OME_untag_slots(slots)[index] = value;
 }
 
-#define OME_ALIGNED __attribute__((aligned(OME_HEAP_ALIGNMENT)))
+#define OME_ALIGN(n) __attribute__((aligned(n)))
+
+#define OME_ALIGNED OME_ALIGN(OME_HEAP_ALIGNMENT)
 
 #define OME_ENTER_OR_RETURN(stack_size, retval)\
     OME_Value * const _OME_local_stack = OME_context->stack_pointer;\

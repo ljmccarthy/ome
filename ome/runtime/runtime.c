@@ -108,13 +108,17 @@ static void OME_set_heap_base(OME_Heap *heap, char *heap_base, size_t size)
     OME_GC_PRINT("bitmap size: %lu bytes (%lu bits)\n", bitmap_size * 8, bitmap_size * nbits);
 }
 
-static void OME_initialize_heap(OME_Heap *heap, OME_Tag pointer_tag)
+static OME_Context *OME_context_new(size_t stack_size, OME_Tag pointer_tag)
 {
-    heap->pointer_tag = pointer_tag;
-    heap->latency = 50L * OME_globals.cycles_per_ms;
+    size_t context_size = sizeof(OME_Context) + stack_size * sizeof(OME_Value);
+    OME_Context *context = malloc(context_size);
+    if (!context) {
+        return NULL;
+    }
 
-    size_t reserved_size = OME_MAX_HEAP_SIZE;
     char *heap_base = NULL;
+    size_t reserved_size = OME_MAX_HEAP_SIZE;
+
     while (1) {
         heap_base = OME_memory_allocate(reserved_size);
         if (heap_base) {
@@ -122,25 +126,34 @@ static void OME_initialize_heap(OME_Heap *heap, OME_Tag pointer_tag)
         }
         reserved_size /= 2;
         if (reserved_size < OME_MIN_HEAP_SIZE) {
-            fprintf(stderr, "ome: failed to allocate heap memory, aborting");
-            exit(1);
+            free(context);
+            return NULL;
         }
     }
 
-    OME_set_heap_base(heap, heap_base, 0x8000);
-    heap->reserved_size = reserved_size;
+    memset(context, 0, context_size);
+    context->start_time = clock();
+    context->stack_pointer = context->stack_base;
+    context->stack_limit = context->stack_base + stack_size;
+    context->stack_end = context->stack_base + stack_size;
+    context->heap.reserved_size = reserved_size;
+    context->heap.pointer_tag = pointer_tag;
+    context->heap.latency = 50L * OME_globals.cycles_per_ms;
+    OME_set_heap_base(&context->heap, heap_base, 0x10000);
 
     OME_GC_PRINT("heap reserved size: %lu MB\n", reserved_size / (1024*1024));
     OME_GC_PRINT("cycles per ms: %lu\n", OME_globals.cycles_per_ms);
+    return context;
 }
 
-static void OME_delete_heap(OME_Heap *heap)
+static void OME_context_delete(OME_Context *context)
 {
+    OME_Heap *heap = &context->heap;
     for (OME_Big_Object *big = heap->big_objects; big < heap->big_objects_end; big++) {
         OME_memory_free(big->body, big->size);
     }
-    OME_memory_free(heap->base, heap->size);
-    memset(heap, 0, sizeof(*heap));
+    OME_memory_free(heap->base, heap->reserved_size);
+    memset(context, 0, sizeof(OME_Context) + (context->stack_end - context->stack_base) * sizeof(OME_Value));
 }
 
 static void OME_mark_bitmap(OME_Heap *heap, OME_Header *header)
@@ -820,27 +833,17 @@ static void OME_initialize(int argc, const char *const *argv)
     OME_globals.cycles_per_ms = OME_estimate_cycles_per_ms();
 }
 
-static void OME_initialize_context(OME_Context *context, OME_Value *stack, size_t stack_size, OME_Tag pointer_tag)
-{
-    memset(stack, 0, sizeof(stack[0]) * stack_size);
-    memset(context, 0, sizeof(*context));
-    context->stack_pointer = stack;
-    context->stack_limit = stack + stack_size;
-    context->stack_base = stack;
-    context->stack_end = stack + stack_size;
-    context->start_time = clock();
-    OME_initialize_heap(&context->heap, pointer_tag);
-}
-
-#define OME_STACK_SIZE 256
-
 static int OME_thread_main(void)
 {
-    OME_Value stack[OME_STACK_SIZE];
-    OME_Context context;
+    const size_t stack_size = (0x1000 - sizeof(OME_Context)) / sizeof(OME_Value);
 
-    OME_initialize_context(&context, stack, OME_STACK_SIZE, OME_Pointer_Tag);
-    OME_context = &context;
+    OME_Context *context = OME_context_new(stack_size, OME_Pointer_Tag);
+    if (!context) {
+        fprintf(stderr, "ome: failed to allocate heap memory, aborting");
+        exit(1);
+    }
+
+    OME_context = context;
 
     OME_Value value = OME_message_main__0(OME_toplevel(OME_False));
     if (OME_is_error(value)) {
@@ -848,19 +851,20 @@ static int OME_thread_main(void)
     }
 
 #ifdef OME_GC_STATS
-    clock_t time = clock() - context.start_time;
-    clock_t gc_time = context.heap.mark_time + context.heap.compact_time + context.heap.resize_time;
-    printf("collections:  %lu\n", context.heap.num_collections);
+    clock_t time = clock() - context->start_time;
+    clock_t gc_time = context->heap.mark_time + context->heap.compact_time + context->heap.resize_time;
+    printf("collections:  %lu\n", context->heap.num_collections);
     printf("gc time:      %lu ms\n", gc_time * 1000 / CLOCKS_PER_SEC);
-    printf("- marking:    %lu ms\n", context.heap.mark_time * 1000 / CLOCKS_PER_SEC);
-    printf("- compacting: %lu ms\n", context.heap.compact_time * 1000 / CLOCKS_PER_SEC);
-    printf("- resizing:   %lu ms\n", context.heap.resize_time * 1000 / CLOCKS_PER_SEC);
+    printf("- marking:    %lu ms\n", context->heap.mark_time * 1000 / CLOCKS_PER_SEC);
+    printf("- compacting: %lu ms\n", context->heap.compact_time * 1000 / CLOCKS_PER_SEC);
+    printf("- resizing:   %lu ms\n", context->heap.resize_time * 1000 / CLOCKS_PER_SEC);
     printf("mutator time: %lu ms\n", (time - gc_time) * 1000 / CLOCKS_PER_SEC);
     printf("total time:   %lu ms\n", time * 1000 / CLOCKS_PER_SEC);
     printf("gc overhead:  %lu%%\n", gc_time * 100 / time);
 #endif
 
-    OME_delete_heap(&context.heap);
+    OME_context = NULL;
+    OME_context_delete(context);
 
     return OME_is_error(value) ? 1 : 0;
 }
