@@ -144,6 +144,7 @@ static void OME_context_delete(OME_Context *context)
     }
     OME_memory_free(heap->base, heap->reserved_size);
     memset(context, 0, sizeof(OME_Context) + (context->stack_end - context->stack_base) * sizeof(OME_Value));
+    free(context);
 }
 
 static void OME_mark_bitmap(OME_Heap *heap, OME_Header *header)
