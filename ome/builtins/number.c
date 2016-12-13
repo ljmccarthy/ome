@@ -12,6 +12,20 @@ static OME_Large_Integer *OME_make_large_integer(mp_int *n)
     return out;
 }
 
+static OME_Value OME_make_integer(mp_int *n)
+{
+    static mp_digit small_min_digits[1] = {-OME_MIN_SMALL_INTEGER};
+    static mp_digit small_max_digits[1] = {OME_MAX_SMALL_INTEGER};
+    static mp_int small_min = {1, 1, MP_NEG, small_min_digits};
+    static mp_int small_max = {1, 1, MP_ZPOS, small_max_digits};
+
+    if (mp_cmp(n, &small_min) >= 0 && mp_cmp(n, &small_max) <= 0) {
+        intptr_t result = n->sign == MP_ZPOS ? n->dp[0] : -n->dp[0];
+        return OME_tag_integer(result);
+    }
+    return OME_tag_pointer(OME_Tag_Large_Integer, OME_make_large_integer(n));
+}
+
 static void OME_mp_init_from_small_integer(mp_int *out, mp_digit digits[1], OME_Value value)
 {
     intptr_t n = OME_untag_signed(value);
@@ -31,6 +45,19 @@ static void OME_mp_init_from_large_integer(mp_int *out, OME_Value value)
     out->dp = n->digits;
 }
 
+static int OME_mp_init_from_integer(mp_int *out, mp_digit *dp, OME_Value n)
+{
+    switch (OME_get_tag(n)) {
+        case OME_Tag_Small_Integer:
+            OME_mp_init_from_small_integer(out, dp, n);
+            return 1;
+        case OME_Tag_Large_Integer:
+            OME_mp_init_from_large_integer(out, n);
+            return 1;
+    }
+    return 0;
+}
+
 static int OME_is_small_integer(intptr_t n)
 {
     return OME_MIN_SMALL_INTEGER <= n && n <= OME_MAX_SMALL_INTEGER;
@@ -41,51 +68,22 @@ static OME_Value OME_inequality(int cmp)
     return cmp < 0 ? OME_Less : (cmp > 0 ? OME_Greater : OME_Equal);
 }
 
-OME_NOINLINE
 static OME_Value OME_integer_binop(OME_Value _a, OME_Value _b, int (*mp_binop)(mp_int *a, mp_int *b, mp_int *c))
 {
-    static mp_digit small_min_digits[1] = {-OME_MIN_SMALL_INTEGER};
-    static mp_digit small_max_digits[1] = {OME_MAX_SMALL_INTEGER};
-    static mp_int small_min = {1, 1, MP_NEG, small_min_digits};
-    static mp_int small_max = {1, 1, MP_ZPOS, small_max_digits};
-
     mp_int a, b, c;
     mp_digit a_digits[1], b_digits[1];
 
-    switch (OME_get_tag(_a)) {
-        case OME_Tag_Small_Integer:
-            OME_mp_init_from_small_integer(&a, a_digits, _a);
-            break;
-        case OME_Tag_Large_Integer:
-            OME_mp_init_from_large_integer(&a, _a);
-            break;
-        default:
-            return OME_error(OME_Type_Error);
+    if (!OME_mp_init_from_integer(&a, a_digits, _a)) {
+        return OME_error(OME_Type_Error);
     }
-
-    switch (OME_get_tag(_b)) {
-        case OME_Tag_Small_Integer:
-            OME_mp_init_from_small_integer(&b, b_digits, _b);
-            break;
-        case OME_Tag_Large_Integer:
-            OME_mp_init_from_large_integer(&b, _b);
-            break;
-        default:
-            return OME_error(OME_Type_Error);
+    if (!OME_mp_init_from_integer(&b, b_digits, _b)) {
+        return OME_error(OME_Type_Error);
     }
-
     mp_init(&c);
     mp_binop(&a, &b, &c);
-
-    if (mp_cmp(&c, &small_min) >= 0 && mp_cmp(&c, &small_max) <= 0) {
-        intptr_t result = c.sign == MP_ZPOS ? c.dp[0] : -c.dp[0];
-        mp_clear(&c);
-        return OME_tag_integer(result);
-    }
-
-    OME_Large_Integer *result = OME_make_large_integer(&c);
+    OME_Value result = OME_make_integer(&c);
     mp_clear(&c);
-    return OME_tag_pointer(OME_Tag_Large_Integer, result);
+    return result;
 }
 
 static int mp_quotient(mp_int *a, mp_int *b, mp_int *c)
