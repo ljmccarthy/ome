@@ -71,11 +71,9 @@ class ProcedureCodegen(object):
         self.emit.dedent()
         self.emit.end('}')
 
-    def emit_load_list(self, ins):
+    def pre_instruction(self, ins):
         for local, slot in ins.load_list:
             self.emit('_{} = _stack[{}];'.format(local, slot))
-
-    def emit_save_list(self, ins):
         for local, slot in ins.save_list:
             self.emit('_stack[{}] = _{};'.format(slot, local))
         for slot in ins.clear_list:
@@ -104,18 +102,12 @@ class ProcedureCodegen(object):
         self.emit('const OME_Value _{} = OME_tag_pointer({}, {});'.format(ins.dest, ins.tag, ins.label))
 
     def ALLOC(self, ins):
-        self.emit_save_list(ins)
-        self.emit_load_list(ins)
         self.emit('OME_Value _{} = OME_tag_pointer({}, OME_allocate_slots({}));'.format(ins.dest, ins.tag, ins.size))
 
     def ARRAY(self, ins):
-        self.emit_save_list(ins)
-        self.emit_load_list(ins)
         self.emit('OME_Value _{} = OME_tag_pointer({}, OME_allocate_array({}));'.format(ins.dest, ins.tag, ins.size));
 
     def CALL(self, ins):
-        self.emit_save_list(ins)
-        self.emit_load_list(ins)
         if ins.check_tag is not None:
             self.emit('{')
             with self.emit.indented():
@@ -138,8 +130,6 @@ class ProcedureCodegen(object):
             self.emit_error_check(ins.dest, ins.traceback_info)
 
     def CONCAT(self, ins):
-        self.emit_save_list(ins)
-        self.emit_load_list(ins)
         stack_size = self.stack_size + len(ins.args)
         self.emit('if (&_stack[{}] >= OME_context->stack_limit) {{'.format(stack_size + 1))
         with self.emit.indented():
@@ -153,19 +143,15 @@ class ProcedureCodegen(object):
         self.emit_error_check(ins.dest, ins.traceback_info)
 
     def GET_SLOT(self, ins):
-        self.emit_load_list(ins)
         self.emit('OME_Value _{} = OME_get_slot(_{}, {});'.format(ins.dest, ins.object, ins.slot_index))
 
     def SET_SLOT(self, ins):
-        self.emit_load_list(ins)
         self.emit('OME_set_slot(_{}, {}, _{});'.format(ins.object, ins.slot_index, ins.value))
 
     def SET_ELEM(self, ins):
-        self.emit_load_list(ins)
         self.emit('OME_untag_array(_{})->elems[{}] = _{};'.format(ins.array, ins.elem_index, ins.value))
 
     def RETURN(self, ins):
-        self.emit_load_list(ins)
         self.emit_return('_{}'.format(ins.source))
 
 class DispatchCodegen(object):

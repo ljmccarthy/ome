@@ -74,6 +74,7 @@ class MethodCode(object):
         codegen.optimise(self)
         codegen.begin(label, self.num_args)
         for ins in self.instructions:
+            codegen.pre_instruction(ins)
             ins.emit(codegen)
         codegen.end()
         return emit.get_output()
