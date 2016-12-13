@@ -3,6 +3,8 @@
 
 from ... import optimise
 from ...constants import MIN_CONSTANT_TAG
+from ...dispatcher import DispatcherGenerator
+from ...emit import ProcedureCodeEmitter
 from ...instructions import CONCAT
 from ...symbol import symbol_to_label, symbol_arity
 from .cstring import literal_c_string
@@ -315,3 +317,15 @@ def generate_default_method(default_method):
     name = make_default_label(default_method.symbol)
     definition = format_function_definition_with_arg_names(name, default_method.arg_names)
     return '{}\n{{{}}}\n'.format(definition, default_method.code)
+
+def generate_dispatcher(symbol, tags, has_default_method):
+    emit = ProcedureCodeEmitter(indent=indent)
+    codegen = DispatchCodegen(emit, symbol, has_default_method)
+    DispatcherGenerator(codegen, tags)
+    return emit.get_output()
+
+def generate_lookup_dispatcher(symbol, tags, has_default_method):
+    emit = ProcedureCodeEmitter(indent=indent)
+    codegen = LookupDispatchCodegen(emit, symbol, has_default_method)
+    DispatcherGenerator(codegen, tags)
+    return emit.get_output()

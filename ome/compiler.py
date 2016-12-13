@@ -3,7 +3,6 @@
 
 import io
 from . import constants
-from .dispatcher import generate_dispatcher, generate_lookup_dispatcher
 from .error import OmeError
 from .idalloc import IdAllocator
 from .ome_ast import Block, BuiltInBlock, Method, Send, Sequence
@@ -191,9 +190,9 @@ class Program(object):
         if has_default_method:
             out.write(self.target.generate_default_method(self.builtin.defaults[symbol]))
             out.write('\n')
-        out.write(generate_dispatcher(symbol, tags, has_default_method, self.target))
+        out.write(self.target.generate_dispatcher(symbol, tags, has_default_method))
         out.write('\n')
-        out.write(generate_lookup_dispatcher(symbol, tags, has_default_method, self.target))
+        out.write(self.target.generate_lookup_dispatcher(symbol, tags, has_default_method))
         out.write('\n')
 
     def emit_code_definitions(self, out):
