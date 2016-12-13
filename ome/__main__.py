@@ -117,7 +117,7 @@ class OmeApp(object):
 
     def build_packages(self):
         libraries = []
-        if self.target.packages:
+        if self.backend.build_packages and self.target.packages:
             self.print_verbose('building packages')
             sources_dir = os.path.join(self.package_dir, 'sources')
             package_builder = SourcePackageBuilder(sources_dir, self.prefix_dir, self.backend)

@@ -6,6 +6,8 @@ import os
 class FileBuilder(object):
     name = 'file'
     version = ''
+    tools = {}
+    build_packages = False
 
     def __init__(self, tools):
         pass

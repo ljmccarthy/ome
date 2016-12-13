@@ -73,6 +73,7 @@ class CCBuilder(object):
     lib_extension = '.a'
     exe_extension = ''
     version_args = ['CC', '--version']
+    build_packages = True
 
     def __init__(self, tools={}):
         self.tools = {
