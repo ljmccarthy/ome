@@ -73,7 +73,8 @@ def get_build_options_from_command(args):
         verbose_backend = args.verbose_backend,
         include_dirs = args.include_dir,
         library_dirs = args.library_dir,
-        libraries = args.link)
+        libraries = args.library,
+        defines = [d.split('=', 1) if '=' in d else (d, '') for d in args.define])
     options.set_ome_defines(
         debug_gc = args.debug_gc,
         gc_stats = args.gc_stats,
