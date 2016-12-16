@@ -38,14 +38,15 @@ class OmeApp(object):
         self.start = time.time()
         self.args = args
         self.package_dir = os.path.join(get_cache_dir('ome'), 'libs')
-        self.target = build.get_target(args.target)
-        self.backend = build.get_backend(self.target, args.platform, args.backend, get_backend_tool(args))
+        self.target = build.get_target(self.args.target)
+        self.options = get_build_options_from_command(self.args)
+        self.shell = BuildShell(self.args.show_build_commands)
+
+    def initialize_backend(self):
+        self.backend = build.get_backend(self.target, self.args.platform, self.args.backend, get_backend_tool(self.args))
         self.prefix_dir = self.get_prefix_dir(self.backend.tools)
-        self.options = get_build_options_from_command(args)
         self.options.include_dirs.append(os.path.join(self.prefix_dir, 'include'))
         self.options.library_dirs.append(os.path.join(self.prefix_dir, 'lib'))
-        self.shell = BuildShell(args.show_build_commands)
-        self.verbose = args.verbose
 
     def get_prefix_dir(self, tools):
         s = '\0'.join('{}={}'.format(*tool) for tool in sorted(tools.items()))
@@ -54,7 +55,7 @@ class OmeApp(object):
         return os.path.join(self.package_dir, m.hexdigest())
 
     def print_verbose(self, *args):
-        if self.verbose:
+        if self.args.verbose:
             print('ome:', *args)
 
     def print_version(self):
@@ -69,10 +70,13 @@ class OmeApp(object):
         if len(self.args.file) > 1:
             raise OmeError('too many input files')
         self.args.infile = self.args.file[0]
+
+    def get_output(self):
         if not self.args.output:
             self.args.output = self.backend.output_name(self.args.infile, self.options)
             if self.args.infile == self.args.output:
                 raise OmeError('input file name is same as output')
+        return self.args.output
 
     def print_ast(self, filename):
         ast = compiler.parse_file(filename)
@@ -134,6 +138,8 @@ class OmeApp(object):
 
         self.check_args()
         self.print_command(self.args.infile)
+        self.initialize_backend()
+        output = self.get_output()
 
         self.print_verbose('using target {}'.format(self.target.name))
         self.print_verbose('using backend {} {}'.format(self.backend.name, self.backend.version))
@@ -145,9 +151,9 @@ class OmeApp(object):
         input = compiler.compile_file(self.args.infile, self.target, self.options)
         self.print_verbose('frontend compilation completed in %.2fs' % (time.time() - compile_start))
 
-        self.print_verbose('building output', self.args.output)
+        self.print_verbose('building output', output)
         build_start = time.time()
-        self.backend.build_string(self.shell, input, self.args.output, self.options)
+        self.backend.build_string(self.shell, input, output, self.options)
         self.print_verbose('backend build completed in %.2fs' % (time.time() - build_start))
 
         self.print_verbose('completed in %.2fs' % (time.time() - self.start))
