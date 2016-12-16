@@ -15,7 +15,10 @@ def get_backend_version(backend):
     if not hasattr(backend, 'version') and hasattr(backend, 'version_args'):
         reason = 'could not get version number'
         args = list(backend.version_args)
-        args[0] = backend.tools[args[0]]
+        executable = backend.tools[args[0]]
+        if not executable:
+            raise OmeError("backend tool '{}' not found".format(args[0]))
+        args[0] = executable
         try:
             process = subprocess.Popen(args, stdout=subprocess.PIPE)
             outs, errs = process.communicate()
