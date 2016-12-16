@@ -6,12 +6,6 @@ import platform
 from ...error import OmeError
 from ...util import temporary_file, find_executable
 
-def find_tool(name):
-    path = find_executable(name)
-    if path:
-        return path
-    raise OmeError('executable not found: {}'.format(name))
-
 def find_musl_path(path):
     if path:
         return path
@@ -38,6 +32,8 @@ class CCArgsBuilder(object):
         args = []
         tail_args = []
         if build_options.use_musl:
+            if build_options.platform != 'linux':
+                raise OmeError('musl is only supported on Linux')
             musl_path = find_musl_path(build_options.musl_path)
             args, tail_args = self.get_musl_args(build_options, musl_path, linking)
         args.append('-pipe')
@@ -77,7 +73,7 @@ class CCBuilder(object):
 
     def __init__(self, tools={}):
         self.tools = {
-            name: find_tool(command)
+            name: find_executable(command)
             for name, command in self.default_tools.items()
             if name not in tools
         }
