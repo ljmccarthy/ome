@@ -4,12 +4,12 @@ import os
 tests_dir = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(tests_dir, '..')))
 
-from ome.ome_ast import format_sexpr_flat
 from ome.parser import Parser
+from ome.sexpr import format_sexpr_flat
 from ome.terminal import stderr
 
 def read_tests(filename):
-    with open(os.path.join(tests_dir, filename)) as f:
+    with open(os.path.join(tests_dir, filename), encoding='utf8') as f:
         s = f.read()
     lines = s.rstrip().split('\n')
     tests = []

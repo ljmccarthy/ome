@@ -248,7 +248,7 @@ def parse_string(string, filename='<string>'):
 
 def parse_file(filename):
     try:
-        with open(filename) as f:
+        with open(filename, encoding='utf8') as f:
             source = f.read()
     except FileNotFoundError:
         raise OmeError('file does not exist', filename)

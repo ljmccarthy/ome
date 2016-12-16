@@ -33,7 +33,7 @@ def get_builtin():
     for filename in os.listdir(builtin_path):
         if filename.endswith('.c'):
             filename = os.path.join(builtin_path, filename)
-            with open(filename) as f:
+            with open(filename, encoding='utf8') as f:
                 source = f.read()
             parser = CPreParser(source, filename)
             parser.parse(builtin)
